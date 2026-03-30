@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { getSetting, setSetting, deleteSetting, KEYS } from '../services/settings.js'
+import { getConnectionStatus } from '../services/gmail.js'
 
 const app = new Hono()
 
@@ -147,7 +148,7 @@ app.get('/status', async (c) => {
     google: {
       hasCredentials: !!(clientId && clientSecret),
       isConnected: !!refreshToken,
-      clientId: clientId ? mask(clientId) : null,
+      email: refreshToken ? (await getGmailEmail()) : null,
     },
     telegram: {
       isConfigured: !!(botToken && chatId),
@@ -161,6 +162,13 @@ app.get('/status', async (c) => {
     },
   })
 })
+
+async function getGmailEmail(): Promise<string | null> {
+  const status = await getConnectionStatus()
+  if (!status.connected) return null
+  // message format: "Connected as xxx@gmail.com"
+  return status.message.replace('Connected as ', '')
+}
 
 function mask(value: string): string {
   if (value.length <= 8) return '****'

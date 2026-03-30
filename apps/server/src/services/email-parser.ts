@@ -19,7 +19,7 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
   if (banks.length === 0) return result
 
   const senderPatterns = banks.map((b) => `from:(${b.emailSenderPattern})`).join(' OR ')
-  const query = `(${senderPatterns}) newer_than:7d has:attachment`
+  const query = `(${senderPatterns}) newer_than:60d has:attachment`
 
   let messageIds: string[]
   try {
@@ -64,7 +64,7 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
         continue
       }
 
-      let parsed = extractBillFromText(pdfText)
+      let parsed = extractBillFromText(pdfText, bank.code)
       if (!parsed) {
         logger.info({ bank: bank.name }, 'Regex failed, trying LLM fallback')
         try {

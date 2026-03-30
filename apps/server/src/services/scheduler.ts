@@ -4,15 +4,15 @@ import { scanAndProcessEmails } from './email-parser.js'
 import { processNewBill, processReminderRules, processOverdueBills } from './notification.js'
 
 export function startScheduler() {
-  // Scan emails every hour
-  cron.schedule('0 * * * *', async () => {
+  // Scan emails every 6 hours
+  cron.schedule('0 */6 * * *', async () => {
     logger.info('Scanning emails...')
     try {
       const result = await scanAndProcessEmails()
       logger.info({ scanned: result.scanned, newBills: result.newBills.length }, 'Email scan complete')
 
-      for (const { bill, card } of result.newBills) {
-        await processNewBill(bill, card)
+      for (const { bill, bank } of result.newBills) {
+        await processNewBill(bill, bank)
       }
 
       if (result.errors.length > 0) {

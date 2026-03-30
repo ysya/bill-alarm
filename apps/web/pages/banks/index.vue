@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Building2, KeyRound, Pencil, Plus, Trash2 } from 'lucide-vue-next'
+import { Building2, Eye, EyeOff, Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
 interface BankPreset {
@@ -47,6 +47,7 @@ const deleteDialogOpen = ref(false)
 const deletingBank = ref<EnabledBank | null>(null)
 
 const submitting = ref(false)
+const showPassword = ref(false)
 
 async function fetchData() {
   loading.value = true
@@ -92,10 +93,20 @@ async function handleToggle(preset: BankPreset) {
     } catch (error) {
       toast.error('操作失敗', { description: String(error) })
     }
+  } else if (preset.passwordHint.includes('無密碼')) {
+    // No password needed — enable directly
+    try {
+      await bankApi.enable(preset.code)
+      toast.success(`已啟用 ${preset.name}`)
+      await fetchData()
+    } catch (error) {
+      toast.error('啟用失敗', { description: String(error) })
+    }
   } else {
     // First time enable — ask for password
     passwordTarget.value = { code: preset.code, name: preset.name, hint: preset.passwordHint }
     passwordInput.value = ''
+    showPassword.value = false
     passwordDialogOpen.value = true
   }
 }
@@ -118,6 +129,7 @@ async function handleEnableWithPassword() {
 // Edit bank settings
 function openEdit(bank: EnabledBank) {
   editingBank.value = bank
+  showPassword.value = false
   editForm.value = {
     emailSenderPattern: bank.emailSenderPattern,
     emailSubjectPattern: bank.emailSubjectPattern,
@@ -202,7 +214,7 @@ onMounted(fetchData)
 
     <!-- Built-in Banks -->
     <section class="space-y-4">
-      <h2 class="text-lg font-semibold">台灣銀行</h2>
+      <h2 class="text-lg font-semibold">內建銀行</h2>
 
       <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <Card v-for="i in 6" :key="i" class="animate-pulse">
@@ -236,8 +248,8 @@ onMounted(fetchData)
                   <Pencil class="h-3.5 w-3.5" />
                 </Button>
                 <Switch
-                  :checked="isEnabled(preset.code)"
-                  @update:checked="handleToggle(preset)"
+                  :model-value="isEnabled(preset.code)"
+                  @update:model-value="handleToggle(preset)"
                 />
               </div>
             </div>
@@ -282,7 +294,7 @@ onMounted(fetchData)
                 <Button variant="ghost" size="icon" class="h-7 w-7 text-destructive" @click="deletingBank = bank; deleteDialogOpen = true">
                   <Trash2 class="h-3.5 w-3.5" />
                 </Button>
-                <Switch :checked="bank.isActive" @update:checked="bankApi.update(bank.id, { isActive: !bank.isActive }).then(fetchData)" />
+                <Switch :model-value="bank.isActive" @update:model-value="bankApi.update(bank.id, { isActive: !bank.isActive }).then(fetchData)" />
               </div>
             </div>
           </CardContent>
@@ -302,7 +314,13 @@ onMounted(fetchData)
         <form class="space-y-4 py-2" @submit.prevent="handleEnableWithPassword">
           <div class="space-y-2">
             <Label for="pwd">PDF 密碼</Label>
-            <Input id="pwd" v-model="passwordInput" type="password" :placeholder="passwordTarget?.hint || '留空表示無密碼'" />
+            <div class="relative">
+              <Input id="pwd" v-model="passwordInput" :type="showPassword ? 'text' : 'password'" :placeholder="passwordTarget?.hint || '留空表示無密碼'" class="pr-10" />
+              <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" @click="showPassword = !showPassword">
+                <EyeOff v-if="showPassword" class="h-4 w-4" />
+                <Eye v-else class="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <DialogFooter class="gap-2">
             <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
@@ -330,7 +348,13 @@ onMounted(fetchData)
           </div>
           <div class="space-y-2">
             <Label for="ePwd">PDF 密碼</Label>
-            <Input id="ePwd" v-model="editForm.pdfPassword" type="password" placeholder="留空表示無密碼" />
+            <div class="relative">
+              <Input id="ePwd" v-model="editForm.pdfPassword" :type="showPassword ? 'text' : 'password'" placeholder="留空表示無密碼" class="pr-10" />
+              <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" @click="showPassword = !showPassword">
+                <EyeOff v-if="showPassword" class="h-4 w-4" />
+                <Eye v-else class="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <DialogFooter class="gap-2">
             <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
@@ -362,7 +386,13 @@ onMounted(fetchData)
           </div>
           <div class="space-y-2">
             <Label for="cPwd">PDF 密碼</Label>
-            <Input id="cPwd" v-model="customForm.pdfPassword" type="password" placeholder="留空表示無密碼" />
+            <div class="relative">
+              <Input id="cPwd" v-model="customForm.pdfPassword" :type="showPassword ? 'text' : 'password'" placeholder="留空表示無密碼" class="pr-10" />
+              <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" @click="showPassword = !showPassword">
+                <EyeOff v-if="showPassword" class="h-4 w-4" />
+                <Eye v-else class="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <DialogFooter class="gap-2">
             <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>

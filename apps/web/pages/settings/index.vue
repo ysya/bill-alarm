@@ -22,7 +22,7 @@ interface IntegrationStatus {
 }
 
 interface OAuthStatus {
-  google: { hasCredentials: boolean; isConnected: boolean; clientId: string | null }
+  google: { hasCredentials: boolean; isConnected: boolean; email: string | null }
   telegram: { isConfigured: boolean; chatId: string | null }
   calendar: { calendarId: string }
   gemini: { isConfigured: boolean }
@@ -421,7 +421,7 @@ onMounted(fetchData)
               <div class="flex items-center gap-2 text-sm">
                 <CheckCircle class="h-4 w-4 text-green-500" />
                 <span>Gmail 和 Calendar 已連結</span>
-                <span class="text-muted-foreground">({{ oauthStatus.google.clientId }})</span>
+                <span v-if="oauthStatus.google.email" class="text-muted-foreground">({{ oauthStatus.google.email }})</span>
               </div>
               <div class="flex gap-2">
                 <Button size="sm" variant="outline" :disabled="scanning" @click="handleScan">
