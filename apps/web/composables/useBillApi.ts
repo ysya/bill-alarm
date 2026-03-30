@@ -10,20 +10,21 @@ export function useBillApi() {
       nextDueDate: string | null
     }>('/bills/summary'),
 
-    list: (params?: { status?: string; month?: string; bankId?: string }) => {
+    list: (params?: { status?: string; bankId?: string; page?: number; pageSize?: number }) => {
       const query = new URLSearchParams()
       if (params?.status) query.set('status', params.status)
-      if (params?.month) query.set('month', params.month)
       if (params?.bankId) query.set('bankId', params.bankId)
+      if (params?.page) query.set('page', String(params.page))
+      if (params?.pageSize) query.set('pageSize', String(params.pageSize))
       const qs = query.toString()
-      return get<any[]>(`/bills${qs ? `?${qs}` : ''}`)
+      return get<{ data: any[]; total: number; page: number; pageSize: number }>(`/bills${qs ? `?${qs}` : ''}`)
     },
 
     getById: (id: string) => get<any>(`/bills/${id}`),
 
     update: (id: string, data: Record<string, unknown>) => patch<any>(`/bills/${id}`, data),
 
-    markAsPaid: (id: string) => patch<any>(`/bills/${id}/pay`),
+    markAsPaid: (id: string, paidAt?: string) => patch<any>(`/bills/${id}/pay`, paidAt ? { paidAt } : {}),
 
     remove: (id: string) => del<any>(`/bills/${id}`),
   }

@@ -1,10 +1,14 @@
-import { logger } from '../index.js'
-import prisma from '../db/prisma.js'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { PDF_DIR } from '@/paths.js'
+import { logger } from '@/index.js'
+import prisma from '@/prisma.js'
 import { searchEmails, getEmailWithAttachments } from './gmail.js'
 import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
 import { extractBillFromText } from './bill-extractor.js'
 import { parseBillWithLLM } from './llm-parser.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
+
 
 export interface ScanResult {
   scanned: number
@@ -50,10 +54,14 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
       }
 
       let pdfText: string | null = null
+      let matchedPdfBuf: Buffer | null = null
       for (const pdfBuf of pdfBuffers) {
         try {
           pdfText = await extractPdfText(pdfBuf, bank.pdfPassword ?? undefined)
-          if (pdfText) break
+          if (pdfText) {
+            matchedPdfBuf = pdfBuf
+            break
+          }
         } catch (e) {
           logger.warn({ bank: bank.name, error: (e as Error).message }, 'PDF extraction failed')
         }
@@ -88,6 +96,17 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
       })
       if (existing) continue
 
+      // Save PDF to filesystem
+      let pdfPath: string | undefined
+      if (matchedPdfBuf) {
+        const filename = `${bank.code ?? bank.id}_${parsed.billingPeriod}.pdf`
+        await fs.mkdir(PDF_DIR, { recursive: true })
+        const filePath = path.join(PDF_DIR, filename)
+        await fs.writeFile(filePath, matchedPdfBuf)
+        pdfPath = `pdfs/${filename}`
+        logger.info({ pdfPath }, 'PDF saved')
+      }
+
       const bill = await prisma.bill.create({
         data: {
           bankId: bank.id,
@@ -97,6 +116,7 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
           dueDate: parsed.dueDate,
           sourceEmailId: msgId,
           rawEmailSnippet: pdfText.substring(0, 500),
+          pdfPath,
         },
       })
 

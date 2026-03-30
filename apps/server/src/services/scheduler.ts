@@ -1,5 +1,5 @@
 import cron from 'node-cron'
-import { logger } from '../index.js'
+import { logger } from '@/index.js'
 import { scanAndProcessEmails } from './email-parser.js'
 import { processNewBill, processReminderRules, processOverdueBills } from './notification.js'
 

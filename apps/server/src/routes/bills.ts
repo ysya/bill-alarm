@@ -1,13 +1,16 @@
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import prisma from '../db/prisma.js'
-import { handleBillPaid } from '../services/notification.js'
+import prisma from '@/prisma.js'
+import { handleBillPaid } from '@/services/notification.js'
+import { DATA_DIR } from '@/paths.js'
 
 const app = new Hono()
 
 const updateBillSchema = z.object({
-  amount: z.number().int().positive().optional(),
+  amount: z.number().int().optional(),
   minimumPayment: z.number().int().positive().nullable().optional(),
   dueDate: z.string().datetime().optional(),
   status: z.enum(['pending', 'paid', 'overdue']).optional(),
@@ -38,21 +41,28 @@ app.get('/summary', async (c) => {
   })
 })
 
-// List bills with filters
+// List bills with filters + pagination
 app.get('/', async (c) => {
-  const { status, month, bankId } = c.req.query()
+  const { status, bankId } = c.req.query()
+  const page = Math.max(1, Number(c.req.query('page')) || 1)
+  const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize')) || 20))
 
   const where: Record<string, unknown> = {}
   if (status) where.status = status
-  if (month) where.billingPeriod = month
   if (bankId) where.bankId = bankId
 
-  const bills = await prisma.bill.findMany({
-    where,
-    include: { bank: { select: { name: true } } },
-    orderBy: { dueDate: 'asc' },
-  })
-  return c.json(bills)
+  const [bills, total] = await Promise.all([
+    prisma.bill.findMany({
+      where,
+      include: { bank: { select: { name: true } } },
+      orderBy: [{ dueDate: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.bill.count({ where }),
+  ])
+
+  return c.json({ data: bills, total, page, pageSize })
 })
 
 // Get single bill
@@ -82,14 +92,37 @@ app.patch('/:id', zValidator('json', updateBillSchema), async (c) => {
 })
 
 // Mark as paid
-app.patch('/:id/pay', async (c) => {
+app.patch('/:id/pay', zValidator('json', z.object({
+  paidAt: z.string().optional(),
+}).optional()), async (c) => {
+  const body = c.req.valid('json')
+  const paidAt = body?.paidAt ? new Date(body.paidAt) : new Date()
   const bill = await prisma.bill.update({
     where: { id: c.req.param('id') },
-    data: { status: 'paid', paidAt: new Date() },
+    data: { status: 'paid', paidAt },
   })
   // Remove calendar event
   await handleBillPaid(bill.id)
   return c.json(bill)
+})
+
+// Download PDF
+app.get('/:id/pdf', async (c) => {
+  const bill = await prisma.bill.findUnique({ where: { id: c.req.param('id') } })
+  if (!bill?.pdfPath) return c.json({ error: 'PDF not found' }, 404)
+
+  const filePath = path.join(DATA_DIR, bill.pdfPath)
+  try {
+    const buffer = await fs.readFile(filePath)
+    return new Response(buffer, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${path.basename(bill.pdfPath)}"`,
+      },
+    })
+  } catch {
+    return c.json({ error: 'PDF file missing' }, 404)
+  }
 })
 
 // Delete bill

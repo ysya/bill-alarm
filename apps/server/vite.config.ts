@@ -1,7 +1,13 @@
+import path from 'node:path'
 import { defineConfig } from 'vite'
 import devServer from '@hono/vite-dev-server'
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
+  },
   server: {
     port: 3100,
   },
