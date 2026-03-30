@@ -1,9 +1,3 @@
-export const BILL_STATUS_LABELS: Record<string, string> = {
-  pending: '待繳',
-  paid: '已繳',
-  overdue: '逾期',
-}
-
 export const NOTIFICATION_CHANNEL_LABELS: Record<string, string> = {
   telegram: 'Telegram',
   calendar: 'Google Calendar',

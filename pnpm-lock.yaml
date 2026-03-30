@@ -44,6 +44,9 @@ importers:
       hono:
         specifier: ^4.12.9
         version: 4.12.9
+      hono-pino:
+        specifier: ^0.10.3
+        version: 0.10.3(hono@4.12.9)(pino@10.3.1)
       mupdf:
         specifier: ^1.27.0
         version: 1.27.0
@@ -96,6 +99,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@bill-alarm/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@internationalized/date':
         specifier: ^3.12.0
         version: 3.12.0
@@ -3781,6 +3787,13 @@ packages:
 
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
+
+  hono-pino@0.10.3:
+    resolution: {integrity: sha512-n0RNPIFOoq25Fg8b4D5gus4sVqI0z+8I17ibl96+p43d07UnZ0EMM/It0qSgfc7UtaC+XP5FkFmRHwBp6owsNA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      hono: '>=4.0.0'
+      pino: '>=7.1.0'
 
   hono@4.12.9:
     resolution: {integrity: sha512-wy3T8Zm2bsEvxKZM5w21VdHDDcwVS1yUFFY6i8UobSsKfFceT7TOwhbhfKsDyx7tYQlmRM5FLpIuYvNFyjctiA==}
@@ -9606,6 +9619,12 @@ snapshots:
       function-bind: 1.1.2
 
   help-me@5.0.0: {}
+
+  hono-pino@0.10.3(hono@4.12.9)(pino@10.3.1):
+    dependencies:
+      defu: 6.1.4
+      hono: 4.12.9
+      pino: 10.3.1
 
   hono@4.12.9: {}
 

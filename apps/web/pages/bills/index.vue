@@ -73,7 +73,7 @@
                     <CalendarIcon class="h-3.5 w-3.5" />
                     {{ formatDate(bill.dueDate) }}
                   </span>
-                  <span v-if="bill.status !== 'paid'" :class="`text-xs font-medium ${daysRemainingText(bill.dueDate).className}`">
+                  <span v-if="bill.status !== BillStatus.PAID" :class="`text-xs font-medium ${daysRemainingText(bill.dueDate).className}`">
                     {{ daysRemainingText(bill.dueDate).text }}
                   </span>
                 </div>
@@ -81,7 +81,7 @@
               <div class="flex items-center gap-3 sm:gap-4">
                 <span class="text-lg font-bold whitespace-nowrap">{{ formatAmount(bill.amount) }}</span>
                 <Button
-                  v-if="bill.status !== 'paid'"
+                  v-if="bill.status !== BillStatus.PAID"
                   size="sm"
                   :disabled="markingPaid.has(bill.id)"
                   @click.stop="openPayDialog(bill.id)"
@@ -149,15 +149,8 @@ import {
 } from 'lucide-vue-next'
 import { getLocalTimeZone, today } from '@internationalized/date'
 import type { DateValue } from 'reka-ui'
-
-interface Bill {
-  id: string
-  bank?: { name: string }
-  billingPeriod: string
-  amount: number
-  dueDate: string
-  status: 'pending' | 'paid' | 'overdue'
-}
+import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
+import type { BillDTO } from '@bill-alarm/shared/types'
 
 // --- Helpers ---
 
@@ -178,20 +171,6 @@ function daysUntil(date: string | Date): number {
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-function statusLabel(status: string): string {
-  const map: Record<string, string> = { pending: '待繳', paid: '已繳', overdue: '逾期' }
-  return map[status] ?? status
-}
-
-function statusBadgeClass(status: string): string {
-  const map: Record<string, string> = {
-    pending: 'bg-yellow-500/15 text-yellow-500 border-yellow-500/25 hover:bg-yellow-500/15',
-    paid: 'bg-green-500/15 text-green-500 border-green-500/25 hover:bg-green-500/15',
-    overdue: 'bg-red-500/15 text-red-500 border-red-500/25 hover:bg-red-500/15',
-  }
-  return map[status] ?? ''
-}
-
 function daysRemainingText(dueDate: string): { text: string; className: string } {
   const days = daysUntil(dueDate)
   if (days < 0) return { text: `已逾期 ${Math.abs(days)} 天`, className: 'text-red-500' }
@@ -207,7 +186,7 @@ const PAGE_SIZE = 20
 const { list, markAsPaid } = useBillApi()
 const { post } = useApi()
 
-const bills = ref<Bill[]>([])
+const bills = ref<BillDTO[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const loading = ref(true)

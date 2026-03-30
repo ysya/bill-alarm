@@ -29,6 +29,7 @@ export default defineConfig({
       '@google/genai',
       'node-cron',
       'mupdf',
+      'hono-pino',
     ],
   },
 })

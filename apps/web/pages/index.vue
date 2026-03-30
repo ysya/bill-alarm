@@ -33,7 +33,7 @@
         </CardHeader>
         <CardContent>
           <div class="text-2xl font-bold">
-            {{ formatAmount(summary?.totalPendingAmount ?? 0) }}
+            {{ formatAmount(summary?.totalPending ?? 0) }}
           </div>
         </CardContent>
       </Card>
@@ -174,21 +174,8 @@ import {
   Calendar,
   Loader2,
 } from 'lucide-vue-next'
-
-interface BillSummary {
-  totalPendingAmount: number
-  pendingCount: number
-  paidCount: number
-  overdueCount: number
-}
-
-interface Bill {
-  id: string
-  bank?: { name: string }
-  amount: number
-  dueDate: string
-  status: 'pending' | 'paid' | 'overdue'
-}
+import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
+import type { BillDTO, BillSummaryDTO } from '@bill-alarm/shared/types'
 
 // --- Helpers ---
 
@@ -207,24 +194,6 @@ function daysUntil(date: string | Date): number {
   const target = new Date(date)
   target.setHours(0, 0, 0, 0)
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-}
-
-function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    pending: '待繳',
-    paid: '已繳',
-    overdue: '逾期',
-  }
-  return map[status] ?? status
-}
-
-function statusBadgeClass(status: string): string {
-  const map: Record<string, string> = {
-    pending: 'bg-yellow-500/15 text-yellow-500 border-yellow-500/25 hover:bg-yellow-500/15',
-    paid: 'bg-green-500/15 text-green-500 border-green-500/25 hover:bg-green-500/15',
-    overdue: 'bg-red-500/15 text-red-500 border-red-500/25 hover:bg-red-500/15',
-  }
-  return map[status] ?? ''
 }
 
 // --- Month Filter ---
@@ -286,8 +255,8 @@ const DaysRemainingBadge = defineComponent({
 
 const { getSummary, list, markAsPaid } = useBillApi()
 
-const summary = ref<BillSummary | null>(null)
-const pendingBills = ref<Bill[]>([])
+const summary = ref<BillSummaryDTO | null>(null)
+const pendingBills = ref<BillDTO[]>([])
 const loading = ref(true)
 const markingPaid = ref<Set<string>>(new Set())
 
@@ -295,11 +264,11 @@ async function fetchData() {
   loading.value = true
   try {
     const [summaryData, billsData] = await Promise.all([
-      getSummary({ month: selectedMonth.value }),
-      list({ month: selectedMonth.value, status: 'pending' }),
+      getSummary(),
+      list({ status: BillStatus.PENDING }),
     ])
     summary.value = summaryData
-    pendingBills.value = billsData
+    pendingBills.value = billsData.data
   } catch {
     toast.error('載入資料失敗', { description: '請稍後再試' })
   } finally {
