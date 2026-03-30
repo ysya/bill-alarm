@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model CreditCard {
+  id                  String   @id @default(cuid())
+  bankName            String
+  emailSenderPattern  String
+  emailSubjectPattern String
+  pdfPassword         String?
+  isActive            Boolean  @default(true)
+  // parserType removed — LLM handles all parsing now
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  bills               Bill[]
+
+  @@map("credit_cards")
+}
+
+model Bill {
+  id               String            @id @default(cuid())
+  creditCardId     String
+  creditCard       CreditCard        @relation(fields: [creditCardId], references: [id])
+  billingPeriod    String
+  amount           Int
+  minimumPayment   Int?
+  dueDate          DateTime
+  status           String            @default("pending")
+  paidAt           DateTime?
+  calendarEventId  String?
+  sourceEmailId    String?
+  rawEmailSnippet  String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  notifications    NotificationLog[]
+
+  @@unique([creditCardId, billingPeriod])
+  @@map("bills")
+}
+
+model NotificationRule {
+  id         String            @id @default(cuid())
+  name       String
+  daysBefore Int
+  timeOfDay  String
+  channels   String
+  isActive   Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  logs       NotificationLog[]
+
+  @@map("notification_rules")
+}
+
+model NotificationLog {
+  id           String            @id @default(cuid())
+  billId       String
+  bill         Bill              @relation(fields: [billId], references: [id])
+  ruleId       String?
+  rule         NotificationRule? @relation(fields: [ruleId], references: [id])
+  channel      String
+  message      String
+  success      Boolean
+  errorMessage String?
+  sentAt       DateTime          @default(now())
+
+  @@map("notification_logs")
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
