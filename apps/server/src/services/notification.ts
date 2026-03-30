@@ -1,4 +1,4 @@
-import prisma from '../db/prisma.js'
+import prisma from '@/prisma.js'
 import { sendNewBillAlert, sendBillReminder, sendOverdueWarning } from './telegram.js'
 import { createDueDateEvent, deleteDueDateEvent } from './calendar.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'

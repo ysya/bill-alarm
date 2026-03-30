@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { getSetting, setSetting, deleteSetting, KEYS } from '../services/settings.js'
-import { getConnectionStatus } from '../services/gmail.js'
+import { getSetting, setSetting, deleteSetting, KEYS } from '@/services/settings.js'
+import { getConnectionStatus } from '@/services/gmail.js'
 
 const app = new Hono()
 

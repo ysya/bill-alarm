@@ -1,6 +1,6 @@
 import type { ParsedBill } from '@bill-alarm/shared/types'
-import { logger } from '../index.js'
-import { getParser } from '../parsers/registry.js'
+import { logger } from '@/index.js'
+import { getParser } from '@/parsers/registry.js'
 
 /**
  * Extract bill data from PDF text.

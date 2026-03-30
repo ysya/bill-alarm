@@ -11,6 +11,7 @@
     "declaration": true,
     "composite": true,
     "paths": {
+      "@/*": ["./src/*"],
       "@bill-alarm/shared/*": ["../../packages/shared/*"]
     }
   },

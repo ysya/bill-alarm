@@ -1,4 +1,4 @@
-import prisma from '../db/prisma.js'
+import prisma from '@/prisma.js'
 
 // Setting keys
 export const KEYS = {

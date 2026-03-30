@@ -6,26 +6,10 @@
         <h2 class="text-2xl font-bold tracking-tight">帳單管理</h2>
         <p class="text-muted-foreground">查看與管理所有信用卡帳單</p>
       </div>
-      <div class="flex items-center gap-2 w-full sm:w-auto">
-        <Button variant="outline" size="sm" :disabled="scanning" @click="handleScan">
-          <RefreshCw class="mr-2 h-4 w-4" :class="scanning ? 'animate-spin' : ''" />
-          {{ scanning ? '掃描中...' : '掃描信件' }}
-        </Button>
-        <Select v-model="selectedMonth">
-          <SelectTrigger class="w-full sm:w-44">
-            <SelectValue placeholder="選擇月份" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem
-              v-for="month in monthOptions"
-              :key="month.value"
-              :value="month.value"
-            >
-              {{ month.label }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <Button variant="outline" size="sm" :disabled="scanning" @click="handleScan">
+        <RefreshCw class="mr-2 h-4 w-4" :class="scanning ? 'animate-spin' : ''" />
+        {{ scanning ? '掃描中...' : '掃描信件' }}
+      </Button>
     </div>
 
     <!-- Status Tabs -->
@@ -33,60 +17,144 @@
       <TabsList>
         <TabsTrigger value="all">
           全部
-          <Badge v-if="counts.all > 0" variant="secondary" class="ml-1.5">
-            {{ counts.all }}
-          </Badge>
+          <Badge v-if="total > 0" variant="secondary" class="ml-1.5">{{ total }}</Badge>
         </TabsTrigger>
         <TabsTrigger value="pending">
           待繳
-          <Badge v-if="counts.pending > 0" class="ml-1.5 bg-yellow-500/15 text-yellow-500 border-yellow-500/25 hover:bg-yellow-500/15">
-            {{ counts.pending }}
-          </Badge>
         </TabsTrigger>
         <TabsTrigger value="paid">
           已繳
-          <Badge v-if="counts.paid > 0" class="ml-1.5 bg-green-500/15 text-green-500 border-green-500/25 hover:bg-green-500/15">
-            {{ counts.paid }}
-          </Badge>
         </TabsTrigger>
         <TabsTrigger value="overdue">
           逾期
-          <Badge v-if="counts.overdue > 0" class="ml-1.5 bg-red-500/15 text-red-500 border-red-500/25 hover:bg-red-500/15">
-            {{ counts.overdue }}
-          </Badge>
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="all">
-        <BillListContent :bills="filteredBills" :loading="loading" :marking-paid="markingPaid" @mark-paid="handleMarkAsPaid" />
-      </TabsContent>
-      <TabsContent value="pending">
-        <BillListContent :bills="filteredBills" :loading="loading" :marking-paid="markingPaid" @mark-paid="handleMarkAsPaid" />
-      </TabsContent>
-      <TabsContent value="paid">
-        <BillListContent :bills="filteredBills" :loading="loading" :marking-paid="markingPaid" @mark-paid="handleMarkAsPaid" />
-      </TabsContent>
-      <TabsContent value="overdue">
-        <BillListContent :bills="filteredBills" :loading="loading" :marking-paid="markingPaid" @mark-paid="handleMarkAsPaid" />
+      <!-- Shared content for all tabs -->
+      <TabsContent :value="activeTab" :force-mount="true">
+        <!-- Loading -->
+        <div v-if="loading" class="space-y-3">
+          <Card v-for="i in 4" :key="i" class="animate-pulse">
+            <div class="p-4 flex items-center gap-4">
+              <div class="flex-1 space-y-2">
+                <div class="h-4 w-32 rounded bg-muted" />
+                <div class="h-3 w-48 rounded bg-muted" />
+              </div>
+              <div class="h-8 w-20 rounded bg-muted" />
+            </div>
+          </Card>
+        </div>
+
+        <!-- Empty -->
+        <Card v-else-if="bills.length === 0" class="py-12">
+          <CardContent class="flex flex-col items-center text-center">
+            <Inbox class="h-12 w-12 text-muted-foreground mb-4" />
+            <h4 class="text-lg font-semibold mb-1">沒有帳單</h4>
+            <p class="text-sm text-muted-foreground">目前沒有符合條件的帳單</p>
+          </CardContent>
+        </Card>
+
+        <!-- Bill list -->
+        <div v-else class="space-y-3">
+          <Card
+            v-for="bill in bills"
+            :key="bill.id"
+            class="transition-colors hover:border-primary/50 cursor-pointer"
+            @click="navigateTo(`/bills/${bill.id}`)"
+          >
+            <div class="p-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div class="flex-1 min-w-0 space-y-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-semibold truncate">{{ bill.bank?.name }}</span>
+                  <Badge :class="statusBadgeClass(bill.status)">{{ statusLabel(bill.status) }}</Badge>
+                  <span class="text-xs text-muted-foreground">{{ bill.billingPeriod }}</span>
+                </div>
+                <div class="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span class="flex items-center gap-1">
+                    <CalendarIcon class="h-3.5 w-3.5" />
+                    {{ formatDate(bill.dueDate) }}
+                  </span>
+                  <span v-if="bill.status !== 'paid'" :class="`text-xs font-medium ${daysRemainingText(bill.dueDate).className}`">
+                    {{ daysRemainingText(bill.dueDate).text }}
+                  </span>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 sm:gap-4">
+                <span class="text-lg font-bold whitespace-nowrap">{{ formatAmount(bill.amount) }}</span>
+                <Button
+                  v-if="bill.status !== 'paid'"
+                  size="sm"
+                  :disabled="markingPaid.has(bill.id)"
+                  @click.stop="openPayDialog(bill.id)"
+                >
+                  <Loader2 v-if="markingPaid.has(bill.id)" class="h-4 w-4 animate-spin" />
+                  <CircleCheck v-else class="h-4 w-4" />
+                  {{ markingPaid.has(bill.id) ? '處理中...' : '標記已繳' }}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="totalPages > 1" class="flex items-center justify-between pt-4">
+          <p class="text-sm text-muted-foreground">
+            共 {{ total }} 筆，第 {{ currentPage }} / {{ totalPages }} 頁
+          </p>
+          <div class="flex items-center gap-2">
+            <Button variant="outline" size="sm" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
+              <ChevronLeft class="h-4 w-4" />
+              上一頁
+            </Button>
+            <Button variant="outline" size="sm" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">
+              下一頁
+              <ChevronRight class="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </TabsContent>
     </Tabs>
+
+    <!-- Mark as Paid Dialog -->
+    <Dialog v-model:open="payDialogOpen">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>標記為已繳</DialogTitle>
+          <DialogDescription>選擇繳費日期，預設為今天。</DialogDescription>
+        </DialogHeader>
+        <div class="flex justify-center py-2">
+          <Calendar v-model="payDate" />
+        </div>
+        <DialogFooter class="gap-2">
+          <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
+          <Button :disabled="markingPaid.size > 0" @click="handleConfirmPaid">
+            <Loader2 v-if="markingPaid.size > 0" class="mr-2 h-4 w-4 animate-spin" />
+            確認已繳
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
 import {
-  Calendar,
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
   CircleCheck,
   Loader2,
-  Eye,
   Inbox,
   RefreshCw,
 } from 'lucide-vue-next'
+import { getLocalTimeZone, today } from '@internationalized/date'
+import type { DateValue } from 'reka-ui'
 
 interface Bill {
   id: string
   bank?: { name: string }
+  billingPeriod: string
   amount: number
   dueDate: string
   status: 'pending' | 'paid' | 'overdue'
@@ -112,11 +180,7 @@ function daysUntil(date: string | Date): number {
 }
 
 function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    pending: '待繳',
-    paid: '已繳',
-    overdue: '逾期',
-  }
+  const map: Record<string, string> = { pending: '待繳', paid: '已繳', overdue: '逾期' }
   return map[status] ?? status
 }
 
@@ -129,75 +193,51 @@ function statusBadgeClass(status: string): string {
   return map[status] ?? ''
 }
 
-function daysRemainingText(dueDate: string): { text: string, className: string } {
+function daysRemainingText(dueDate: string): { text: string; className: string } {
   const days = daysUntil(dueDate)
-  if (days < 0) {
-    return { text: `已逾期 ${Math.abs(days)} 天`, className: 'text-red-500' }
-  }
-  if (days === 0) {
-    return { text: '今天到期', className: 'text-red-500' }
-  }
-  if (days <= 3) {
-    return { text: `剩 ${days} 天`, className: 'text-yellow-500' }
-  }
+  if (days < 0) return { text: `已逾期 ${Math.abs(days)} 天`, className: 'text-red-500' }
+  if (days === 0) return { text: '今天到期', className: 'text-red-500' }
+  if (days <= 3) return { text: `剩 ${days} 天`, className: 'text-yellow-500' }
   return { text: `剩 ${days} 天`, className: 'text-muted-foreground' }
 }
 
-// --- Month Filter ---
+// --- State ---
 
-function getCurrentMonth(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-function generateMonthOptions(): Array<{ value: string, label: string }> {
-  const options: Array<{ value: string, label: string }> = []
-  const now = new Date()
-  for (let i = -6; i <= 3; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    const label = `${d.getFullYear()} 年 ${d.getMonth() + 1} 月`
-    options.push({ value, label })
-  }
-  return options
-}
-
-const selectedMonth = ref<string>(getCurrentMonth())
-const monthOptions = generateMonthOptions()
-
-// --- Tab State ---
-
-const activeTab = ref<string>('all')
-
-// --- Data ---
+const PAGE_SIZE = 20
 
 const { list, markAsPaid } = useBillApi()
 const { post } = useApi()
 
-const allBills = ref<Bill[]>([])
+const bills = ref<Bill[]>([])
+const total = ref(0)
+const currentPage = ref(1)
 const loading = ref(true)
 const scanning = ref(false)
 const markingPaid = ref<Set<string>>(new Set())
+const activeTab = ref<string>('all')
 
-const filteredBills = computed<Bill[]>(() => {
-  if (activeTab.value === 'all') return allBills.value
-  return allBills.value.filter(b => b.status === activeTab.value)
-})
+// Mark as paid dialog
+const payDialogOpen = ref(false)
+const payingBillId = ref<string | null>(null)
+const payDate = ref(today(getLocalTimeZone())) as Ref<DateValue>
 
-const counts = computed(() => {
-  const bills = allBills.value
-  return {
-    all: bills.length,
-    pending: bills.filter(b => b.status === 'pending').length,
-    paid: bills.filter(b => b.status === 'paid').length,
-    overdue: bills.filter(b => b.status === 'overdue').length,
-  }
-})
+function openPayDialog(id: string) {
+  payingBillId.value = id
+  payDate.value = today(getLocalTimeZone())
+  payDialogOpen.value = true
+}
+
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+
+// --- Data ---
 
 async function fetchBills() {
   loading.value = true
   try {
-    allBills.value = await list({ month: selectedMonth.value })
+    const status = activeTab.value === 'all' ? undefined : activeTab.value
+    const result = await list({ status, page: currentPage.value, pageSize: PAGE_SIZE })
+    bills.value = result.data
+    total.value = result.total
   } catch {
     toast.error('載入帳單失敗', { description: '請稍後再試' })
   } finally {
@@ -205,11 +245,18 @@ async function fetchBills() {
   }
 }
 
-async function handleMarkAsPaid(id: string) {
+function goToPage(page: number) {
+  currentPage.value = page
+}
+
+async function handleConfirmPaid() {
+  if (!payingBillId.value) return
+  const id = payingBillId.value
   markingPaid.value.add(id)
   try {
-    await markAsPaid(id)
+    await markAsPaid(id, payDate.value.toString())
     toast.success('帳單已標記為已繳')
+    payDialogOpen.value = false
     await fetchBills()
   } catch {
     toast.error('操作失敗', { description: '無法標記帳單，請稍後再試' })
@@ -238,110 +285,15 @@ async function handleScan() {
   }
 }
 
-watch(selectedMonth, () => fetchBills())
+// 切換 tab 時回到第一頁
+watch(activeTab, () => {
+  currentPage.value = 1
+  fetchBills()
+})
+
+watch(currentPage, () => fetchBills())
 
 onMounted(() => fetchBills())
 
 useHead({ title: '帳單管理 - Bill Alarm' })
-
-// --- Inline child component for bill list rendering ---
-
-const BillListContent = defineComponent({
-  props: {
-    bills: { type: Array as PropType<Bill[]>, required: true },
-    loading: { type: Boolean, required: true },
-    markingPaid: { type: Set as unknown as PropType<Set<string>>, required: true },
-  },
-  emits: ['mark-paid'],
-  setup(props, { emit }) {
-    return () => {
-      // Loading skeleton
-      if (props.loading) {
-        return h('div', { class: 'space-y-3' }, Array.from({ length: 4 }, (_, i) =>
-          h(resolveComponent('Card'), { key: i, class: 'animate-pulse' }, {
-            default: () => h('div', { class: 'p-4 flex items-center gap-4' }, [
-              h('div', { class: 'flex-1 space-y-2' }, [
-                h('div', { class: 'h-4 w-32 rounded bg-muted' }),
-                h('div', { class: 'h-3 w-48 rounded bg-muted' }),
-              ]),
-              h('div', { class: 'h-8 w-20 rounded bg-muted' }),
-            ]),
-          }),
-        ))
-      }
-
-      // Empty state
-      if (props.bills.length === 0) {
-        return h(resolveComponent('Card'), { class: 'py-12' }, {
-          default: () => h(resolveComponent('CardContent'), { class: 'flex flex-col items-center text-center' }, {
-            default: () => [
-              h(Inbox, { class: 'h-12 w-12 text-muted-foreground mb-4' }),
-              h('h4', { class: 'text-lg font-semibold mb-1' }, '沒有帳單'),
-              h('p', { class: 'text-sm text-muted-foreground' }, '此篩選條件下沒有帳單'),
-            ],
-          }),
-        })
-      }
-
-      // Bill list
-      return h('div', { class: 'space-y-3' }, props.bills.map(bill =>
-        h(resolveComponent('Card'), {
-          key: bill.id,
-          class: 'transition-colors hover:border-primary/50 cursor-pointer',
-          onClick: () => navigateTo(`/bills/${bill.id}`),
-        }, {
-          default: () => h('div', { class: 'p-4 flex flex-col gap-3 sm:flex-row sm:items-center' }, [
-            // Bill info
-            h('div', { class: 'flex-1 min-w-0 space-y-1' }, [
-              h('div', { class: 'flex items-center gap-2 flex-wrap' }, [
-                h('span', { class: 'font-semibold truncate' }, bill.bank?.name),
-                h(resolveComponent('Badge'), { class: statusBadgeClass(bill.status) }, {
-                  default: () => statusLabel(bill.status),
-                }),
-              ]),
-              h('div', { class: 'flex items-center gap-3 text-sm text-muted-foreground' }, [
-                h('span', { class: 'flex items-center gap-1' }, [
-                  h(Calendar, { class: 'h-3.5 w-3.5' }),
-                  formatDate(bill.dueDate),
-                ]),
-                (() => {
-                  const remaining = daysRemainingText(bill.dueDate)
-                  return h('span', { class: `text-xs font-medium ${remaining.className}` }, remaining.text)
-                })(),
-              ]),
-            ]),
-            // Amount and actions
-            h('div', { class: 'flex items-center gap-3 sm:gap-4' }, [
-              h('span', { class: 'text-lg font-bold whitespace-nowrap' }, formatAmount(bill.amount)),
-              h('div', { class: 'flex items-center gap-1.5' }, [
-                h(resolveComponent('Button'), {
-                  variant: 'ghost',
-                  size: 'icon-sm',
-                  onClick: (e: Event) => { e.stopPropagation(); navigateTo(`/bills/${bill.id}`) },
-                  'aria-label': '查看帳單詳情',
-                }, {
-                  default: () => h(Eye, { class: 'h-4 w-4' }),
-                }),
-                bill.status !== 'paid'
-                  ? h(resolveComponent('Button'), {
-                    size: 'sm',
-                    disabled: props.markingPaid.has(bill.id),
-                    onClick: (e: Event) => { e.stopPropagation(); emit('mark-paid', bill.id) },
-                  }, {
-                    default: () => [
-                      props.markingPaid.has(bill.id)
-                        ? h(Loader2, { class: 'h-4 w-4 animate-spin' })
-                        : h(CircleCheck, { class: 'h-4 w-4' }),
-                      props.markingPaid.has(bill.id) ? '處理中...' : '標記已繳',
-                    ],
-                  })
-                  : null,
-              ]),
-            ]),
-          ]),
-        }),
-      ))
-    }
-  },
-})
 </script>

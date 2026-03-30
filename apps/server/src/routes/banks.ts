@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import prisma from '../db/prisma.js'
+import prisma from '@/prisma.js'
 import { BANK_PRESETS } from '@bill-alarm/shared/constants'
 
 const app = new Hono()

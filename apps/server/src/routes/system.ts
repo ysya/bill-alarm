@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
-import { getConnectionStatus, searchEmails, getEmailWithAttachments } from '../services/gmail.js'
-import { extractPdfText, getPdfBuffers } from '../services/pdf-parser.js'
-import { extractBillFromText } from '../services/bill-extractor.js'
-import { scanAndProcessEmails } from '../services/email-parser.js'
-import { processNewBill } from '../services/notification.js'
-import { sendTestMessage, isConfigured as telegramConfigured } from '../services/telegram.js'
-import { isConfigured as calendarConfigured } from '../services/calendar.js'
+import { getConnectionStatus, searchEmails, getEmailWithAttachments } from '@/services/gmail.js'
+import { extractPdfText, getPdfBuffers } from '@/services/pdf-parser.js'
+import { extractBillFromText } from '@/services/bill-extractor.js'
+import { scanAndProcessEmails } from '@/services/email-parser.js'
+import { processNewBill } from '@/services/notification.js'
+import { sendTestMessage, isConfigured as telegramConfigured } from '@/services/telegram.js'
+import { isConfigured as calendarConfigured } from '@/services/calendar.js'
 
 const app = new Hono()
 

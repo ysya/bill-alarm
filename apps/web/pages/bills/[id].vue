@@ -69,7 +69,7 @@
             <div class="space-y-1">
               <Label class="text-muted-foreground text-xs uppercase tracking-wide">繳費截止日</Label>
               <div class="flex items-center gap-2">
-                <Calendar class="h-4 w-4 text-muted-foreground" />
+                <CalendarIcon class="h-4 w-4 text-muted-foreground" />
                 <span class="font-medium">{{ formatDate(bill.dueDate) }}</span>
                 <span :class="daysRemainingInfo.className" class="text-sm font-medium">
                   ({{ daysRemainingInfo.text }})
@@ -101,11 +101,10 @@
             v-if="bill.status !== 'paid'"
             class="w-full sm:w-auto"
             :disabled="actionLoading"
-            @click="handleMarkAsPaid"
+            @click="payDialogOpen = true; payDate = today(getLocalTimeZone())"
           >
-            <Loader2 v-if="actionLoading" class="h-4 w-4 animate-spin" />
-            <CircleCheck v-else class="h-4 w-4" />
-            {{ actionLoading ? '處理中...' : '標記已繳' }}
+            <CircleCheck class="h-4 w-4" />
+            標記已繳
           </Button>
           <Button
             v-else
@@ -117,6 +116,17 @@
             <Loader2 v-if="actionLoading" class="h-4 w-4 animate-spin" />
             <Undo2 v-else class="h-4 w-4" />
             {{ actionLoading ? '處理中...' : '恢復為待繳' }}
+          </Button>
+          <Button
+            v-if="bill.pdfPath"
+            variant="outline"
+            class="w-full sm:w-auto"
+            as="a"
+            :href="`/api/bills/${bill.id}/pdf`"
+            target="_blank"
+          >
+            <FileDown class="h-4 w-4" />
+            下載 PDF
           </Button>
           <Button
             variant="outline"
@@ -205,6 +215,26 @@
       </Card>
     </template>
 
+    <!-- Mark as Paid Dialog -->
+    <Dialog v-model:open="payDialogOpen">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>標記為已繳</DialogTitle>
+          <DialogDescription>選擇繳費日期，預設為今天。</DialogDescription>
+        </DialogHeader>
+        <div class="flex justify-center py-2">
+          <Calendar v-model="payDate" />
+        </div>
+        <DialogFooter class="gap-2">
+          <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
+          <Button :disabled="actionLoading" @click="handleConfirmPaid">
+            <Loader2 v-if="actionLoading" class="mr-2 h-4 w-4 animate-spin" />
+            確認已繳
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <!-- Delete Confirm Dialog -->
     <Dialog v-model:open="deleteDialogOpen">
       <DialogContent class="sm:max-w-md">
@@ -225,10 +255,10 @@
 import { toast } from 'vue-sonner'
 import {
   ArrowLeft,
-  Calendar,
+  Calendar as CalendarIcon,
   CalendarRange,
-  CreditCard,
   Clock,
+  FileDown,
   CircleCheck,
   AlertTriangle,
   Loader2,
@@ -239,6 +269,8 @@ import {
   BellOff,
   Trash2,
 } from 'lucide-vue-next'
+import { getLocalTimeZone, today } from '@internationalized/date'
+import type { DateValue } from 'reka-ui'
 
 interface BillDetail {
   id: string
@@ -250,6 +282,7 @@ interface BillDetail {
   billingPeriodStart?: string
   billingPeriodEnd?: string
   rawEmailSnippet?: string
+  pdfPath?: string | null
   notifications?: Notification[]
   createdAt?: string
 }
@@ -312,6 +345,8 @@ const error = ref(false)
 const actionLoading = ref(false)
 const emailExpanded = ref(false)
 const deleteDialogOpen = ref(false)
+const payDialogOpen = ref(false)
+const payDate = ref(today(getLocalTimeZone())) as Ref<DateValue>
 
 const notifications = computed<Notification[]>(() => bill.value?.notifications ?? [])
 
@@ -337,11 +372,12 @@ async function fetchBill() {
   }
 }
 
-async function handleMarkAsPaid() {
+async function handleConfirmPaid() {
   actionLoading.value = true
   try {
-    await markAsPaid(billId.value)
+    await markAsPaid(billId.value, payDate.value.toString())
     toast.success('帳單已標記為已繳')
+    payDialogOpen.value = false
     await fetchBill()
   } catch {
     toast.error('操作失敗', { description: '無法標記帳單，請稍後再試' })
@@ -380,6 +416,6 @@ async function handleDelete() {
 onMounted(() => fetchBill())
 
 useHead({
-  title: computed(() => bill.value ? `${bill.value.bankName} - Bill Alarm` : 'Bill Alarm'),
+  title: computed(() => bill.value ? `${bill.value.bank?.name} - Bill Alarm` : 'Bill Alarm'),
 })
 </script>

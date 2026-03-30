@@ -33,7 +33,7 @@ function extractAmount(text: string): number | null {
     /前期帳單總額[\s\S]*?繳款截止日\n-?[\d,]+\s+-?[\d,]+\s+(-?[\d,]+)/,
   )
   if (match) {
-    return Math.abs(parseAmount(match[1]))
+    return parseAmount(match[1])
   }
   return null
 }
