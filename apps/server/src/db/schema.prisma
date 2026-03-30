@@ -9,12 +9,13 @@ datasource db {
 
 model CreditCard {
   id                  String   @id @default(cuid())
+  code                String?  @unique
   bankName            String
   emailSenderPattern  String
   emailSubjectPattern String
   pdfPassword         String?
+  isBuiltin           Boolean  @default(false)
   isActive            Boolean  @default(true)
-  // parserType removed — LLM handles all parsing now
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   bills               Bill[]
