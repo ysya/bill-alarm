@@ -6,6 +6,7 @@ import { z } from 'zod'
 import prisma from '@/prisma.js'
 import { handleBillPaid } from '@/services/notification.js'
 import { DATA_DIR } from '@/paths.js'
+import { decryptPdf } from '@/services/pdf-parser.js'
 
 const app = new Hono()
 
@@ -106,15 +107,20 @@ app.patch('/:id/pay', zValidator('json', z.object({
   return c.json(bill)
 })
 
-// Download PDF
+// View PDF (decrypted with stored password)
 app.get('/:id/pdf', async (c) => {
-  const bill = await prisma.bill.findUnique({ where: { id: c.req.param('id') } })
+  const bill = await prisma.bill.findUnique({
+    where: { id: c.req.param('id') },
+    include: { bank: { select: { pdfPassword: true } } },
+  })
   if (!bill?.pdfPath) return c.json({ error: 'PDF not found' }, 404)
 
   const filePath = path.join(DATA_DIR, bill.pdfPath)
   try {
-    const buffer = await fs.readFile(filePath)
-    return new Response(buffer, {
+    const encrypted = await fs.readFile(filePath)
+    const password = bill.bank.pdfPassword || undefined
+    const decrypted = await decryptPdf(encrypted, password)
+    return new Response(decrypted, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${path.basename(bill.pdfPath)}"`,

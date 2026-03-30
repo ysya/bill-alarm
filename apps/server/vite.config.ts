@@ -28,6 +28,7 @@ export default defineConfig({
       'googleapis',
       '@google/genai',
       'node-cron',
+      'mupdf',
     ],
   },
 })
