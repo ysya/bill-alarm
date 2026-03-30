@@ -26,4 +26,5 @@ export const BANK_PRESETS: BankPreset[] = [
   { code: 'esun', name: '玉山銀行', emailSender: 'estatement@esunbank.com', emailSubject: '信用卡電子帳單', passwordHint: '無密碼（留空）' },
   { code: 'yuanta', name: '元大銀行', emailSender: 'YuantaBank@estmt.com.tw', emailSubject: '信用卡電子帳單', passwordHint: '身分證字號' },
   { code: 'ctbc', name: '中國信託', emailSender: 'ebill@estats.ctbcbank.com', emailSubject: '中國信託信用卡電子帳單', passwordHint: '身分證字號' },
+  { code: 'taishin', name: '台新銀行', emailSender: 'webmaster@bhurecv.taishinbank.com.tw', emailSubject: '台新信用卡電子帳單', passwordHint: '身分證字號後2碼+生日月日4碼' },
 ]
