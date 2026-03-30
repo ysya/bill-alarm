@@ -1,5 +1,5 @@
 import { google } from 'googleapis'
-import { getSetting, KEYS } from './settings.js'
+import { getSetting, setSetting, KEYS } from './settings.js'
 
 export interface EmailAttachment {
   filename: string
@@ -26,6 +26,14 @@ async function getAuth() {
 
   const auth = new google.auth.OAuth2(clientId, clientSecret)
   auth.setCredentials({ refresh_token: refreshToken })
+
+  // Auto-save if Google issues a new refresh token
+  auth.on('tokens', async (tokens) => {
+    if (tokens.refresh_token) {
+      await setSetting(KEYS.GOOGLE_REFRESH_TOKEN, tokens.refresh_token)
+    }
+  })
+
   return auth
 }
 
