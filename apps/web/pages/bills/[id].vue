@@ -126,7 +126,7 @@
             target="_blank"
           >
             <FileDown class="h-4 w-4" />
-            下載 PDF
+            檢視 PDF
           </Button>
           <Button
             variant="outline"

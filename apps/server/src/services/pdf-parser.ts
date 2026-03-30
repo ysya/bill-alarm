@@ -34,6 +34,24 @@ export async function extractPdfText(pdfBuffer: Buffer, password?: string): Prom
 }
 
 /**
+ * Decrypt a PDF buffer using mupdf WASM, returning an unencrypted PDF buffer.
+ * If no password is needed, returns the original buffer.
+ */
+export async function decryptPdf(pdfBuffer: Buffer, password?: string): Promise<Buffer> {
+  const mupdf = await import('mupdf')
+  const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf')
+  if (doc.needsPassword()) {
+    if (!password || !doc.authenticatePassword(password)) {
+      throw new Error('PDF 密碼錯誤或未提供密碼')
+    }
+  }
+  const pdf = doc.asPDF()
+  if (!pdf) return pdfBuffer
+  const output = pdf.saveToBuffer('decrypt,compress')
+  return Buffer.from(output.asUint8Array())
+}
+
+/**
  * Extract PDF files from a ZIP buffer.
  */
 export async function extractPdfsFromZip(zipBuffer: Buffer): Promise<Array<{ filename: string; data: Buffer }>> {
