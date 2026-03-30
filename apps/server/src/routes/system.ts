@@ -76,6 +76,7 @@ app.get('/gmail/message/:id', async (c) => {
 // Debug: extract PDF text from an email attachment and try parsing
 app.get('/gmail/message/:id/parse', async (c) => {
   const password = c.req.query('password') || undefined
+  const bankCode = c.req.query('bank') || undefined
   const email = await getEmailWithAttachments(c.req.param('id'))
   if (!email) return c.json({ error: 'Email not found' }, 404)
 
@@ -95,7 +96,7 @@ app.get('/gmail/message/:id/parse', async (c) => {
 
   if (!pdfText) return c.json({ error: extractError || 'Failed to extract PDF text' })
 
-  const parsed = extractBillFromText(pdfText)
+  const parsed = extractBillFromText(pdfText, bankCode)
 
   return c.json({
     pdfTextPreview: pdfText.substring(0, 2000),

@@ -6,7 +6,11 @@
         <h2 class="text-2xl font-bold tracking-tight">帳單管理</h2>
         <p class="text-muted-foreground">查看與管理所有信用卡帳單</p>
       </div>
-      <div class="w-full sm:w-auto">
+      <div class="flex items-center gap-2 w-full sm:w-auto">
+        <Button variant="outline" size="sm" :disabled="scanning" @click="handleScan">
+          <RefreshCw class="mr-2 h-4 w-4" :class="scanning ? 'animate-spin' : ''" />
+          {{ scanning ? '掃描中...' : '掃描信件' }}
+        </Button>
         <Select v-model="selectedMonth">
           <SelectTrigger class="w-full sm:w-44">
             <SelectValue placeholder="選擇月份" />
@@ -77,6 +81,7 @@ import {
   Loader2,
   Eye,
   Inbox,
+  RefreshCw,
 } from 'lucide-vue-next'
 
 interface Bill {
@@ -167,9 +172,11 @@ const activeTab = ref<string>('all')
 // --- Data ---
 
 const { list, markAsPaid } = useBillApi()
+const { post } = useApi()
 
 const allBills = ref<Bill[]>([])
 const loading = ref(true)
+const scanning = ref(false)
 const markingPaid = ref<Set<string>>(new Set())
 
 const filteredBills = computed<Bill[]>(() => {
@@ -208,6 +215,26 @@ async function handleMarkAsPaid(id: string) {
     toast.error('操作失敗', { description: '無法標記帳單，請稍後再試' })
   } finally {
     markingPaid.value.delete(id)
+  }
+}
+
+async function handleScan() {
+  scanning.value = true
+  try {
+    const result = await post<{ scanned: number; newBills: number; errors: string[] }>('/gmail/scan')
+    if (result.newBills > 0) {
+      toast.success(`掃描完成，新增 ${result.newBills} 筆帳單`)
+      await fetchBills()
+    } else {
+      toast.info(`掃描完成，共檢查 ${result.scanned} 封信件，沒有新帳單`)
+    }
+    if (result.errors.length > 0) {
+      toast.warning('部分信件處理失敗', { description: result.errors.join('\n') })
+    }
+  } catch {
+    toast.error('掃描失敗', { description: '請確認 Gmail 已連線' })
+  } finally {
+    scanning.value = false
   }
 }
 

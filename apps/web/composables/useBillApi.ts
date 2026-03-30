@@ -1,5 +1,5 @@
 export function useBillApi() {
-  const { get, patch } = useApi()
+  const { get, patch, del } = useApi()
 
   return {
     getSummary: () => get<{
@@ -24,5 +24,7 @@ export function useBillApi() {
     update: (id: string, data: Record<string, unknown>) => patch<any>(`/bills/${id}`, data),
 
     markAsPaid: (id: string) => patch<any>(`/bills/${id}/pay`),
+
+    remove: (id: string) => del<any>(`/bills/${id}`),
   }
 }

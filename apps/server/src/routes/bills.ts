@@ -92,4 +92,12 @@ app.patch('/:id/pay', async (c) => {
   return c.json(bill)
 })
 
+// Delete bill
+app.delete('/:id', async (c) => {
+  const bill = await prisma.bill.findUnique({ where: { id: c.req.param('id') } })
+  if (!bill) return c.json({ error: 'Not found' }, 404)
+  await prisma.bill.delete({ where: { id: bill.id } })
+  return c.json({ success: true })
+})
+
 export default app

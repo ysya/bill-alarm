@@ -118,6 +118,15 @@
             <Undo2 v-else class="h-4 w-4" />
             {{ actionLoading ? '處理中...' : '恢復為待繳' }}
           </Button>
+          <Button
+            variant="outline"
+            class="w-full sm:w-auto text-destructive hover:text-destructive"
+            :disabled="actionLoading"
+            @click="deleteDialogOpen = true"
+          >
+            <Trash2 class="h-4 w-4" />
+            刪除帳單
+          </Button>
         </CardFooter>
       </Card>
 
@@ -195,6 +204,20 @@
         </CardContent>
       </Card>
     </template>
+
+    <!-- Delete Confirm Dialog -->
+    <Dialog v-model:open="deleteDialogOpen">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>確認刪除</DialogTitle>
+          <DialogDescription>確定要刪除此帳單嗎？此操作無法復原。</DialogDescription>
+        </DialogHeader>
+        <DialogFooter class="gap-2">
+          <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
+          <Button variant="destructive" :disabled="actionLoading" @click="handleDelete">確認刪除</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -214,6 +237,7 @@ import {
   ChevronDown,
   Bell,
   BellOff,
+  Trash2,
 } from 'lucide-vue-next'
 
 interface BillDetail {
@@ -280,13 +304,14 @@ function statusBadgeClass(status: string): string {
 const route = useRoute()
 const billId = computed(() => route.params.id as string)
 
-const { getById, markAsPaid, update } = useBillApi()
+const { getById, markAsPaid, update, remove } = useBillApi()
 
 const bill = ref<BillDetail | null>(null)
 const loading = ref(true)
 const error = ref(false)
 const actionLoading = ref(false)
 const emailExpanded = ref(false)
+const deleteDialogOpen = ref(false)
 
 const notifications = computed<Notification[]>(() => bill.value?.notifications ?? [])
 
@@ -335,6 +360,20 @@ async function handleRevertToPending() {
     toast.error('操作失敗', { description: '無法恢復帳單狀態，請稍後再試' })
   } finally {
     actionLoading.value = false
+  }
+}
+
+async function handleDelete() {
+  actionLoading.value = true
+  try {
+    await remove(billId.value)
+    toast.success('帳單已刪除')
+    navigateTo('/bills')
+  } catch {
+    toast.error('刪除失敗')
+  } finally {
+    actionLoading.value = false
+    deleteDialogOpen.value = false
   }
 }
 

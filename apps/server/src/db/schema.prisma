@@ -8,7 +8,7 @@ datasource db {
 }
 
 model Bank {
-  id                  String   @id @default(cuid())
+  id                  String   @id @default(uuid(7))
   code                String?  @unique
   name                String
   emailSenderPattern  String
@@ -24,7 +24,7 @@ model Bank {
 }
 
 model Bill {
-  id               String            @id @default(cuid())
+  id               String            @id @default(uuid(7))
   bankId           String
   bank             Bank              @relation(fields: [bankId], references: [id])
   billingPeriod    String
@@ -45,7 +45,7 @@ model Bill {
 }
 
 model NotificationRule {
-  id         String            @id @default(cuid())
+  id         String            @id @default(uuid(7))
   name       String
   daysBefore Int
   timeOfDay  String
@@ -59,7 +59,7 @@ model NotificationRule {
 }
 
 model NotificationLog {
-  id           String            @id @default(cuid())
+  id           String            @id @default(uuid(7))
   billId       String
   bill         Bill              @relation(fields: [billId], references: [id])
   ruleId       String?
