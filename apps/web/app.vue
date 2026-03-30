@@ -52,11 +52,12 @@
         <NuxtPage />
       </main>
     </div>
-    <Sonner />
+    <Sonner position="top-right" />
   </div>
 </template>
 
 <script setup lang="ts">
+import 'vue-sonner/style.css'
 import { LayoutDashboard, Receipt, CreditCard, Settings, Menu } from 'lucide-vue-next'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
