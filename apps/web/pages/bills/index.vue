@@ -272,8 +272,10 @@ async function handleScan() {
     if (result.newBills > 0) {
       toast.success(`掃描完成，新增 ${result.newBills} 筆帳單`)
       await fetchBills()
+    } else if (result.scanned === 0) {
+      toast.warning('沒有找到任何信件', { description: '請確認 Gmail 已連線，或信箱中沒有新的帳單通知' })
     } else {
-      toast.info(`掃描完成，共檢查 ${result.scanned} 封信件，沒有新帳單`)
+      toast.info(`已檢查 ${result.scanned} 封信件，沒有新帳單`)
     }
     if (result.errors.length > 0) {
       toast.warning('部分信件處理失敗', { description: result.errors.join('\n') })
