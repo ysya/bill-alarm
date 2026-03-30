@@ -304,7 +304,7 @@ onMounted(fetchData)
             <Label for="pwd">PDF 密碼</Label>
             <Input id="pwd" v-model="passwordInput" type="password" :placeholder="passwordTarget?.hint || '留空表示無密碼'" />
           </div>
-          <DialogFooter class="gap-2 sm:gap-0">
+          <DialogFooter class="gap-2">
             <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
             <Button type="submit" :disabled="submitting">啟用</Button>
           </DialogFooter>
@@ -332,7 +332,7 @@ onMounted(fetchData)
             <Label for="ePwd">PDF 密碼</Label>
             <Input id="ePwd" v-model="editForm.pdfPassword" type="password" placeholder="留空表示無密碼" />
           </div>
-          <DialogFooter class="gap-2 sm:gap-0">
+          <DialogFooter class="gap-2">
             <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
             <Button type="submit" :disabled="submitting">儲存</Button>
           </DialogFooter>
@@ -364,7 +364,7 @@ onMounted(fetchData)
             <Label for="cPwd">PDF 密碼</Label>
             <Input id="cPwd" v-model="customForm.pdfPassword" type="password" placeholder="留空表示無密碼" />
           </div>
-          <DialogFooter class="gap-2 sm:gap-0">
+          <DialogFooter class="gap-2">
             <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
             <Button type="submit" :disabled="submitting">新增</Button>
           </DialogFooter>
@@ -379,7 +379,7 @@ onMounted(fetchData)
           <DialogTitle>確認刪除</DialogTitle>
           <DialogDescription>確定要刪除「{{ deletingBank?.bankName }}」嗎？</DialogDescription>
         </DialogHeader>
-        <DialogFooter class="gap-2 sm:gap-0">
+        <DialogFooter class="gap-2">
           <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
           <Button variant="destructive" :disabled="submitting" @click="handleDelete">確認刪除</Button>
         </DialogFooter>
