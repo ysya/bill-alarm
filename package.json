@@ -1,0 +1,28 @@
+{
+  "name": "bill-alarm",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "turbo dev",
+    "dev:server": "turbo dev --filter=@bill-alarm/server",
+    "dev:web": "turbo dev --filter=@bill-alarm/web",
+    "build": "turbo build",
+    "lint": "turbo lint"
+  },
+  "packageManager": "pnpm@10.32.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "@prisma/engines",
+      "better-sqlite3",
+      "esbuild",
+      "prisma",
+      "protobufjs",
+      "unrs-resolver",
+      "vue-demi"
+    ]
+  },
+  "devDependencies": {
+    "turbo": "^2.8.21"
+  }
+}

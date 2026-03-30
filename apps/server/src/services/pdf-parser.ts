@@ -1,0 +1,82 @@
+import type { EmailAttachment } from './gmail.js'
+
+async function parsePdf(buffer: Buffer, password?: string): Promise<string> {
+  const { PDFParse } = await import('pdf-parse')
+  const options: Record<string, unknown> = { data: new Uint8Array(buffer) }
+  if (password) options.password = password
+  const parser = new PDFParse(options)
+  await parser.load()
+  const result = await parser.getText() as unknown
+  parser.destroy()
+
+  // getText() returns { pages: [{ text, num }] } in v2
+  if (result && typeof result === 'object' && 'pages' in (result as Record<string, unknown>)) {
+    const pages = (result as { pages: Array<{ text: string }> }).pages
+    return pages.map((p) => p.text).join('\n')
+  }
+  return String(result ?? '')
+}
+
+/**
+ * Extract text content from a PDF buffer, optionally decrypting with a password.
+ */
+export async function extractPdfText(pdfBuffer: Buffer, password?: string): Promise<string | null> {
+  try {
+    const text = await parsePdf(pdfBuffer, password)
+    return text.trim() || null
+  } catch (e) {
+    const msg = (e as Error).message
+    if (msg.includes('password') || msg.includes('encrypt')) {
+      throw new Error(`PDF 密碼錯誤或未提供密碼: ${msg}`)
+    }
+    throw new Error(`PDF 解析失敗: ${msg}`)
+  }
+}
+
+/**
+ * Extract PDF files from a ZIP buffer.
+ */
+export async function extractPdfsFromZip(zipBuffer: Buffer): Promise<Array<{ filename: string; data: Buffer }>> {
+  // Use Node.js built-in ZIP handling via dynamic import of a lightweight approach
+  // For simplicity, we'll try to use the AdmZip pattern
+  const { default: AdmZip } = await import('adm-zip')
+  const zip = new AdmZip(zipBuffer)
+  const pdfs: Array<{ filename: string; data: Buffer }> = []
+
+  for (const entry of zip.getEntries()) {
+    if (entry.entryName.endsWith('.pdf') && !entry.isDirectory) {
+      pdfs.push({
+        filename: entry.entryName,
+        data: entry.getData(),
+      })
+    }
+  }
+
+  return pdfs
+}
+
+/**
+ * Given a list of email attachments, extract all PDF buffers
+ * (handling both direct PDFs and PDFs inside ZIPs).
+ */
+export async function getPdfBuffers(
+  attachments: EmailAttachment[],
+  zipPassword?: string,
+): Promise<Buffer[]> {
+  const pdfs: Buffer[] = []
+
+  for (const att of attachments) {
+    if (att.mimeType === 'application/pdf' || att.filename.endsWith('.pdf')) {
+      pdfs.push(att.data)
+    } else if (att.mimeType === 'application/zip' || att.filename.endsWith('.zip')) {
+      try {
+        const extracted = await extractPdfsFromZip(att.data)
+        pdfs.push(...extracted.map((e) => e.data))
+      } catch (e) {
+        // ZIP extraction failed, skip
+      }
+    }
+  }
+
+  return pdfs
+}
