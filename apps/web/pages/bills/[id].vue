@@ -77,13 +77,11 @@
               </div>
             </div>
 
-            <div v-if="bill.billingPeriodStart && bill.billingPeriodEnd" class="space-y-1">
+            <div v-if="bill.billingPeriod" class="space-y-1">
               <Label class="text-muted-foreground text-xs uppercase tracking-wide">帳單週期</Label>
               <div class="flex items-center gap-2">
                 <CalendarRange class="h-4 w-4 text-muted-foreground" />
-                <span class="font-medium">
-                  {{ formatDate(bill.billingPeriodStart) }} - {{ formatDate(bill.billingPeriodEnd) }}
-                </span>
+                <span class="font-medium">{{ bill.billingPeriod }}</span>
               </div>
             </div>
 
@@ -98,7 +96,7 @@
         </CardContent>
         <CardFooter class="flex flex-col gap-2 sm:flex-row">
           <Button
-            v-if="bill.status !== 'paid'"
+            v-if="bill.status !== BillStatus.PAID"
             class="w-full sm:w-auto"
             :disabled="actionLoading"
             @click="payDialogOpen = true; payDate = today(getLocalTimeZone())"
@@ -192,9 +190,8 @@
                 <div
                   class="h-2 w-2 rounded-full"
                   :class="{
-                    'bg-green-500': notification.status === 'sent',
-                    'bg-red-500': notification.status === 'failed',
-                    'bg-yellow-500': notification.status === 'pending',
+                    'bg-green-500': notification.success,
+                    'bg-red-500': !notification.success,
                   }"
                 />
               </div>
@@ -271,29 +268,8 @@ import {
 } from 'lucide-vue-next'
 import { getLocalTimeZone, today } from '@internationalized/date'
 import type { DateValue } from 'reka-ui'
-
-interface BillDetail {
-  id: string
-  bank?: { name: string }
-  amount: number
-  minimumPayment?: number
-  dueDate: string
-  status: 'pending' | 'paid' | 'overdue'
-  billingPeriodStart?: string
-  billingPeriodEnd?: string
-  rawEmailSnippet?: string
-  pdfPath?: string | null
-  notifications?: Notification[]
-  createdAt?: string
-}
-
-interface Notification {
-  id?: string
-  channel: string
-  status: 'sent' | 'failed' | 'pending'
-  sentAt: string
-  message?: string
-}
+import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
+import type { BillDetailDTO, NotificationDTO } from '@bill-alarm/shared/types'
 
 // --- Helpers ---
 
@@ -314,24 +290,6 @@ function daysUntil(date: string | Date): number {
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    pending: '待繳',
-    paid: '已繳',
-    overdue: '逾期',
-  }
-  return map[status] ?? status
-}
-
-function statusBadgeClass(status: string): string {
-  const map: Record<string, string> = {
-    pending: 'bg-yellow-500/15 text-yellow-500 border-yellow-500/25 hover:bg-yellow-500/15',
-    paid: 'bg-green-500/15 text-green-500 border-green-500/25 hover:bg-green-500/15',
-    overdue: 'bg-red-500/15 text-red-500 border-red-500/25 hover:bg-red-500/15',
-  }
-  return map[status] ?? ''
-}
-
 // --- Route & API ---
 
 const route = useRoute()
@@ -339,7 +297,7 @@ const billId = computed(() => route.params.id as string)
 
 const { getById, markAsPaid, update, remove } = useBillApi()
 
-const bill = ref<BillDetail | null>(null)
+const bill = ref<BillDetailDTO | null>(null)
 const loading = ref(true)
 const error = ref(false)
 const actionLoading = ref(false)
@@ -348,10 +306,11 @@ const deleteDialogOpen = ref(false)
 const payDialogOpen = ref(false)
 const payDate = ref(today(getLocalTimeZone())) as Ref<DateValue>
 
-const notifications = computed<Notification[]>(() => bill.value?.notifications ?? [])
+const notifications = computed<NotificationDTO[]>(() => bill.value?.notifications ?? [])
 
 const daysRemainingInfo = computed(() => {
   if (!bill.value) return { text: '', className: '' }
+  if (bill.value.status === BillStatus.PAID) return { text: '', className: '' }
   const days = daysUntil(bill.value.dueDate)
   if (days < 0) return { text: `已逾期 ${Math.abs(days)} 天`, className: 'text-red-500' }
   if (days === 0) return { text: '今天到期', className: 'text-red-500' }
@@ -389,7 +348,7 @@ async function handleConfirmPaid() {
 async function handleRevertToPending() {
   actionLoading.value = true
   try {
-    await update(billId.value, { status: 'pending' })
+    await update(billId.value, { status: BillStatus.PENDING })
     toast.success('帳單已恢復為待繳')
     await fetchBill()
   } catch {
