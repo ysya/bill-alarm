@@ -1,6 +1,6 @@
 import { google } from 'googleapis'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
-import { getSetting, KEYS } from './settings.js'
+import { getSetting, setSetting, KEYS } from './settings.js'
 
 async function getAuth() {
   const clientId = await getSetting(KEYS.GOOGLE_CLIENT_ID)
@@ -11,6 +11,13 @@ async function getAuth() {
 
   const auth = new google.auth.OAuth2(clientId, clientSecret)
   auth.setCredentials({ refresh_token: refreshToken })
+
+  auth.on('tokens', async (tokens) => {
+    if (tokens.refresh_token) {
+      await setSetting(KEYS.GOOGLE_REFRESH_TOKEN, tokens.refresh_token)
+    }
+  })
+
   return auth
 }
 
