@@ -1,4 +1,4 @@
-import type { Bill, CreditCard } from '../../generated/prisma/client.js'
+import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { getSetting, KEYS } from './settings.js'
 
 const API_BASE = 'https://api.telegram.org/bot'
@@ -51,12 +51,12 @@ function daysUntil(date: Date): number {
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export async function sendNewBillAlert(bill: Bill, card: CreditCard): Promise<boolean> {
+export async function sendNewBillAlert(bill: Bill, bank: Bank): Promise<boolean> {
   const days = daysUntil(bill.dueDate)
   const text = [
     '<b>📨 收到新帳單</b>',
     '',
-    `🏦 ${card.bankName}`,
+    `🏦 ${bank.name}`,
     `💰 應繳金額：${formatAmount(bill.amount)}`,
     bill.minimumPayment ? `📉 最低應繳：${formatAmount(bill.minimumPayment)}` : '',
     `📅 截止日：${formatDate(bill.dueDate)}`,
@@ -66,14 +66,14 @@ export async function sendNewBillAlert(bill: Bill, card: CreditCard): Promise<bo
   return sendMessage(text)
 }
 
-export async function sendBillReminder(bill: Bill, card: CreditCard): Promise<boolean> {
+export async function sendBillReminder(bill: Bill, bank: Bank): Promise<boolean> {
   const days = daysUntil(bill.dueDate)
   const urgency = days <= 1 ? '🔴 緊急' : days <= 3 ? '🟡 注意' : '🔵 提醒'
 
   const text = [
     `<b>${urgency} 信用卡帳單提醒</b>`,
     '',
-    `🏦 ${card.bankName}`,
+    `🏦 ${bank.name}`,
     `💰 應繳金額：${formatAmount(bill.amount)}`,
     `📅 截止日：${formatDate(bill.dueDate)}`,
     days === 0 ? '⚠️ 今天是最後繳費日！' : `⏰ 還有 ${days} 天`,
@@ -82,11 +82,11 @@ export async function sendBillReminder(bill: Bill, card: CreditCard): Promise<bo
   return sendMessage(text)
 }
 
-export async function sendOverdueWarning(bill: Bill, card: CreditCard): Promise<boolean> {
+export async function sendOverdueWarning(bill: Bill, bank: Bank): Promise<boolean> {
   const text = [
     '<b>🔴 帳單逾期警告</b>',
     '',
-    `🏦 ${card.bankName}`,
+    `🏦 ${bank.name}`,
     `💰 應繳金額：${formatAmount(bill.amount)}`,
     `📅 截止日：${formatDate(bill.dueDate)}（已逾期）`,
     '',

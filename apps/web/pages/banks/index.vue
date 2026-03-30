@@ -13,7 +13,7 @@ interface BankPreset {
 interface EnabledBank {
   id: string
   code: string | null
-  bankName: string
+  name: string
   emailSenderPattern: string
   emailSubjectPattern: string
   pdfPassword: string | null
@@ -22,7 +22,7 @@ interface EnabledBank {
   _count?: { bills: number }
 }
 
-const cardApi = useCardApi()
+const bankApi = useBankApi()
 
 const presets = ref<BankPreset[]>([])
 const enabledBanks = ref<EnabledBank[]>([])
@@ -35,7 +35,7 @@ const passwordInput = ref('')
 
 // Custom bank dialog
 const customDialogOpen = ref(false)
-const customForm = ref({ bankName: '', emailSenderPattern: '', emailSubjectPattern: '', pdfPassword: '' })
+const customForm = ref({ name: '', emailSenderPattern: '', emailSubjectPattern: '', pdfPassword: '' })
 
 // Edit dialog (for tweaking patterns)
 const editDialogOpen = ref(false)
@@ -51,7 +51,7 @@ const submitting = ref(false)
 async function fetchData() {
   loading.value = true
   try {
-    const [p, e] = await Promise.all([cardApi.getPresets(), cardApi.list()])
+    const [p, e] = await Promise.all([bankApi.getPresets(), bankApi.list()])
     presets.value = p
     enabledBanks.value = e
   } catch (error) {
@@ -77,7 +77,7 @@ async function handleToggle(preset: BankPreset) {
   if (record?.isActive) {
     // Disable
     try {
-      await cardApi.disable(preset.code)
+      await bankApi.disable(preset.code)
       toast.success(`已停用 ${preset.name}`)
       await fetchData()
     } catch (error) {
@@ -86,7 +86,7 @@ async function handleToggle(preset: BankPreset) {
   } else if (record) {
     // Re-enable existing record
     try {
-      await cardApi.enable(preset.code)
+      await bankApi.enable(preset.code)
       toast.success(`已啟用 ${preset.name}`)
       await fetchData()
     } catch (error) {
@@ -104,7 +104,7 @@ async function handleEnableWithPassword() {
   if (!passwordTarget.value) return
   submitting.value = true
   try {
-    await cardApi.enable(passwordTarget.value.code, passwordInput.value || undefined)
+    await bankApi.enable(passwordTarget.value.code, passwordInput.value || undefined)
     toast.success(`已啟用 ${passwordTarget.value.name}`)
     passwordDialogOpen.value = false
     await fetchData()
@@ -130,7 +130,7 @@ async function handleEdit() {
   if (!editingBank.value) return
   submitting.value = true
   try {
-    await cardApi.update(editingBank.value.id, {
+    await bankApi.update(editingBank.value.id, {
       emailSenderPattern: editForm.value.emailSenderPattern,
       emailSubjectPattern: editForm.value.emailSubjectPattern,
       pdfPassword: editForm.value.pdfPassword || null,
@@ -147,21 +147,21 @@ async function handleEdit() {
 
 // Custom bank
 async function handleAddCustom() {
-  if (!customForm.value.bankName.trim() || !customForm.value.emailSenderPattern.trim()) {
+  if (!customForm.value.name.trim() || !customForm.value.emailSenderPattern.trim()) {
     toast.error('請填寫銀行名稱和寄件者')
     return
   }
   submitting.value = true
   try {
-    await cardApi.create({
-      bankName: customForm.value.bankName.trim(),
+    await bankApi.create({
+      name: customForm.value.name.trim(),
       emailSenderPattern: customForm.value.emailSenderPattern.trim(),
       emailSubjectPattern: customForm.value.emailSubjectPattern.trim() || '帳單',
       pdfPassword: customForm.value.pdfPassword.trim() || undefined,
     })
     toast.success('自訂銀行已新增')
     customDialogOpen.value = false
-    customForm.value = { bankName: '', emailSenderPattern: '', emailSubjectPattern: '', pdfPassword: '' }
+    customForm.value = { name: '', emailSenderPattern: '', emailSubjectPattern: '', pdfPassword: '' }
     await fetchData()
   } catch (error) {
     toast.error('新增失敗', { description: String(error) })
@@ -175,7 +175,7 @@ async function handleDelete() {
   if (!deletingBank.value) return
   submitting.value = true
   try {
-    await cardApi.remove(deletingBank.value.id)
+    await bankApi.remove(deletingBank.value.id)
     toast.success('已刪除')
     deleteDialogOpen.value = false
     await fetchData()
@@ -271,7 +271,7 @@ onMounted(fetchData)
               <div class="flex items-center gap-3 min-w-0">
                 <Building2 class="h-5 w-5 text-muted-foreground shrink-0" />
                 <div class="min-w-0">
-                  <p class="font-medium text-sm truncate">{{ bank.bankName }}</p>
+                  <p class="font-medium text-sm truncate">{{ bank.name }}</p>
                   <p class="text-xs text-muted-foreground truncate">{{ bank.emailSenderPattern }}</p>
                 </div>
               </div>
@@ -282,7 +282,7 @@ onMounted(fetchData)
                 <Button variant="ghost" size="icon" class="h-7 w-7 text-destructive" @click="deletingBank = bank; deleteDialogOpen = true">
                   <Trash2 class="h-3.5 w-3.5" />
                 </Button>
-                <Switch :checked="bank.isActive" @update:checked="cardApi.update(bank.id, { isActive: !bank.isActive }).then(fetchData)" />
+                <Switch :checked="bank.isActive" @update:checked="bankApi.update(bank.id, { isActive: !bank.isActive }).then(fetchData)" />
               </div>
             </div>
           </CardContent>
@@ -316,7 +316,7 @@ onMounted(fetchData)
     <Dialog v-model:open="editDialogOpen">
       <DialogContent class="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>編輯 {{ editingBank?.bankName }}</DialogTitle>
+          <DialogTitle>編輯 {{ editingBank?.name }}</DialogTitle>
           <DialogDescription>微調 email 比對規則和 PDF 密碼。</DialogDescription>
         </DialogHeader>
         <form class="space-y-4 py-2" @submit.prevent="handleEdit">
@@ -350,7 +350,7 @@ onMounted(fetchData)
         <form class="space-y-4 py-2" @submit.prevent="handleAddCustom">
           <div class="space-y-2">
             <Label for="cName">銀行名稱 *</Label>
-            <Input id="cName" v-model="customForm.bankName" placeholder="例：星展銀行" />
+            <Input id="cName" v-model="customForm.name" placeholder="例：星展銀行" />
           </div>
           <div class="space-y-2">
             <Label for="cSender">寄件者比對 *</Label>
@@ -377,7 +377,7 @@ onMounted(fetchData)
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>確認刪除</DialogTitle>
-          <DialogDescription>確定要刪除「{{ deletingBank?.bankName }}」嗎？</DialogDescription>
+          <DialogDescription>確定要刪除「{{ deletingBank?.name }}」嗎？</DialogDescription>
         </DialogHeader>
         <DialogFooter class="gap-2">
           <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>

@@ -1,7 +1,7 @@
 import prisma from '../db/prisma.js'
 import { sendNewBillAlert, sendBillReminder, sendOverdueWarning } from './telegram.js'
 import { createDueDateEvent, deleteDueDateEvent } from './calendar.js'
-import type { Bill, CreditCard } from '../../generated/prisma/client.js'
+import type { Bill, Bank } from '../../generated/prisma/client.js'
 
 async function logNotification(
   billId: string,
@@ -16,14 +16,12 @@ async function logNotification(
   })
 }
 
-export async function processNewBill(bill: Bill, card: CreditCard): Promise<void> {
-  // Send Telegram alert
-  const telegramOk = await sendNewBillAlert(bill, card)
+export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
+  const telegramOk = await sendNewBillAlert(bill, bank)
   await logNotification(bill.id, null, 'telegram', '新帳單通知', telegramOk)
 
-  // Create Calendar event
   try {
-    const eventId = await createDueDateEvent(bill, card)
+    const eventId = await createDueDateEvent(bill, bank)
     if (eventId) {
       await prisma.bill.update({
         where: { id: bill.id },
@@ -45,7 +43,6 @@ export async function processReminderRules(): Promise<void> {
     const targetDate = new Date(today)
     targetDate.setDate(targetDate.getDate() + rule.daysBefore)
 
-    // Find pending bills with dueDate matching rule's daysBefore
     const bills = await prisma.bill.findMany({
       where: {
         status: 'pending',
@@ -54,13 +51,12 @@ export async function processReminderRules(): Promise<void> {
           lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000),
         },
       },
-      include: { creditCard: true },
+      include: { bank: true },
     })
 
     const channels: string[] = JSON.parse(rule.channels)
 
     for (const bill of bills) {
-      // Deduplication: check if already sent today for this bill + rule
       const todayStart = new Date(today)
       const todayEnd = new Date(today)
       todayEnd.setDate(todayEnd.getDate() + 1)
@@ -79,9 +75,8 @@ export async function processReminderRules(): Promise<void> {
         let success = false
         try {
           if (channel === 'telegram') {
-            success = await sendBillReminder(bill, bill.creditCard)
+            success = await sendBillReminder(bill, bill.bank)
           }
-          // calendar event already created when bill was detected
         } catch (e) {
           await logNotification(bill.id, rule.id, channel, rule.name, false, (e as Error).message)
           continue
@@ -101,7 +96,7 @@ export async function processOverdueBills(): Promise<void> {
       status: 'pending',
       dueDate: { lt: today },
     },
-    include: { creditCard: true },
+    include: { bank: true },
   })
 
   for (const bill of overdueBills) {
@@ -110,7 +105,7 @@ export async function processOverdueBills(): Promise<void> {
       data: { status: 'overdue' },
     })
 
-    const success = await sendOverdueWarning(bill, bill.creditCard)
+    const success = await sendOverdueWarning(bill, bill.bank)
     await logNotification(bill.id, null, 'telegram', '逾期警告', success)
   }
 }
@@ -119,7 +114,6 @@ export async function handleBillPaid(billId: string): Promise<void> {
   const bill = await prisma.bill.findUnique({ where: { id: billId } })
   if (!bill) return
 
-  // Remove calendar event if exists
   if (bill.calendarEventId) {
     await deleteDueDateEvent(bill.calendarEventId)
     await prisma.bill.update({

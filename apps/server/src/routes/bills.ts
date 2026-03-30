@@ -40,16 +40,16 @@ app.get('/summary', async (c) => {
 
 // List bills with filters
 app.get('/', async (c) => {
-  const { status, month, cardId } = c.req.query()
+  const { status, month, bankId } = c.req.query()
 
   const where: Record<string, unknown> = {}
   if (status) where.status = status
   if (month) where.billingPeriod = month
-  if (cardId) where.creditCardId = cardId
+  if (bankId) where.bankId = bankId
 
   const bills = await prisma.bill.findMany({
     where,
-    include: { creditCard: { select: { bankName: true } } },
+    include: { bank: { select: { name: true } } },
     orderBy: { dueDate: 'asc' },
   })
   return c.json(bills)
@@ -60,7 +60,7 @@ app.get('/:id', async (c) => {
   const bill = await prisma.bill.findUnique({
     where: { id: c.req.param('id') },
     include: {
-      creditCard: true,
+      bank: true,
       notifications: { orderBy: { sentAt: 'desc' } },
     },
   })

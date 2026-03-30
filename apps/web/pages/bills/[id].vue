@@ -40,7 +40,7 @@
         <CardHeader>
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <CardTitle class="text-xl">{{ bill.bankName }}</CardTitle>
+              <CardTitle class="text-xl">{{ bill.bank?.name }}</CardTitle>
             </div>
             <Badge :class="statusBadgeClass(bill.status)" class="self-start text-sm px-3 py-1">
               {{ statusLabel(bill.status) }}
@@ -218,7 +218,7 @@ import {
 
 interface BillDetail {
   id: string
-  bankName: string
+  bank?: { name: string }
   amount: number
   minimumPayment?: number
   dueDate: string

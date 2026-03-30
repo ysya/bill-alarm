@@ -20,8 +20,8 @@ app.post('/gmail/scan', async (c) => {
   const result = await scanAndProcessEmails()
 
   // Send notifications for new bills
-  for (const { bill, card } of result.newBills) {
-    await processNewBill(bill, card)
+  for (const { bill, bank } of result.newBills) {
+    await processNewBill(bill, bank)
   }
 
   return c.json({
