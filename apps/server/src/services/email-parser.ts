@@ -8,6 +8,7 @@ import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
 import { extractBillFromText } from './bill-extractor.js'
 import { parseBillWithLLM } from './llm-parser.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
+import { BillStatus } from '@bill-alarm/shared/types'
 
 
 export interface ScanResult {
@@ -114,6 +115,7 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
           amount: parsed.amount,
           minimumPayment: parsed.minimumPayment,
           dueDate: parsed.dueDate,
+          status: parsed.amount <= 0 ? BillStatus.PAID : BillStatus.PENDING,
           sourceEmailId: msgId,
           rawEmailSnippet: pdfText.substring(0, 500),
           pdfPath,
