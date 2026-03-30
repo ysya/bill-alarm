@@ -7,6 +7,7 @@ import prisma from '@/prisma.js'
 import { handleBillPaid } from '@/services/notification.js'
 import { DATA_DIR } from '@/paths.js'
 import { decryptPdf } from '@/services/pdf-parser.js'
+import { BillStatus } from '@bill-alarm/shared/types'
 
 const app = new Hono()
 
@@ -14,7 +15,7 @@ const updateBillSchema = z.object({
   amount: z.number().int().optional(),
   minimumPayment: z.number().int().positive().nullable().optional(),
   dueDate: z.string().datetime().optional(),
-  status: z.enum(['pending', 'paid', 'overdue']).optional(),
+  status: z.enum([BillStatus.PENDING, BillStatus.PAID, BillStatus.OVERDUE]).optional(),
 })
 
 // Dashboard summary
@@ -23,9 +24,9 @@ app.get('/summary', async (c) => {
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   const [pending, paid, overdue] = await Promise.all([
-    prisma.bill.findMany({ where: { status: 'pending' } }),
-    prisma.bill.count({ where: { status: 'paid', billingPeriod: currentMonth } }),
-    prisma.bill.count({ where: { status: 'overdue' } }),
+    prisma.bill.findMany({ where: { status: BillStatus.PENDING } }),
+    prisma.bill.count({ where: { status: BillStatus.PAID, billingPeriod: currentMonth } }),
+    prisma.bill.count({ where: { status: BillStatus.OVERDUE } }),
   ])
 
   const totalPending = pending.reduce((sum, b) => sum + b.amount, 0)
@@ -100,7 +101,7 @@ app.patch('/:id/pay', zValidator('json', z.object({
   const paidAt = body?.paidAt ? new Date(body.paidAt) : new Date()
   const bill = await prisma.bill.update({
     where: { id: c.req.param('id') },
-    data: { status: 'paid', paidAt },
+    data: { status: BillStatus.PAID, paidAt },
   })
   // Remove calendar event
   await handleBillPaid(bill.id)
@@ -135,6 +136,7 @@ app.get('/:id/pdf', async (c) => {
 app.delete('/:id', async (c) => {
   const bill = await prisma.bill.findUnique({ where: { id: c.req.param('id') } })
   if (!bill) return c.json({ error: 'Not found' }, 404)
+  await prisma.notificationLog.deleteMany({ where: { billId: bill.id } })
   await prisma.bill.delete({ where: { id: bill.id } })
   return c.json({ success: true })
 })

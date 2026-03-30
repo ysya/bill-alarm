@@ -2,14 +2,13 @@
   <div class="space-y-6">
     <!-- Page Header -->
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div>
+      <div class="flex items-center gap-3">
         <h2 class="text-2xl font-bold tracking-tight">帳單管理</h2>
-        <p class="text-muted-foreground">查看與管理所有信用卡帳單</p>
+        <Button variant="outline" size="sm" :disabled="scanning" @click="handleScan">
+          <RefreshCw class="mr-2 h-4 w-4" :class="scanning ? 'animate-spin' : ''" />
+          {{ scanning ? '掃描中...' : '掃描信件' }}
+        </Button>
       </div>
-      <Button variant="outline" size="sm" :disabled="scanning" @click="handleScan">
-        <RefreshCw class="mr-2 h-4 w-4" :class="scanning ? 'animate-spin' : ''" />
-        {{ scanning ? '掃描中...' : '掃描信件' }}
-      </Button>
     </div>
 
     <!-- Status Tabs -->

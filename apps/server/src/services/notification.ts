@@ -2,6 +2,7 @@ import prisma from '@/prisma.js'
 import { sendNewBillAlert, sendBillReminder, sendOverdueWarning } from './telegram.js'
 import { createDueDateEvent, deleteDueDateEvent } from './calendar.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
+import { BillStatus } from '@bill-alarm/shared/types'
 
 async function logNotification(
   billId: string,
@@ -45,7 +46,7 @@ export async function processReminderRules(): Promise<void> {
 
     const bills = await prisma.bill.findMany({
       where: {
-        status: 'pending',
+        status: BillStatus.PENDING,
         dueDate: {
           gte: targetDate,
           lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000),
@@ -93,7 +94,7 @@ export async function processOverdueBills(): Promise<void> {
 
   const overdueBills = await prisma.bill.findMany({
     where: {
-      status: 'pending',
+      status: BillStatus.PENDING,
       dueDate: { lt: today },
     },
     include: { bank: true },
@@ -102,7 +103,7 @@ export async function processOverdueBills(): Promise<void> {
   for (const bill of overdueBills) {
     await prisma.bill.update({
       where: { id: bill.id },
-      data: { status: 'overdue' },
+      data: { status: BillStatus.OVERDUE },
     })
 
     const success = await sendOverdueWarning(bill, bill.bank)
