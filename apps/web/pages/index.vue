@@ -125,7 +125,7 @@
           <CardHeader class="pb-3">
             <div class="flex items-start justify-between">
               <div>
-                <CardTitle class="text-base">{{ bill.bankName }}</CardTitle>
+                <CardTitle class="text-base">{{ bill.bank?.name }}</CardTitle>
               </div>
               <Badge :class="statusBadgeClass(bill.status)">
                 {{ statusLabel(bill.status) }}
@@ -184,7 +184,7 @@ interface BillSummary {
 
 interface Bill {
   id: string
-  bankName: string
+  bank?: { name: string }
   amount: number
   dueDate: string
   status: 'pending' | 'paid' | 'overdue'

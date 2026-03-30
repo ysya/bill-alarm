@@ -70,7 +70,7 @@ onMounted(() => {
 const navItems = [
   { to: '/', label: '總覽', icon: LayoutDashboard },
   { to: '/bills', label: '帳單', icon: Receipt },
-  { to: '/cards', label: '銀行', icon: CreditCard },
+  { to: '/banks', label: '銀行', icon: CreditCard },
   { to: '/settings', label: '設定', icon: Settings },
 ]
 </script>

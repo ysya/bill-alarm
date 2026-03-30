@@ -6,21 +6,21 @@ import { BANK_PRESETS } from '@bill-alarm/shared/constants'
 
 const app = new Hono()
 
-// List presets + user's enabled banks
+// List presets
 app.get('/presets', (c) => {
   return c.json(BANK_PRESETS)
 })
 
 // List user's enabled banks (DB records)
 app.get('/', async (c) => {
-  const cards = await prisma.creditCard.findMany({
+  const banks = await prisma.bank.findMany({
     include: { _count: { select: { bills: true } } },
-    orderBy: { bankName: 'asc' },
+    orderBy: { name: 'asc' },
   })
-  return c.json(cards)
+  return c.json(banks)
 })
 
-// Enable a preset bank (creates DB record from preset)
+// Enable a preset bank
 app.post('/enable/:code', zValidator('json', z.object({
   pdfPassword: z.string().optional(),
 }).optional()), async (c) => {
@@ -28,10 +28,9 @@ app.post('/enable/:code', zValidator('json', z.object({
   const preset = BANK_PRESETS.find((p) => p.code === code)
   if (!preset) return c.json({ error: 'Unknown bank code' }, 404)
 
-  // Check if already exists
-  const existing = await prisma.creditCard.findUnique({ where: { code } })
+  const existing = await prisma.bank.findUnique({ where: { code } })
   if (existing) {
-    const updated = await prisma.creditCard.update({
+    const updated = await prisma.bank.update({
       where: { code },
       data: { isActive: true },
     })
@@ -39,10 +38,10 @@ app.post('/enable/:code', zValidator('json', z.object({
   }
 
   const body = c.req.valid('json')
-  const card = await prisma.creditCard.create({
+  const bank = await prisma.bank.create({
     data: {
       code,
-      bankName: preset.name,
+      name: preset.name,
       emailSenderPattern: preset.emailSender,
       emailSubjectPattern: preset.emailSubject,
       pdfPassword: body?.pdfPassword,
@@ -50,57 +49,57 @@ app.post('/enable/:code', zValidator('json', z.object({
       isActive: true,
     },
   })
-  return c.json(card, 201)
+  return c.json(bank, 201)
 })
 
 // Disable a bank
 app.post('/disable/:code', async (c) => {
   const code = c.req.param('code')
-  const card = await prisma.creditCard.findUnique({ where: { code } })
-  if (!card) return c.json({ error: 'Not found' }, 404)
-  const updated = await prisma.creditCard.update({
+  const bank = await prisma.bank.findUnique({ where: { code } })
+  if (!bank) return c.json({ error: 'Not found' }, 404)
+  const updated = await prisma.bank.update({
     where: { code },
     data: { isActive: false },
   })
   return c.json(updated)
 })
 
-// Update bank settings (password, email patterns)
+// Update bank settings
 app.patch('/:id', zValidator('json', z.object({
-  bankName: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
   emailSenderPattern: z.string().min(1).optional(),
   emailSubjectPattern: z.string().min(1).optional(),
   pdfPassword: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
 })), async (c) => {
   const data = c.req.valid('json')
-  const card = await prisma.creditCard.update({
+  const bank = await prisma.bank.update({
     where: { id: c.req.param('id') },
     data,
   })
-  return c.json(card)
+  return c.json(bank)
 })
 
 // Add custom bank
 app.post('/', zValidator('json', z.object({
-  bankName: z.string().min(1),
+  name: z.string().min(1),
   emailSenderPattern: z.string().min(1),
   emailSubjectPattern: z.string().min(1),
   pdfPassword: z.string().optional(),
 })), async (c) => {
   const data = c.req.valid('json')
-  const card = await prisma.creditCard.create({
+  const bank = await prisma.bank.create({
     data: { ...data, isBuiltin: false, isActive: true },
   })
-  return c.json(card, 201)
+  return c.json(bank, 201)
 })
 
 // Delete custom bank only
 app.delete('/:id', async (c) => {
-  const card = await prisma.creditCard.findUnique({ where: { id: c.req.param('id') } })
-  if (!card) return c.json({ error: 'Not found' }, 404)
-  if (card.isBuiltin) return c.json({ error: '無法刪除內建銀行，請改為停用' }, 400)
-  await prisma.creditCard.delete({ where: { id: card.id } })
+  const bank = await prisma.bank.findUnique({ where: { id: c.req.param('id') } })
+  if (!bank) return c.json({ error: 'Not found' }, 404)
+  if (bank.isBuiltin) return c.json({ error: '無法刪除內建銀行，請改為停用' }, 400)
+  await prisma.bank.delete({ where: { id: bank.id } })
   return c.json({ success: true })
 })
 

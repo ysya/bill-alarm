@@ -1,5 +1,5 @@
 import { google } from 'googleapis'
-import type { Bill, CreditCard } from '../../generated/prisma/client.js'
+import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { getSetting, KEYS } from './settings.js'
 
 async function getAuth() {
@@ -22,7 +22,7 @@ function formatAmount(amount: number): string {
   return `NT$ ${amount.toLocaleString('zh-TW')}`
 }
 
-export async function createDueDateEvent(bill: Bill, card: CreditCard): Promise<string | null> {
+export async function createDueDateEvent(bill: Bill, bank: Bank): Promise<string | null> {
   const auth = await getAuth()
   if (!auth) return null
 
@@ -33,9 +33,9 @@ export async function createDueDateEvent(bill: Bill, card: CreditCard): Promise<
   const event = await calendar.events.insert({
     calendarId,
     requestBody: {
-      summary: `💳 ${card.bankName} 帳單 ${formatAmount(bill.amount)} 截止`,
+      summary: `💳 ${bank.name} 帳單 ${formatAmount(bill.amount)} 截止`,
       description: [
-        `銀行：${card.bankName}`,
+        `銀行：${bank.name}`,
         `應繳金額：${formatAmount(bill.amount)}`,
         bill.minimumPayment ? `最低應繳：${formatAmount(bill.minimumPayment)}` : '',
         `帳單月份：${bill.billingPeriod}`,
@@ -68,7 +68,7 @@ export async function deleteDueDateEvent(eventId: string): Promise<void> {
   }
 }
 
-export async function updateDueDateEvent(eventId: string, bill: Bill, card: CreditCard): Promise<void> {
+export async function updateDueDateEvent(eventId: string, bill: Bill, bank: Bank): Promise<void> {
   const auth = await getAuth()
   if (!auth) return
 
@@ -81,7 +81,7 @@ export async function updateDueDateEvent(eventId: string, bill: Bill, card: Cred
       calendarId,
       eventId,
       requestBody: {
-        summary: `💳 ${card.bankName} 帳單 ${formatAmount(bill.amount)} 截止`,
+        summary: `💳 ${bank.name} 帳單 ${formatAmount(bill.amount)} 截止`,
         start: { date: dateStr },
         end: { date: dateStr },
       },

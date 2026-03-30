@@ -81,7 +81,7 @@ import {
 
 interface Bill {
   id: string
-  bankName: string
+  bank?: { name: string }
   amount: number
   dueDate: string
   status: 'pending' | 'paid' | 'overdue'
@@ -267,7 +267,7 @@ const BillListContent = defineComponent({
             // Bill info
             h('div', { class: 'flex-1 min-w-0 space-y-1' }, [
               h('div', { class: 'flex items-center gap-2 flex-wrap' }, [
-                h('span', { class: 'font-semibold truncate' }, bill.bankName),
+                h('span', { class: 'font-semibold truncate' }, bill.bank?.name),
                 h(resolveComponent('Badge'), { class: statusBadgeClass(bill.status) }, {
                   default: () => statusLabel(bill.status),
                 }),

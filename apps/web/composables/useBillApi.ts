@@ -10,11 +10,11 @@ export function useBillApi() {
       nextDueDate: string | null
     }>('/bills/summary'),
 
-    list: (params?: { status?: string; month?: string; cardId?: string }) => {
+    list: (params?: { status?: string; month?: string; bankId?: string }) => {
       const query = new URLSearchParams()
       if (params?.status) query.set('status', params.status)
       if (params?.month) query.set('month', params.month)
-      if (params?.cardId) query.set('cardId', params.cardId)
+      if (params?.bankId) query.set('bankId', params.bankId)
       const qs = query.toString()
       return get<any[]>(`/bills${qs ? `?${qs}` : ''}`)
     },

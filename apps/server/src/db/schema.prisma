@@ -7,10 +7,10 @@ datasource db {
   provider = "sqlite"
 }
 
-model CreditCard {
+model Bank {
   id                  String   @id @default(cuid())
   code                String?  @unique
-  bankName            String
+  name                String
   emailSenderPattern  String
   emailSubjectPattern String
   pdfPassword         String?
@@ -20,13 +20,13 @@ model CreditCard {
   updatedAt           DateTime @updatedAt
   bills               Bill[]
 
-  @@map("credit_cards")
+  @@map("banks")
 }
 
 model Bill {
   id               String            @id @default(cuid())
-  creditCardId     String
-  creditCard       CreditCard        @relation(fields: [creditCardId], references: [id])
+  bankId           String
+  bank             Bank              @relation(fields: [bankId], references: [id])
   billingPeriod    String
   amount           Int
   minimumPayment   Int?
@@ -40,7 +40,7 @@ model Bill {
   updatedAt        DateTime          @updatedAt
   notifications    NotificationLog[]
 
-  @@unique([creditCardId, billingPeriod])
+  @@unique([bankId, billingPeriod])
   @@map("bills")
 }
 
