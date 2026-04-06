@@ -16,13 +16,19 @@ const isDev = process.env.NODE_ENV !== 'production'
 export const logger = pino({
   level: process.env.LOG_LEVEL || (isDev ? 'debug' : 'info'),
   transport: isDev
-    ? { target: 'pino-pretty', options: { colorize: true, ignore: 'pid,hostname', translateTime: 'HH:MM:ss' } }
+    ? { target: 'pino-pretty', options: { colorize: true, ignore: 'pid,hostname', translateTime: 'HH:MM:ss', messageFormat: '{msg}' } }
     : undefined,
 })
 
 const app = new Hono()
 
-app.use(pinoLogger({ pino: logger }))
+app.use(pinoLogger({
+  pino: logger,
+  http: {
+    onResMessage: (c, _logger, rt) => `${c.req.method} ${c.req.path} ${c.res.status} ${rt}ms`,
+    reqId: () => undefined as unknown as string,
+  },
+}))
 app.use('/api/*', cors())
 
 // API routes
