@@ -2,7 +2,7 @@ services:
   bill-alarm:
     image: ghcr.io/ysya/bill-alarm:latest
     ports:
-      - "${PORT:-3100}:3000"
+      - "${PORT:-3100}:80"
     volumes:
       - ./data:/app/data
     env_file:

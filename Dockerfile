@@ -21,10 +21,10 @@ FROM deps AS server-builder
 COPY . .
 RUN pnpm --filter @bill-alarm/server build
 
-# Stage 4: Production (install prod deps natively on Alpine)
+# Stage 4: Production
 FROM node:24-alpine
 RUN corepack enable && corepack prepare pnpm@latest --activate
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 make g++ nginx
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/server/package.json apps/server/
@@ -35,7 +35,10 @@ RUN pnpm install --frozen-lockfile --prod && apk del python3 make g++
 # Copy built artifacts
 COPY --from=server-builder /app/apps/server/dist ./apps/server/
 COPY --from=server-builder /app/apps/server/generated ./apps/server/generated
-COPY --from=web-builder /app/apps/web/.output/public ./apps/server/public
+# Frontend static files for nginx
+COPY --from=web-builder /app/apps/web/.output/public /usr/share/nginx/html
+# Nginx config
+COPY nginx.conf /etc/nginx/http.d/default.conf
 
 ENV NODE_ENV=production
 ENV DATA_DIR=/app/data
@@ -43,6 +46,6 @@ ENV DATABASE_URL=file:/app/data/bill-alarm.db
 
 WORKDIR /app/apps/server
 
-EXPOSE 3000
+EXPOSE 80
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node serve.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && nginx && node serve.js"]

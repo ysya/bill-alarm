@@ -1,5 +1,4 @@
 import { serve } from '@hono/node-server'
-import { serveStatic } from '@hono/node-server/serve-static'
 import app, { logger } from './index.js'
 
 process.on('uncaughtException', (err) => {
@@ -8,10 +7,6 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   logger.error({ reason: String(reason) }, 'Unhandled rejection — process stays alive')
 })
-
-// Serve Nuxt static files in production
-app.use('/*', serveStatic({ root: './public' }))
-app.get('*', serveStatic({ root: './public', path: 'index.html' }))
 
 const port = Number(process.env.PORT) || 3000
 
