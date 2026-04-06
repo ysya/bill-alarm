@@ -132,7 +132,9 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
       logger.info({ bank: bank.name, amount: parsed.amount, dueDate: parsed.dueDate }, 'New bill created')
       result.newBills.push({ bill, bank })
     } catch (e) {
-      result.errors.push(`Failed to process email ${msgId}: ${(e as Error).message}`)
+      const msg = (e as Error).message ?? String(e)
+      logger.error({ msgId, error: msg }, 'Failed to process email')
+      result.errors.push(`Email ${msgId}: ${msg}`)
     }
   }
 

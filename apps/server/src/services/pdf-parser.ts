@@ -17,12 +17,22 @@ async function parsePdf(buffer: Buffer, password?: string): Promise<string> {
   return String(result ?? '')
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} 超時（${ms / 1000}秒）`)), ms)
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v) },
+      (e) => { clearTimeout(timer); reject(e) },
+    )
+  })
+}
+
 /**
  * Extract text content from a PDF buffer, optionally decrypting with a password.
  */
 export async function extractPdfText(pdfBuffer: Buffer, password?: string): Promise<string | null> {
   try {
-    const text = await parsePdf(pdfBuffer, password)
+    const text = await withTimeout(parsePdf(pdfBuffer, password), 30_000, 'PDF 解析')
     return text.trim() || null
   } catch (e) {
     const msg = (e as Error).message
