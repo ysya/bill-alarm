@@ -38,7 +38,8 @@ COPY --from=server-builder /app/apps/server/generated ./apps/server/generated
 COPY --from=web-builder /app/apps/web/.output/public ./apps/server/public
 
 ENV NODE_ENV=production
-ENV DATABASE_URL=file:./data/bill-alarm.db
+ENV DATA_DIR=/app/data
+ENV DATABASE_URL=file:/app/data/bill-alarm.db
 
 WORKDIR /app/apps/server
 
