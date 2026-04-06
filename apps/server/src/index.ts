@@ -15,9 +15,14 @@ const isDev = process.env.NODE_ENV !== 'production'
 
 export const logger = pino({
   level: process.env.LOG_LEVEL || (isDev ? 'debug' : 'info'),
-  transport: isDev
-    ? { target: 'pino-pretty', options: { colorize: true, ignore: 'pid,hostname', translateTime: 'HH:MM:ss', messageFormat: '{msg}' } }
-    : undefined,
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: isDev,
+      ignore: 'pid,hostname,req,res,reqId,responseTime',
+      translateTime: 'HH:MM:ss',
+    },
+  },
 })
 
 const app = new Hono()

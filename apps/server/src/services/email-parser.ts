@@ -56,6 +56,7 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
 
       let pdfText: string | null = null
       let matchedPdfBuf: Buffer | null = null
+      let lastPdfError: string | null = null
       for (const pdfBuf of pdfBuffers) {
         try {
           pdfText = await extractPdfText(pdfBuf, bank.pdfPassword ?? undefined)
@@ -64,12 +65,18 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
             break
           }
         } catch (e) {
-          logger.warn({ bank: bank.name, error: (e as Error).message }, 'PDF extraction failed')
+          lastPdfError = (e as Error).message
+          logger.warn({ bank: bank.name, error: lastPdfError }, 'PDF extraction failed')
         }
       }
 
       if (!pdfText) {
-        result.errors.push(`${bank.name}: PDF 文字擷取失敗`)
+        const isPasswordError = lastPdfError?.includes('密碼')
+        result.errors.push(
+          isPasswordError
+            ? `${bank.name}: PDF 密碼錯誤，請至銀行管理更新密碼`
+            : `${bank.name}: PDF 文字擷取失敗${lastPdfError ? `（${lastPdfError}）` : ''}`,
+        )
         continue
       }
 

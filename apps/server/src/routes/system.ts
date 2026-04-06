@@ -19,18 +19,26 @@ app.get('/gmail/status', async (c) => {
 
 // Manual email scan trigger
 app.post('/gmail/scan', async (c) => {
-  const result = await scanAndProcessEmails()
+  try {
+    const result = await scanAndProcessEmails()
 
-  // Send notifications for new bills
-  for (const { bill, bank } of result.newBills) {
-    await processNewBill(bill, bank)
+    // Send notifications for new bills
+    for (const { bill, bank } of result.newBills) {
+      try {
+        await processNewBill(bill, bank)
+      } catch (e) {
+        result.errors.push(`Notification failed for ${bank.name}: ${(e as Error).message}`)
+      }
+    }
+
+    return c.json({
+      scanned: result.scanned,
+      newBills: result.newBills.length,
+      errors: result.errors,
+    })
+  } catch (e) {
+    return c.json({ error: (e as Error).message, scanned: 0, newBills: 0, errors: [(e as Error).message] }, 500)
   }
-
-  return c.json({
-    scanned: result.scanned,
-    newBills: result.newBills.length,
-    errors: result.errors,
-  })
 })
 
 // Telegram test
