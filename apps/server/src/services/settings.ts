@@ -9,6 +9,7 @@ export const KEYS = {
   TELEGRAM_CHAT_ID: 'telegram_chat_id',
   GOOGLE_CALENDAR_ID: 'google_calendar_id',
   GEMINI_API_KEY: 'gemini_api_key',
+  CALENDAR_ENABLED: 'calendar_enabled',
 } as const
 
 const ENV_MAP: Record<string, string> = {

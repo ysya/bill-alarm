@@ -2,6 +2,7 @@ import prisma from '@/prisma.js'
 import { logger } from '@/index.js'
 import { sendNewBillAlert, sendBillReminder, sendOverdueWarning } from './telegram.js'
 import { createDueDateEvent, deleteDueDateEvent } from './calendar.js'
+import { getSetting, KEYS } from './settings.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus } from '@bill-alarm/shared/types'
 
@@ -29,6 +30,12 @@ export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
   const telegramOk = await sendNewBillAlert(bill, bank)
   await logNotification(bill.id, null, 'telegram', '新帳單通知', telegramOk)
   logger.info({ bank: bank.name, telegramOk }, 'Telegram notification sent')
+
+  const calendarEnabled = await getSetting(KEYS.CALENDAR_ENABLED)
+  if (calendarEnabled !== 'true') {
+    logger.info({ bank: bank.name }, 'Calendar disabled by user — skipping event creation')
+    return
+  }
 
   try {
     if (bill.calendarEventId) {

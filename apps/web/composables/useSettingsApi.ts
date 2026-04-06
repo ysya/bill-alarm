@@ -31,7 +31,7 @@ export function useSettingsApi() {
     getOAuthStatus: () => get<{
       google: { hasCredentials: boolean; isConnected: boolean; clientId: string | null }
       telegram: { isConfigured: boolean; chatId: string | null }
-      calendar: { calendarId: string }
+      calendar: { calendarId: string; enabled: boolean }
       gemini: { isConfigured: boolean }
     }>('/oauth/status'),
 
@@ -47,6 +47,9 @@ export function useSettingsApi() {
 
     saveCalendarConfig: (calendarId: string) =>
       post<{ success: boolean }>('/oauth/calendar/config', { calendarId }),
+
+    toggleCalendar: (enabled: boolean) =>
+      post<{ success: boolean; enabled: boolean }>('/oauth/calendar/toggle', { enabled }),
 
     saveGeminiConfig: (apiKey: string) =>
       post<{ success: boolean }>('/oauth/gemini/config', { apiKey }),

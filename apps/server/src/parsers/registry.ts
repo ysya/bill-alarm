@@ -6,6 +6,7 @@ import { taishinParser } from './taishin.js'
 import { sinopacParser } from './sinopac.js'
 import { ubotParser } from './ubot.js'
 import { cathayParser } from './cathay.js'
+import { hsbcTwParser } from './hsbc.js'
 import { genericParser } from './generic.js'
 
 const parsers = new Map<string, BillEmailParser>([
@@ -16,6 +17,7 @@ const parsers = new Map<string, BillEmailParser>([
   [sinopacParser.bankCode, sinopacParser],
   [ubotParser.bankCode, ubotParser],
   [cathayParser.bankCode, cathayParser],
+  [hsbcTwParser.bankCode, hsbcTwParser],
 ])
 
 /** Get bank-specific parser, or generic fallback */

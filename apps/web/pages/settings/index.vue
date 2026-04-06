@@ -24,7 +24,7 @@ interface IntegrationStatus {
 interface OAuthStatus {
   google: { hasCredentials: boolean; isConnected: boolean; email: string | null }
   telegram: { isConfigured: boolean; chatId: string | null }
-  calendar: { calendarId: string }
+  calendar: { calendarId: string; enabled: boolean }
   gemini: { isConfigured: boolean }
 }
 
@@ -268,6 +268,22 @@ async function handleSaveTelegram() {
 }
 
 // -------------------------------------------------------------------
+// Calendar Toggle
+// -------------------------------------------------------------------
+
+async function handleToggleCalendar(enabled: boolean) {
+  try {
+    await settingsApi.toggleCalendar(enabled)
+    if (oauthStatus.value) {
+      oauthStatus.value.calendar.enabled = enabled
+    }
+    toast.success(enabled ? '已啟用行事曆自動建立' : '已停用行事曆自動建立')
+  } catch (error) {
+    toast.error('更新失敗', { description: String(error) })
+  }
+}
+
+// -------------------------------------------------------------------
 // Calendar Config
 // -------------------------------------------------------------------
 
@@ -432,6 +448,21 @@ onMounted(fetchData)
                   <Unlink class="mr-2 h-4 w-4" />
                   斷開連結
                 </Button>
+              </div>
+
+              <!-- Calendar toggle -->
+              <div class="flex items-center justify-between rounded-lg border border-border p-3">
+                <div class="space-y-0.5">
+                  <div class="flex items-center gap-2">
+                    <CalendarCheck class="h-4 w-4 text-muted-foreground" />
+                    <span class="text-sm font-medium">自動新增帳單到行事曆</span>
+                  </div>
+                  <p class="text-xs text-muted-foreground">掃描到新帳單時，自動在 Google Calendar 建立繳費截止日事件。</p>
+                </div>
+                <Switch
+                  :checked="oauthStatus.calendar.enabled"
+                  @update:checked="handleToggleCalendar"
+                />
               </div>
             </div>
           </CardContent>
