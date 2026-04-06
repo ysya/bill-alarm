@@ -9,4 +9,5 @@ data
 .git
 .DS_Store
 .remember
+.claude
 docs

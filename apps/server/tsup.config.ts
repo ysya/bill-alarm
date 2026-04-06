@@ -10,5 +10,6 @@ export default defineConfig({
   esbuildOptions(options) {
     options.alias = { '@': path.resolve(__dirname, 'src') }
   },
+  noExternal: ['@bill-alarm/shared'],
   external: ['@prisma/client', '@prisma/adapter-better-sqlite3', 'better-sqlite3'],
 })

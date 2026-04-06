@@ -1,6 +1,6 @@
 services:
   bill-alarm:
-    build: .
+    image: ghcr.io/ysya/bill-alarm:main
     ports:
       - "3100:3000"
     volumes:
