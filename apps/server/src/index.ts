@@ -30,7 +30,7 @@ const app = new Hono()
 app.use(pinoLogger({
   pino: logger,
   http: {
-    onResMessage: (c, _logger, rt) => `${c.req.method} ${c.req.path} ${c.res.status} ${rt}ms`,
+    onResMessage: (c, _logger, rt) => `${c.req.method} ${c.req.path} ${c.res.status}${rt != null ? ` ${rt}ms` : ''}`,
     reqId: () => undefined as unknown as string,
   },
 }))

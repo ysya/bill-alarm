@@ -1,0 +1,19 @@
+name: Cleanup old container images
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+
+    steps:
+      - uses: actions/delete-package-versions@v5
+        with:
+          package-name: bill-alarm
+          package-type: container
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: false
