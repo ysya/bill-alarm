@@ -4,7 +4,7 @@ import { defineConfig } from 'tsup'
 export default defineConfig({
   entry: ['src/serve.ts'],
   format: ['esm'],
-  target: 'node22',
+  target: 'node24',
   outDir: 'dist',
   clean: true,
   esbuildOptions(options) {

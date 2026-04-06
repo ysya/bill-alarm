@@ -1,5 +1,5 @@
 # Stage 1: Install dependencies
-FROM node:22-alpine AS deps
+FROM node:24-alpine AS deps
 RUN corepack enable && corepack prepare pnpm@latest --activate
 RUN apk add --no-cache python3 make g++
 WORKDIR /app
@@ -22,7 +22,7 @@ COPY . .
 RUN pnpm --filter @bill-alarm/server build
 
 # Stage 4: Production (install prod deps natively on Alpine)
-FROM node:22-alpine
+FROM node:24-alpine
 RUN corepack enable && corepack prepare pnpm@latest --activate
 RUN apk add --no-cache python3 make g++
 WORKDIR /app

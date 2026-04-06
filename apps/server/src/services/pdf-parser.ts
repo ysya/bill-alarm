@@ -1,20 +1,20 @@
 import type { EmailAttachment } from './gmail.js'
 
 async function parsePdf(buffer: Buffer, password?: string): Promise<string> {
-  const { PDFParse } = await import('pdf-parse')
-  const options: Record<string, unknown> = { data: new Uint8Array(buffer) }
-  if (password) options.password = password
-  const parser = new PDFParse(options)
-  await parser.load()
-  const result = await parser.getText() as unknown
-  parser.destroy()
-
-  // getText() returns { pages: [{ text, num }] } in v2
-  if (result && typeof result === 'object' && 'pages' in (result as Record<string, unknown>)) {
-    const pages = (result as { pages: Array<{ text: string }> }).pages
-    return pages.map((p) => p.text).join('\n')
+  const mupdf = await import('mupdf')
+  const doc = mupdf.Document.openDocument(buffer, 'application/pdf')
+  if (doc.needsPassword()) {
+    if (!password || !doc.authenticatePassword(password)) {
+      throw new Error('PDF 密碼錯誤或未提供密碼')
+    }
   }
-  return String(result ?? '')
+  const pages: string[] = []
+  for (let i = 0; i < doc.countPages(); i++) {
+    const page = doc.loadPage(i)
+    const text = page.toStructuredText('preserve-whitespace').asText()
+    pages.push(text)
+  }
+  return pages.join('\n')
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {

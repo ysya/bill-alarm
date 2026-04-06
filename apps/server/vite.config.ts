@@ -20,7 +20,6 @@ export default defineConfig({
     external: [
       'pino',
       'pino-pretty',
-      'pdf-parse',
       'adm-zip',
       'better-sqlite3',
       '@prisma/client',
