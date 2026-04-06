@@ -49,6 +49,35 @@ export interface BillSummaryDTO {
   nextDueDate: string | null
 }
 
+export interface BankAccountDTO {
+  id: string
+  name: string
+  bankName: string
+  note?: string | null
+}
+
+export interface BillBreakdownItem {
+  bankId: string
+  bankName: string
+  totalAmount: number
+  billCount: number
+  autoDebit: boolean
+}
+
+export interface BillTimelineItem {
+  id: string
+  bankName: string
+  amount: number
+  dueDate: string
+  status: BillStatus
+  autoDebit: boolean
+}
+
+export interface MonthlySummaryDTO extends BillSummaryDTO {
+  breakdown?: BillBreakdownItem[]
+  timeline?: BillTimelineItem[]
+}
+
 // --- Shared helpers ---
 
 export const BILL_STATUS_LABELS: Record<BillStatus, string> = {

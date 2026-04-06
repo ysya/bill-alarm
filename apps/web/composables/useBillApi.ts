@@ -2,13 +2,10 @@ export function useBillApi() {
   const { get, patch, del } = useApi()
 
   return {
-    getSummary: () => get<{
-      totalPending: number
-      pendingCount: number
-      paidCount: number
-      overdueCount: number
-      nextDueDate: string | null
-    }>('/bills/summary'),
+    getSummary: (month?: string) => {
+      const qs = month ? `?month=${month}` : ''
+      return get<any>(`/bills/summary${qs}`)
+    },
 
     list: (params?: { status?: string; bankId?: string; page?: number; pageSize?: number }) => {
       const query = new URLSearchParams()

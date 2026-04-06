@@ -18,9 +18,8 @@ app.get('/google/start', async (c) => {
     return c.json({ error: 'Google Client ID not configured' }, 400)
   }
 
-  // Use the actual server URL for callback (not frontend proxy)
-  const serverPort = Number(process.env.PORT) || 3100
-  const redirectUri = `http://localhost:${serverPort}/api/oauth/google/callback`
+  const origin = getOrigin(c)
+  const redirectUri = `${origin}/api/oauth/google/callback`
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -55,9 +54,8 @@ app.get('/google/callback', async (c) => {
     return c.html(renderResult(false, 'Google OAuth 憑證未設定'))
   }
 
-  // Must match the same redirect URI used in /start
-  const serverPort = Number(process.env.PORT) || 3100
-  const redirectUri = `http://localhost:${serverPort}/api/oauth/google/callback`
+  const origin = getOrigin(c)
+  const redirectUri = `${origin}/api/oauth/google/callback`
 
   try {
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -196,6 +194,13 @@ function renderResult(success: boolean, message: string): string {
   </div>
 </body>
 </html>`
+}
+
+function getOrigin(c: { req: { header: (name: string) => string | undefined; url: string } }): string {
+  const proto = c.req.header('x-forwarded-proto') ?? 'http'
+  const host = c.req.header('x-forwarded-host') ?? c.req.header('host')
+  if (host) return `${proto}://${host}`
+  return new URL(c.req.url).origin
 }
 
 export default app

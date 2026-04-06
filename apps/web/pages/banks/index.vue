@@ -19,13 +19,25 @@ interface EnabledBank {
   pdfPassword: string | null
   isBuiltin: boolean
   isActive: boolean
+  autoDebit: boolean
+  bankAccountId: string | null
+  bankAccount?: { id: string; name: string; bankName: string } | null
   _count?: { bills: number }
 }
 
+interface BankAccount {
+  id: string
+  name: string
+  bankName: string
+  note?: string | null
+}
+
 const bankApi = useBankApi()
+const bankAccountApi = useBankAccountApi()
 
 const presets = ref<BankPreset[]>([])
 const enabledBanks = ref<EnabledBank[]>([])
+const bankAccounts = ref<BankAccount[]>([])
 const loading = ref(true)
 
 // Password dialog
@@ -40,11 +52,18 @@ const customForm = ref({ name: '', emailSenderPattern: '', emailSubjectPattern: 
 // Edit dialog (for tweaking patterns)
 const editDialogOpen = ref(false)
 const editingBank = ref<EnabledBank | null>(null)
-const editForm = ref({ emailSenderPattern: '', emailSubjectPattern: '', pdfPassword: '' })
+const editForm = ref({ emailSenderPattern: '', emailSubjectPattern: '', pdfPassword: '', autoDebit: false, bankAccountId: '' as string | null })
 
 // Delete confirm
 const deleteDialogOpen = ref(false)
 const deletingBank = ref<EnabledBank | null>(null)
+
+// Bank account dialog
+const accountDialogOpen = ref(false)
+const editingAccount = ref<BankAccount | null>(null)
+const accountForm = ref({ name: '', bankName: '', note: '' })
+const deleteAccountDialogOpen = ref(false)
+const deletingAccount = ref<BankAccount | null>(null)
 
 const submitting = ref(false)
 const showPassword = ref(false)
@@ -52,9 +71,10 @@ const showPassword = ref(false)
 async function fetchData() {
   loading.value = true
   try {
-    const [p, e] = await Promise.all([bankApi.getPresets(), bankApi.list()])
+    const [p, e, a] = await Promise.all([bankApi.getPresets(), bankApi.list(), bankAccountApi.list()])
     presets.value = p
     enabledBanks.value = e
+    bankAccounts.value = a
   } catch (error) {
     toast.error('載入失敗', { description: String(error) })
   } finally {
@@ -134,6 +154,8 @@ function openEdit(bank: EnabledBank) {
     emailSenderPattern: bank.emailSenderPattern,
     emailSubjectPattern: bank.emailSubjectPattern,
     pdfPassword: bank.pdfPassword ?? '',
+    autoDebit: bank.autoDebit,
+    bankAccountId: bank.bankAccountId,
   }
   editDialogOpen.value = true
 }
@@ -146,6 +168,8 @@ async function handleEdit() {
       emailSenderPattern: editForm.value.emailSenderPattern,
       emailSubjectPattern: editForm.value.emailSubjectPattern,
       pdfPassword: editForm.value.pdfPassword || null,
+      autoDebit: editForm.value.autoDebit,
+      bankAccountId: editForm.value.bankAccountId || null,
     })
     toast.success('設定已更新')
     editDialogOpen.value = false
@@ -198,6 +222,60 @@ async function handleDelete() {
   }
 }
 
+// Bank account CRUD
+function openAccountDialog(account?: BankAccount) {
+  editingAccount.value = account ?? null
+  accountForm.value = {
+    name: account?.name ?? '',
+    bankName: account?.bankName ?? '',
+    note: account?.note ?? '',
+  }
+  accountDialogOpen.value = true
+}
+
+async function handleSaveAccount() {
+  if (!accountForm.value.name.trim() || !accountForm.value.bankName.trim()) {
+    toast.error('請填寫帳戶名稱和銀行名稱')
+    return
+  }
+  submitting.value = true
+  try {
+    const data = {
+      name: accountForm.value.name.trim(),
+      bankName: accountForm.value.bankName.trim(),
+      note: accountForm.value.note.trim() || undefined,
+    }
+    if (editingAccount.value) {
+      await bankAccountApi.update(editingAccount.value.id, data)
+      toast.success('帳戶已更新')
+    } else {
+      await bankAccountApi.create(data)
+      toast.success('帳戶已新增')
+    }
+    accountDialogOpen.value = false
+    await fetchData()
+  } catch (error) {
+    toast.error('操作失敗', { description: String(error) })
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function handleDeleteAccount() {
+  if (!deletingAccount.value) return
+  submitting.value = true
+  try {
+    await bankAccountApi.remove(deletingAccount.value.id)
+    toast.success('帳戶已刪除')
+    deleteAccountDialogOpen.value = false
+    await fetchData()
+  } catch (error) {
+    toast.error('刪除失敗', { description: String(error) })
+  } finally {
+    submitting.value = false
+  }
+}
+
 const customBanks = computed(() => enabledBanks.value.filter((b) => !b.isBuiltin))
 
 onMounted(fetchData)
@@ -236,6 +314,7 @@ onMounted(fetchData)
                 <div class="min-w-0">
                   <p class="font-medium text-sm truncate">{{ preset.name }}</p>
                   <p class="text-xs text-muted-foreground truncate">{{ preset.emailSender }}</p>
+                  <Badge v-if="getEnabledRecord(preset.code)?.autoDebit" variant="secondary" class="text-xs mt-1">自動扣款</Badge>
                 </div>
               </div>
               <div class="flex items-center gap-2 shrink-0">
@@ -285,6 +364,7 @@ onMounted(fetchData)
                 <div class="min-w-0">
                   <p class="font-medium text-sm truncate">{{ bank.name }}</p>
                   <p class="text-xs text-muted-foreground truncate">{{ bank.emailSenderPattern }}</p>
+                  <Badge v-if="bank.autoDebit" variant="secondary" class="text-xs mt-1">自動扣款</Badge>
                 </div>
               </div>
               <div class="flex items-center gap-2 shrink-0">
@@ -295,6 +375,50 @@ onMounted(fetchData)
                   <Trash2 class="h-3.5 w-3.5" />
                 </Button>
                 <Switch :model-value="bank.isActive" @update:model-value="bankApi.update(bank.id, { isActive: !bank.isActive }).then(fetchData)" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+
+    <Separator />
+
+    <!-- Bank Accounts -->
+    <section class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-semibold">銀行帳戶</h2>
+          <p class="text-sm text-muted-foreground mt-1">設定自動扣款來源帳戶</p>
+        </div>
+        <Button size="sm" @click="openAccountDialog()">
+          <Plus class="mr-2 h-4 w-4" />
+          新增
+        </Button>
+      </div>
+
+      <Card v-if="bankAccounts.length === 0">
+        <CardContent class="py-8 text-center text-sm text-muted-foreground">
+          尚未設定銀行帳戶。新增帳戶後可在銀行設定中選擇自動扣款來源。
+        </CardContent>
+      </Card>
+
+      <div v-else class="space-y-2">
+        <Card v-for="acc in bankAccounts" :key="acc.id">
+          <CardContent class="p-4">
+            <div class="flex items-center justify-between">
+              <div class="min-w-0">
+                <p class="font-medium text-sm">{{ acc.name }}</p>
+                <p class="text-xs text-muted-foreground">{{ acc.bankName }}</p>
+                <p v-if="acc.note" class="text-xs text-muted-foreground mt-0.5">{{ acc.note }}</p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <Button variant="ghost" size="icon" class="h-7 w-7" @click="openAccountDialog(acc)">
+                  <Pencil class="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" class="h-7 w-7 text-destructive" @click="deletingAccount = acc; deleteAccountDialogOpen = true">
+                  <Trash2 class="h-3.5 w-3.5" />
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -356,6 +480,28 @@ onMounted(fetchData)
               </button>
             </div>
           </div>
+          <Separator />
+          <div class="flex items-center justify-between">
+            <div class="space-y-0.5">
+              <Label>自動扣款</Label>
+              <p class="text-xs text-muted-foreground">啟用後將不再發送繳費提醒</p>
+            </div>
+            <Switch v-model:checked="editForm.autoDebit" />
+          </div>
+          <div v-if="editForm.autoDebit" class="space-y-2">
+            <Label for="eBankAccount">扣款帳戶</Label>
+            <Select v-model="editForm.bankAccountId">
+              <SelectTrigger>
+                <SelectValue placeholder="選擇扣款帳戶" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem :value="null">無</SelectItem>
+                <SelectItem v-for="acc in bankAccounts" :key="acc.id" :value="acc.id">
+                  {{ acc.name }} ({{ acc.bankName }})
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <DialogFooter class="gap-2">
             <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
             <Button type="submit" :disabled="submitting">儲存</Button>
@@ -412,6 +558,48 @@ onMounted(fetchData)
         <DialogFooter class="gap-2">
           <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
           <Button variant="destructive" :disabled="submitting" @click="handleDelete">確認刪除</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Bank Account Dialog -->
+    <Dialog v-model:open="accountDialogOpen">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{{ editingAccount ? '編輯帳戶' : '新增銀行帳戶' }}</DialogTitle>
+          <DialogDescription>設定自動扣款來源的銀行帳戶資訊。</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4 py-2" @submit.prevent="handleSaveAccount">
+          <div class="space-y-2">
+            <Label for="accName">帳戶名稱 *</Label>
+            <Input id="accName" v-model="accountForm.name" placeholder="例：玉山薪轉帳戶" />
+          </div>
+          <div class="space-y-2">
+            <Label for="accBank">銀行名稱 *</Label>
+            <Input id="accBank" v-model="accountForm.bankName" placeholder="例：玉山銀行" />
+          </div>
+          <div class="space-y-2">
+            <Label for="accNote">備註</Label>
+            <Input id="accNote" v-model="accountForm.note" placeholder="選填" />
+          </div>
+          <DialogFooter class="gap-2">
+            <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>
+            <Button type="submit" :disabled="submitting">{{ editingAccount ? '儲存' : '新增' }}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Delete Account Confirm -->
+    <Dialog v-model:open="deleteAccountDialogOpen">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>確認刪除</DialogTitle>
+          <DialogDescription>確定要刪除「{{ deletingAccount?.name }}」嗎？</DialogDescription>
+        </DialogHeader>
+        <DialogFooter class="gap-2">
+          <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
+          <Button variant="destructive" :disabled="submitting" @click="handleDeleteAccount">確認刪除</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

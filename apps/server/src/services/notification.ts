@@ -20,12 +20,21 @@ async function logNotification(
 
 export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
   logger.info({ bank: bank.name, amount: bill.amount }, 'Processing new bill notifications')
+
+  if (bank.autoDebit) {
+    logger.info({ bank: bank.name }, 'Auto-debit bank — skipping new bill notifications')
+    return
+  }
+
   const telegramOk = await sendNewBillAlert(bill, bank)
   await logNotification(bill.id, null, 'telegram', '新帳單通知', telegramOk)
   logger.info({ bank: bank.name, telegramOk }, 'Telegram notification sent')
 
   try {
-    const eventId = await createDueDateEvent(bill, bank)
+    if (bill.calendarEventId) {
+      logger.info({ bank: bank.name, eventId: bill.calendarEventId }, 'Calendar event already exists, skipping')
+    }
+    const eventId = !bill.calendarEventId ? await createDueDateEvent(bill, bank) : null
     if (eventId) {
       await prisma.bill.update({
         where: { id: bill.id },
@@ -64,6 +73,8 @@ export async function processReminderRules(): Promise<void> {
     const channels: string[] = JSON.parse(rule.channels)
 
     for (const bill of bills) {
+      if (bill.bank.autoDebit) continue
+
       const todayStart = new Date(today)
       const todayEnd = new Date(today)
       todayEnd.setDate(todayEnd.getDate() + 1)

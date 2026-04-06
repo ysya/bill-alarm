@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 import pino from 'pino'
 import { pinoLogger } from 'hono-pino'
 import bankRoutes from './routes/banks.js'
+import bankAccountRoutes from './routes/bank-accounts.js'
 import billRoutes from './routes/bills.js'
 import settingsRoutes from './routes/settings.js'
 import systemRoutes from './routes/system.js'
@@ -27,6 +28,7 @@ app.use('/api/*', cors())
 // API routes
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }))
 app.route('/api/banks', bankRoutes)
+app.route('/api/bank-accounts', bankAccountRoutes)
 app.route('/api/bills', billRoutes)
 app.route('/api/notification-rules', settingsRoutes)
 app.route('/api', systemRoutes)

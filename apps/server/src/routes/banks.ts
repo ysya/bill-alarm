@@ -14,7 +14,7 @@ app.get('/presets', (c) => {
 // List user's enabled banks (DB records)
 app.get('/', async (c) => {
   const banks = await prisma.bank.findMany({
-    include: { _count: { select: { bills: true } } },
+    include: { _count: { select: { bills: true } }, bankAccount: true },
     orderBy: { name: 'asc' },
   })
   return c.json(banks)
@@ -71,6 +71,8 @@ app.patch('/:id', zValidator('json', z.object({
   emailSubjectPattern: z.string().min(1).optional(),
   pdfPassword: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
+  autoDebit: z.boolean().optional(),
+  bankAccountId: z.string().nullable().optional(),
 })), async (c) => {
   const data = c.req.valid('json')
   const bank = await prisma.bank.update({

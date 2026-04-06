@@ -20,6 +20,7 @@ const updateBillSchema = z.object({
 
 // Dashboard summary
 app.get('/summary', async (c) => {
+  const month = c.req.query('month')
   const now = new Date()
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
@@ -34,13 +35,50 @@ app.get('/summary', async (c) => {
     .filter((b) => b.dueDate >= now)
     .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
 
-  return c.json({
+  const result: Record<string, unknown> = {
     totalPending,
     pendingCount: pending.length,
     paidCount: paid,
     overdueCount: overdue,
     nextDueDate: upcomingBills[0]?.dueDate ?? null,
-  })
+  }
+
+  if (month) {
+    const monthBills = await prisma.bill.findMany({
+      where: { billingPeriod: month },
+      include: { bank: { select: { id: true, name: true, autoDebit: true } } },
+      orderBy: { dueDate: 'asc' },
+    })
+
+    const breakdownMap = new Map<string, { bankId: string; bankName: string; totalAmount: number; billCount: number; autoDebit: boolean }>()
+    for (const b of monthBills) {
+      const existing = breakdownMap.get(b.bankId)
+      if (existing) {
+        existing.totalAmount += b.amount
+        existing.billCount++
+      } else {
+        breakdownMap.set(b.bankId, {
+          bankId: b.bankId,
+          bankName: b.bank.name,
+          totalAmount: b.amount,
+          billCount: 1,
+          autoDebit: b.bank.autoDebit,
+        })
+      }
+    }
+
+    result.breakdown = Array.from(breakdownMap.values())
+    result.timeline = monthBills.map((b) => ({
+      id: b.id,
+      bankName: b.bank.name,
+      amount: b.amount,
+      dueDate: b.dueDate,
+      status: b.status,
+      autoDebit: b.bank.autoDebit,
+    }))
+  }
+
+  return c.json(result)
 })
 
 // List bills with filters + pagination

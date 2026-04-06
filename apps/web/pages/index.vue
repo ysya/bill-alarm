@@ -78,6 +78,58 @@
       </Card>
     </div>
 
+    <!-- Monthly Breakdown -->
+    <div v-if="summary?.breakdown?.length" class="space-y-4">
+      <h3 class="text-lg font-semibold">月度明細</h3>
+      <Card>
+        <CardContent class="p-0">
+          <div class="divide-y">
+            <div
+              v-for="item in summary.breakdown"
+              :key="item.bankId"
+              class="flex items-center justify-between px-4 py-3"
+            >
+              <div class="flex items-center gap-2">
+                <span class="font-medium text-sm">{{ item.bankName }}</span>
+                <Badge v-if="item.autoDebit" variant="secondary" class="text-xs">自動扣款</Badge>
+              </div>
+              <div class="text-right">
+                <span class="font-bold">{{ formatAmount(item.totalAmount) }}</span>
+                <span class="text-xs text-muted-foreground ml-2">{{ item.billCount }} 筆</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+
+    <!-- Due Date Timeline -->
+    <div v-if="summary?.timeline?.length" class="space-y-4">
+      <h3 class="text-lg font-semibold">繳費時程</h3>
+      <div class="space-y-2">
+        <Card
+          v-for="item in summary.timeline"
+          :key="item.id"
+          class="cursor-pointer transition-colors hover:border-primary/50"
+          @click="navigateTo(`/bills/${item.id}`)"
+        >
+          <CardContent class="flex items-center justify-between p-4">
+            <div class="flex items-center gap-3">
+              <div class="flex flex-col">
+                <span class="font-medium text-sm">{{ item.bankName }}</span>
+                <span class="text-xs text-muted-foreground">截止 {{ formatDate(item.dueDate) }}</span>
+              </div>
+              <Badge v-if="item.autoDebit" variant="secondary" class="text-xs">自動扣款</Badge>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="font-bold">{{ formatAmount(item.amount) }}</span>
+              <Badge :class="statusBadgeClass(item.status)">{{ statusLabel(item.status) }}</Badge>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+
     <!-- Pending Bills List -->
     <div class="space-y-4">
       <div class="flex items-center justify-between">
@@ -175,7 +227,7 @@ import {
   Loader2,
 } from 'lucide-vue-next'
 import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
-import type { BillDTO, BillSummaryDTO } from '@bill-alarm/shared/types'
+import type { BillDTO, MonthlySummaryDTO } from '@bill-alarm/shared/types'
 
 // --- Helpers ---
 
@@ -255,7 +307,7 @@ const DaysRemainingBadge = defineComponent({
 
 const { getSummary, list, markAsPaid } = useBillApi()
 
-const summary = ref<BillSummaryDTO | null>(null)
+const summary = ref<MonthlySummaryDTO | null>(null)
 const pendingBills = ref<BillDTO[]>([])
 const loading = ref(true)
 const markingPaid = ref<Set<string>>(new Set())
@@ -264,7 +316,7 @@ async function fetchData() {
   loading.value = true
   try {
     const [summaryData, billsData] = await Promise.all([
-      getSummary(),
+      getSummary(selectedMonth.value),
       list({ status: BillStatus.PENDING }),
     ])
     summary.value = summaryData

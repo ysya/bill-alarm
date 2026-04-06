@@ -123,7 +123,7 @@
             :href="`/api/bills/${bill.id}/pdf`"
             target="_blank"
           >
-            <FileDown class="h-4 w-4" />
+            <FileText class="h-4 w-4" />
             檢視 PDF
           </Button>
           <Button
@@ -255,7 +255,7 @@ import {
   Calendar as CalendarIcon,
   CalendarRange,
   Clock,
-  FileDown,
+  FileText,
   CircleCheck,
   AlertTriangle,
   Loader2,
