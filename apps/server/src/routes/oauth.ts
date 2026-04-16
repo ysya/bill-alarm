@@ -132,6 +132,15 @@ app.post('/calendar/toggle', zValidator('json', z.object({
   return c.json({ success: true, enabled })
 })
 
+// Set scan interval (hours). 0 = disabled, default = 24
+app.post('/scan/config', zValidator('json', z.object({
+  interval: z.number().int().min(0),
+})), async (c) => {
+  const { interval } = c.req.valid('json')
+  await setSetting(KEYS.SCAN_INTERVAL, String(interval))
+  return c.json({ success: true, interval })
+})
+
 // Save Gemini API key from settings page
 app.post('/gemini/config', zValidator('json', z.object({
   apiKey: z.string().min(1),
@@ -151,6 +160,7 @@ app.get('/status', async (c) => {
   const calendarId = await getSetting(KEYS.GOOGLE_CALENDAR_ID)
   const geminiKey = await getSetting(KEYS.GEMINI_API_KEY)
   const calendarEnabled = await getSetting(KEYS.CALENDAR_ENABLED)
+  const scanInterval = await getSetting(KEYS.SCAN_INTERVAL)
 
   return c.json({
     google: {
@@ -165,6 +175,9 @@ app.get('/status', async (c) => {
     calendar: {
       calendarId: calendarId || 'primary',
       enabled: calendarEnabled === 'true',
+    },
+    scan: {
+      interval: scanInterval != null ? parseInt(scanInterval) : 24,
     },
     gemini: {
       isConfigured: !!geminiKey,

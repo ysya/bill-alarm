@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, CalendarCheck, CheckCircle, ExternalLink, Link2, Mail, Pencil, Plus, Send, Trash2, Unlink, XCircle } from 'lucide-vue-next'
+import { Bell, CalendarCheck, CheckCircle, Clock, ExternalLink, Link2, Mail, Pencil, Plus, Send, Trash2, Unlink, XCircle } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
 // -------------------------------------------------------------------
@@ -25,8 +25,18 @@ interface OAuthStatus {
   google: { hasCredentials: boolean; isConnected: boolean; email: string | null }
   telegram: { isConfigured: boolean; chatId: string | null }
   calendar: { calendarId: string; enabled: boolean }
+  scan: { interval: number }
   gemini: { isConfigured: boolean }
 }
+
+const SCAN_INTERVAL_OPTIONS = [
+  { value: '0', label: '關閉自動掃描' },
+  { value: '1', label: '每 1 小時' },
+  { value: '3', label: '每 3 小時' },
+  { value: '6', label: '每 6 小時' },
+  { value: '12', label: '每 12 小時' },
+  { value: '24', label: '每 24 小時' },
+] as const
 
 const CHANNEL_OPTIONS = [
   { value: 'telegram', label: 'Telegram' },
@@ -284,6 +294,24 @@ async function handleToggleCalendar(enabled: boolean) {
 }
 
 // -------------------------------------------------------------------
+// Scan Interval
+// -------------------------------------------------------------------
+
+async function handleScanIntervalChange(value: string) {
+  const interval = parseInt(value)
+  try {
+    await settingsApi.saveScanInterval(interval)
+    if (oauthStatus.value) {
+      oauthStatus.value.scan.interval = interval
+    }
+    const label = SCAN_INTERVAL_OPTIONS.find(o => o.value === value)?.label ?? value
+    toast.success(`掃描頻率已更新為「${label}」`)
+  } catch (error) {
+    toast.error('更新失敗', { description: String(error) })
+  }
+}
+
+// -------------------------------------------------------------------
 // Calendar Config
 // -------------------------------------------------------------------
 
@@ -448,6 +476,27 @@ onMounted(fetchData)
                   <Unlink class="mr-2 h-4 w-4" />
                   斷開連結
                 </Button>
+              </div>
+
+              <!-- Scan interval -->
+              <div class="flex items-center justify-between rounded-lg border border-border p-3">
+                <div class="space-y-0.5">
+                  <div class="flex items-center gap-2">
+                    <Clock class="h-4 w-4 text-muted-foreground" />
+                    <span class="text-sm font-medium">自動掃描頻率</span>
+                  </div>
+                  <p class="text-xs text-muted-foreground">定時檢查 Gmail 信箱是否有新帳單。</p>
+                </div>
+                <Select :model-value="String(oauthStatus.scan.interval)" @update:model-value="handleScanIntervalChange">
+                  <SelectTrigger class="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="opt in SCAN_INTERVAL_OPTIONS" :key="opt.value" :value="opt.value">
+                      {{ opt.label }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <!-- Calendar toggle -->

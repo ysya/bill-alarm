@@ -10,6 +10,8 @@ export const KEYS = {
   GOOGLE_CALENDAR_ID: 'google_calendar_id',
   GEMINI_API_KEY: 'gemini_api_key',
   CALENDAR_ENABLED: 'calendar_enabled',
+  SCAN_INTERVAL: 'scan_interval',
+  LAST_SCAN_AT: 'last_scan_at',
 } as const
 
 const ENV_MAP: Record<string, string> = {
