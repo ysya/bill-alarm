@@ -25,4 +25,6 @@ export const BANK_PRESETS: BankPreset[] = [
   { code: 'ubot', name: '聯邦銀行', emailSender: 'estatement@ebillv2.card.ubot.com.tw', emailSubject: '聯邦銀行信用卡電子帳單', passwordHint: '身分證字號' },
   { code: 'cathay', name: '國泰世華', emailSender: 'service@pxbillrc01.cathaybk.com.tw', emailSubject: '國泰世華銀行信用卡', passwordHint: '身分證字號' },
   { code: 'hsbc_tw', name: '滙豐銀行（台灣）', emailSender: 'cards@estatements.hsbc.com.tw', emailSubject: '信用卡帳單', passwordHint: '身分證字號' },
+  { code: 'chb', name: '彰化銀行', emailSender: 'service@bill.chb.com.tw', emailSubject: '綜合對帳單', passwordHint: '身分證字號' },
+  { code: 'fubon', name: '台北富邦', emailSender: 'rs@cf.taipeifubon.com.tw', emailSubject: '信用卡帳單', passwordHint: '身分證字號' },
 ]

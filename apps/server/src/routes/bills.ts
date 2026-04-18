@@ -7,7 +7,7 @@ import prisma from '@/prisma.js'
 import { handleBillPaid } from '@/services/notification.js'
 import { DATA_DIR } from '@/paths.js'
 import { decryptPdf } from '@/services/pdf-parser.js'
-import { parseBillWithLLM, getLlmProvider } from '@/services/llm-parser.js'
+import { parseBillWithLLM, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
 import { BillStatus } from '@bill-alarm/shared/types'
 
 const app = new Hono()
@@ -16,6 +16,7 @@ const updateBillSchema = z.object({
   amount: z.number().int().optional(),
   minimumPayment: z.number().int().positive().nullable().optional(),
   dueDate: z.string().datetime().optional(),
+  billingPeriod: z.string().regex(/^\d{4}-\d{2}$/, 'billingPeriod 須為 YYYY-MM 格式').optional(),
   status: z.enum([BillStatus.PENDING, BillStatus.PAID, BillStatus.OVERDUE]).optional(),
 })
 
@@ -96,7 +97,7 @@ app.get('/', async (c) => {
     prisma.bill.findMany({
       where,
       include: { bank: { select: { name: true } } },
-      orderBy: [{ dueDate: 'desc' }],
+      orderBy: [{ billingPeriod: 'desc' }, { dueDate: 'desc' }],
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
@@ -157,7 +158,7 @@ app.post('/:id/reparse', async (c) => {
   if (!bill.pdfPath) return c.json({ error: '此帳單沒有 PDF，無法重新解析' }, 400)
 
   const provider = await getLlmProvider()
-  if (provider === 'none') return c.json({ error: 'LLM 未設定，請先到設定啟用 Gemini 或 Ollama' }, 400)
+  if (provider === LlmProvider.None) return c.json({ error: 'LLM 未設定，請先到設定啟用 Gemini 或 Ollama' }, 400)
 
   // Extract PDF text
   let pdfText = ''

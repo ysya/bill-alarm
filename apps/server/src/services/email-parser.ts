@@ -6,7 +6,7 @@ import prisma from '@/prisma.js'
 import { searchEmails, getEmailWithAttachments } from './gmail.js'
 import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
 import { extractBillFromText } from './bill-extractor.js'
-import { parseBillWithLLM, getLlmProvider } from './llm-parser.js'
+import { parseBillWithLLM, getLlmProvider, LlmProvider } from './llm-parser.js'
 import { getSetting, KEYS } from './settings.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus, type ParsedBill } from '@bill-alarm/shared/types'
@@ -119,7 +119,7 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
       // 2. LLM as primary (LLM-first for user to just-review-and-edit)
       if (!parsed) {
         const llmProvider = await getLlmProvider()
-        if (llmProvider !== 'none') {
+        if (llmProvider !== LlmProvider.None) {
           try {
             parsed = await parseBillWithLLM(pdfText, bank.name)
             if (parsed) source = 'llm'

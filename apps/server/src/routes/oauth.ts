@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { getSetting, setSetting, deleteSetting, KEYS } from '@/services/settings.js'
 import { getConnectionStatus } from '@/services/gmail.js'
+import { LlmProvider } from '@/services/llm-parser.js'
 
 const app = new Hono()
 
@@ -156,7 +157,7 @@ app.post('/gemini/config', zValidator('json', z.object({
 
 // Save LLM provider selection + model settings
 app.post('/llm/config', zValidator('json', z.object({
-  provider: z.enum(['none', 'gemini', 'ollama']),
+  provider: z.nativeEnum(LlmProvider),
   geminiModel: z.string().min(1).optional(),
   ollamaBaseUrl: z.string().url().optional(),
   ollamaModel: z.string().min(1).optional(),
@@ -182,7 +183,7 @@ app.get('/status', async (c) => {
   const scanInterval = await getSetting(KEYS.SCAN_INTERVAL)
   const scanRangeDays = await getSetting(KEYS.SCAN_RANGE_DAYS)
   const scanQueryExtra = await getSetting(KEYS.SCAN_GMAIL_QUERY_EXTRA)
-  const llmProvider = (await getSetting(KEYS.LLM_PROVIDER)) ?? 'none'
+  const llmProvider = (await getSetting(KEYS.LLM_PROVIDER)) ?? LlmProvider.None
   const geminiModel = await getSetting(KEYS.GEMINI_MODEL)
   const ollamaBaseUrl = await getSetting(KEYS.OLLAMA_BASE_URL)
   const ollamaModel = await getSetting(KEYS.OLLAMA_MODEL)
@@ -210,7 +211,7 @@ app.get('/status', async (c) => {
       isConfigured: !!geminiKey,
     },
     llm: {
-      provider: llmProvider as 'none' | 'gemini' | 'ollama',
+      provider: llmProvider as LlmProvider,
       geminiModel: geminiModel || 'gemini-2.5-flash',
       ollamaBaseUrl: ollamaBaseUrl || 'http://localhost:11434',
       ollamaModel: ollamaModel || 'qwen2.5:1.5b',

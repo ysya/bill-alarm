@@ -144,12 +144,13 @@
                 <Input v-else v-model="editForm.dueDate" type="date" class="mt-1" />
               </div>
 
-              <div v-if="bill.billingPeriod">
+              <div v-if="bill.billingPeriod || editing">
                 <Label class="text-muted-foreground text-xs uppercase tracking-wide">帳單週期</Label>
-                <div class="flex items-center gap-2 mt-1">
+                <div v-if="!editing" class="flex items-center gap-2 mt-1">
                   <CalendarRange class="h-4 w-4 text-muted-foreground shrink-0" />
                   <span class="font-medium">{{ bill.billingPeriod }}</span>
                 </div>
+                <Input v-else v-model="editForm.billingPeriod" type="month" class="mt-1" />
               </div>
 
               <div v-if="bill.createdAt">
@@ -406,10 +407,12 @@ const editForm = ref<{
   amount: number
   minimumPayment: number | null
   dueDate: string
+  billingPeriod: string
 }>({
   amount: 0,
   minimumPayment: null,
   dueDate: '',
+  billingPeriod: '',
 })
 
 function startEdit() {
@@ -418,6 +421,7 @@ function startEdit() {
     amount: bill.value.amount,
     minimumPayment: bill.value.minimumPayment ?? null,
     dueDate: new Date(bill.value.dueDate).toISOString().split('T')[0],
+    billingPeriod: bill.value.billingPeriod ?? '',
   }
   editing.value = true
 }
@@ -434,11 +438,13 @@ async function handleSaveEdit() {
       amount: Math.round(editForm.value.amount),
       dueDate: new Date(editForm.value.dueDate + 'T00:00:00').toISOString(),
     }
-    // Only send minimumPayment if user entered a positive value
     if (editForm.value.minimumPayment && editForm.value.minimumPayment > 0) {
       payload.minimumPayment = Math.round(editForm.value.minimumPayment)
     } else {
       payload.minimumPayment = null
+    }
+    if (/^\d{4}-\d{2}$/.test(editForm.value.billingPeriod)) {
+      payload.billingPeriod = editForm.value.billingPeriod
     }
     await update(bill.value.id, payload)
     toast.success('帳單已更新')

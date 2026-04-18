@@ -53,46 +53,56 @@
           </CardContent>
         </Card>
 
-        <!-- Bill list -->
-        <div v-else class="space-y-3">
-          <Card
-            v-for="bill in bills"
-            :key="bill.id"
-            class="transition-colors hover:border-primary/50 cursor-pointer"
-            @click="navigateTo(`/bills/${bill.id}`)"
-          >
-            <div class="p-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div class="flex-1 min-w-0 space-y-1">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span class="font-semibold truncate">{{ bill.bank?.name }}</span>
-                  <Badge :class="statusBadgeClass(bill.status)">{{ statusLabel(bill.status) }}</Badge>
-                  <span class="text-xs text-muted-foreground">{{ bill.billingPeriod }}</span>
-                </div>
-                <div class="flex items-center gap-3 text-sm text-muted-foreground">
-                  <span class="flex items-center gap-1">
-                    <CalendarIcon class="h-3.5 w-3.5" />
-                    {{ formatDate(bill.dueDate) }}
-                  </span>
-                  <span v-if="bill.status !== BillStatus.PAID" :class="`text-xs font-medium ${daysRemainingText(bill.dueDate).className}`">
-                    {{ daysRemainingText(bill.dueDate).text }}
-                  </span>
-                </div>
-              </div>
-              <div class="flex items-center gap-3 sm:gap-4">
-                <span class="text-lg font-bold whitespace-nowrap">{{ formatAmount(bill.amount) }}</span>
-                <Button
-                  v-if="bill.status !== BillStatus.PAID"
-                  size="sm"
-                  :disabled="markingPaid.has(bill.id)"
-                  @click.stop="openPayDialog(bill.id)"
-                >
-                  <Loader2 v-if="markingPaid.has(bill.id)" class="h-4 w-4 animate-spin" />
-                  <CircleCheck v-else class="h-4 w-4" />
-                  {{ markingPaid.has(bill.id) ? '處理中...' : '標記已繳' }}
-                </Button>
-              </div>
+        <!-- Bill list grouped by billing period -->
+        <div v-else class="space-y-6">
+          <section v-for="group in groupedBills" :key="group.period" class="space-y-3">
+            <div class="flex items-center gap-3">
+              <h3 class="text-sm font-semibold text-muted-foreground">
+                {{ formatPeriodLabel(group.period) }}
+              </h3>
+              <Separator class="flex-1" />
+              <span class="text-xs text-muted-foreground whitespace-nowrap">
+                共 {{ group.bills.length }} 筆 · {{ formatAmount(group.total) }}
+              </span>
             </div>
-          </Card>
+            <Card
+              v-for="bill in group.bills"
+              :key="bill.id"
+              class="transition-colors hover:border-primary/50 cursor-pointer"
+              @click="navigateTo(`/bills/${bill.id}`)"
+            >
+              <div class="p-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div class="flex-1 min-w-0 space-y-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-semibold truncate">{{ bill.bank?.name }}</span>
+                    <Badge :class="statusBadgeClass(bill.status)">{{ statusLabel(bill.status) }}</Badge>
+                  </div>
+                  <div class="flex items-center gap-3 text-sm text-muted-foreground">
+                    <span class="flex items-center gap-1">
+                      <CalendarIcon class="h-3.5 w-3.5" />
+                      {{ formatDate(bill.dueDate) }}
+                    </span>
+                    <span v-if="bill.status !== BillStatus.PAID" :class="`text-xs font-medium ${daysRemainingText(bill.dueDate).className}`">
+                      {{ daysRemainingText(bill.dueDate).text }}
+                    </span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 sm:gap-4">
+                  <span class="text-lg font-bold whitespace-nowrap">{{ formatAmount(bill.amount) }}</span>
+                  <Button
+                    v-if="bill.status !== BillStatus.PAID"
+                    size="sm"
+                    :disabled="markingPaid.has(bill.id)"
+                    @click.stop="openPayDialog(bill.id)"
+                  >
+                    <Loader2 v-if="markingPaid.has(bill.id)" class="h-4 w-4 animate-spin" />
+                    <CircleCheck v-else class="h-4 w-4" />
+                    {{ markingPaid.has(bill.id) ? '處理中...' : '標記已繳' }}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </section>
         </div>
 
         <!-- Pagination -->
@@ -179,6 +189,12 @@ function daysRemainingText(dueDate: string): { text: string; className: string }
   return { text: `剩 ${days} 天`, className: 'text-muted-foreground' }
 }
 
+function formatPeriodLabel(period: string): string {
+  const match = period.match(/^(\d{4})-(\d{2})$/)
+  if (!match) return period || '未分類'
+  return `${match[1]} 年 ${match[2]} 月帳單`
+}
+
 // --- State ---
 
 const PAGE_SIZE = 20
@@ -206,6 +222,21 @@ function openPayDialog(id: string) {
 }
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+
+const groupedBills = computed(() => {
+  const groups: { period: string; bills: BillDTO[]; total: number }[] = []
+  let current: { period: string; bills: BillDTO[]; total: number } | null = null
+  for (const bill of bills.value) {
+    const period = bill.billingPeriod ?? ''
+    if (!current || current.period !== period) {
+      current = { period, bills: [], total: 0 }
+      groups.push(current)
+    }
+    current.bills.push(bill)
+    current.total += bill.amount
+  }
+  return groups
+})
 
 // --- Data ---
 

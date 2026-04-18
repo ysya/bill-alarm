@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { getConnectionStatus, searchEmails, getEmailWithAttachments } from '@/services/gmail.js'
 import { extractPdfText, getPdfBuffers } from '@/services/pdf-parser.js'
 import { extractBillFromText } from '@/services/bill-extractor.js'
-import { parseBillWithLLM, suggestRuleWithLLM, testLlmConnection, getLlmProvider } from '@/services/llm-parser.js'
+import { parseBillWithLLM, suggestRuleWithLLM, testLlmConnection, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
 import prisma from '@/prisma.js'
 import { DATA_DIR } from '@/paths.js'
 import fs from 'node:fs/promises'
@@ -259,7 +259,7 @@ app.get('/llm/status', async (c) => {
 // Test LLM connection (provider + config must already be saved)
 app.post('/llm/test', async (c) => {
   const provider = await getLlmProvider()
-  if (provider === 'none') return c.json({ ok: false, message: 'LLM 提供者未設定' })
+  if (provider === LlmProvider.None) return c.json({ ok: false, message: 'LLM 提供者未設定' })
   const result = await testLlmConnection(provider)
   return c.json(result)
 })
