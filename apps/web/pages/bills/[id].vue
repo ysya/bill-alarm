@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 max-w-3xl">
+  <div class="space-y-6" :class="bill?.pdfPath ? 'max-w-7xl' : 'max-w-3xl'">
     <!-- Back Button -->
     <Button variant="ghost" size="sm" class="-ml-2" @click="navigateTo('/bills')">
       <ArrowLeft class="h-4 w-4" />
