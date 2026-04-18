@@ -21,6 +21,7 @@
     "reka-ui": "^2.9.2",
     "tailwind-merge": "^3.5.0",
     "vue": "latest",
+    "vue-pdf-embed": "^2.1.4",
     "vue-router": "latest",
     "vue-sonner": "^2.0.9"
   },

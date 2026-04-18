@@ -216,11 +216,14 @@
             </div>
           </CardHeader>
           <CardContent>
-            <iframe
-              :src="`/api/bills/${bill.id}/pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH&pagemode=none`"
-              class="w-full h-[70vh] rounded border"
-              title="PDF preview"
-            />
+            <ClientOnly>
+              <BillPdfViewer :source="`/api/bills/${bill.id}/pdf`" />
+              <template #fallback>
+                <div class="h-[70vh] rounded border bg-muted flex items-center justify-center text-muted-foreground text-sm">
+                  載入 PDF 中...
+                </div>
+              </template>
+            </ClientOnly>
           </CardContent>
         </Card>
       </div>
