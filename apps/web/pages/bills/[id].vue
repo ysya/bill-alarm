@@ -35,8 +35,8 @@
 
     <!-- Bill Detail -->
     <template v-else-if="bill">
-      <!-- 2-column layout when PDF exists -->
-      <div :class="bill.pdfPath ? 'grid grid-cols-1 lg:grid-cols-2 gap-4' : ''">
+      <!-- 2-column layout when PDF exists: narrow info panel + wide PDF -->
+      <div :class="bill.pdfPath ? 'grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4' : ''">
         <!-- Left: Bill info + actions -->
         <Card>
           <CardHeader>
