@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6" :class="bill?.pdfPath ? 'max-w-7xl' : 'max-w-3xl'">
+  <div class="space-y-6 max-w-4xl">
     <!-- Back Button -->
     <Button variant="ghost" size="sm" class="-ml-2" @click="navigateTo('/bills')">
       <ArrowLeft class="h-4 w-4" />
@@ -35,9 +35,8 @@
 
     <!-- Bill Detail -->
     <template v-else-if="bill">
-      <!-- 2-column layout when PDF exists: narrow info panel + wide PDF -->
-      <div :class="bill.pdfPath ? 'grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4' : ''">
-        <!-- Left: Bill info + actions -->
+      <div class="space-y-4">
+        <!-- Bill info -->
         <Card>
           <CardHeader>
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -195,8 +194,8 @@
           </CardFooter>
         </Card>
 
-        <!-- Right: PDF inline preview -->
-        <Card v-if="bill.pdfPath" class="lg:sticky lg:top-4 lg:self-start">
+        <!-- PDF (full width, below info) -->
+        <Card v-if="bill.pdfPath">
           <CardHeader>
             <div class="flex items-center justify-between">
               <CardTitle class="text-base flex items-center gap-2">
@@ -226,9 +225,8 @@
             </ClientOnly>
           </CardContent>
         </Card>
-      </div>
 
-      <!-- Raw Email Snippet -->
+        <!-- Raw Email Snippet -->
       <Card v-if="bill.rawEmailSnippet">
         <CardHeader
           class="cursor-pointer select-none"
@@ -300,6 +298,7 @@
           </div>
         </CardContent>
       </Card>
+      </div><!-- end space-y-4 wrapper -->
     </template>
 
     <!-- Mark as Paid Dialog -->
