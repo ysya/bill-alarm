@@ -153,6 +153,20 @@
                 <Input v-else v-model="editForm.billingPeriod" type="month" class="mt-1" />
               </div>
 
+              <div v-if="editing">
+                <Label class="text-muted-foreground text-xs uppercase tracking-wide">狀態</Label>
+                <Select v-model="editForm.status" class="mt-1">
+                  <SelectTrigger class="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="s in statusOptions" :key="s" :value="s">
+                      {{ statusLabel(s) }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div v-if="bill.createdAt">
                 <Label class="text-muted-foreground text-xs uppercase tracking-wide">建立時間</Label>
                 <div class="flex items-center gap-2 mt-1">
@@ -165,7 +179,7 @@
 
           <CardFooter class="flex flex-wrap gap-2">
             <Button
-              v-if="bill.status !== BillStatus.PAID"
+              v-if="bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE"
               :disabled="actionLoading || editing"
               @click="payDialogOpen = true; payDate = today(getLocalTimeZone())"
             >
@@ -173,7 +187,7 @@
               標記已繳
             </Button>
             <Button
-              v-else
+              v-else-if="bill.status === BillStatus.PAID"
               variant="outline"
               :disabled="actionLoading || editing"
               @click="handleRevertToPending"
@@ -408,12 +422,21 @@ const editForm = ref<{
   minimumPayment: number | null
   dueDate: string
   billingPeriod: string
+  status: BillStatus
 }>({
   amount: 0,
   minimumPayment: null,
   dueDate: '',
   billingPeriod: '',
+  status: BillStatus.PENDING,
 })
+
+const statusOptions: BillStatus[] = [
+  BillStatus.PENDING,
+  BillStatus.PAID,
+  BillStatus.OVERDUE,
+  BillStatus.NO_PAYMENT,
+]
 
 function startEdit() {
   if (!bill.value) return
@@ -422,6 +445,7 @@ function startEdit() {
     minimumPayment: bill.value.minimumPayment ?? null,
     dueDate: new Date(bill.value.dueDate).toISOString().split('T')[0],
     billingPeriod: bill.value.billingPeriod ?? '',
+    status: bill.value.status,
   }
   editing.value = true
 }
@@ -445,6 +469,9 @@ async function handleSaveEdit() {
     }
     if (/^\d{4}-\d{2}$/.test(editForm.value.billingPeriod)) {
       payload.billingPeriod = editForm.value.billingPeriod
+    }
+    if (editForm.value.status !== bill.value.status) {
+      payload.status = editForm.value.status
     }
     await update(bill.value.id, payload)
     toast.success('帳單已更新')
@@ -497,7 +524,7 @@ const notifications = computed<NotificationDTO[]>(() => bill.value?.notification
 
 const daysRemainingInfo = computed(() => {
   if (!bill.value) return { text: '', className: '' }
-  if (bill.value.status === BillStatus.PAID) return { text: '', className: '' }
+  if (bill.value.status === BillStatus.PAID || bill.value.status === BillStatus.NO_PAYMENT) return { text: '', className: '' }
   const days = daysUntil(bill.value.dueDate)
   if (days < 0) return { text: `已逾期 ${Math.abs(days)} 天`, className: 'text-red-500' }
   if (days === 0) return { text: '今天到期', className: 'text-red-500' }

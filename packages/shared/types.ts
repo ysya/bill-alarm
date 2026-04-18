@@ -2,6 +2,7 @@ export enum BillStatus {
   PENDING = 'pending',
   PAID = 'paid',
   OVERDUE = 'overdue',
+  NO_PAYMENT = 'no_payment',
 }
 
 export type NotificationChannel = 'telegram' | 'calendar'
@@ -86,12 +87,14 @@ export const BILL_STATUS_LABELS: Record<BillStatus, string> = {
   [BillStatus.PENDING]: '待繳',
   [BillStatus.PAID]: '已繳',
   [BillStatus.OVERDUE]: '逾期',
+  [BillStatus.NO_PAYMENT]: '不需繳費',
 }
 
 export const BILL_STATUS_BADGE_CLASS: Record<BillStatus, string> = {
   [BillStatus.PENDING]: 'bg-yellow-500/15 text-yellow-500 border-yellow-500/25 hover:bg-yellow-500/15',
   [BillStatus.PAID]: 'bg-green-500/15 text-green-500 border-green-500/25 hover:bg-green-500/15',
   [BillStatus.OVERDUE]: 'bg-red-500/15 text-red-500 border-red-500/25 hover:bg-red-500/15',
+  [BillStatus.NO_PAYMENT]: 'bg-blue-500/15 text-blue-500 border-blue-500/25 hover:bg-blue-500/15',
 }
 
 export function statusLabel(status: string): string {

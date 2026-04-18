@@ -27,6 +27,9 @@
         <TabsTrigger value="overdue">
           逾期
         </TabsTrigger>
+        <TabsTrigger value="no_payment">
+          不需繳費
+        </TabsTrigger>
       </TabsList>
 
       <!-- Shared content for all tabs -->
@@ -82,7 +85,7 @@
                       <CalendarIcon class="h-3.5 w-3.5" />
                       {{ formatDate(bill.dueDate) }}
                     </span>
-                    <span v-if="bill.status !== BillStatus.PAID" :class="`text-xs font-medium ${daysRemainingText(bill.dueDate).className}`">
+                    <span v-if="bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE" :class="`text-xs font-medium ${daysRemainingText(bill.dueDate).className}`">
                       {{ daysRemainingText(bill.dueDate).text }}
                     </span>
                   </div>
@@ -90,7 +93,7 @@
                 <div class="flex items-center gap-3 sm:gap-4">
                   <span class="text-lg font-bold whitespace-nowrap">{{ formatAmount(bill.amount) }}</span>
                   <Button
-                    v-if="bill.status !== BillStatus.PAID"
+                    v-if="bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE"
                     size="sm"
                     :disabled="markingPaid.has(bill.id)"
                     @click.stop="openPayDialog(bill.id)"

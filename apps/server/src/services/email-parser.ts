@@ -178,7 +178,7 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
           amount: parsed.amount,
           minimumPayment: parsed.minimumPayment,
           dueDate: parsed.dueDate,
-          status: parsed.amount <= 0 ? BillStatus.PAID : BillStatus.PENDING,
+          status: parsed.amount <= 0 ? BillStatus.NO_PAYMENT : BillStatus.PENDING,
           parseSource: source,
           sourceEmailId: msgId,
           rawEmailSnippet: pdfText.substring(0, 500),

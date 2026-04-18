@@ -22,6 +22,11 @@ async function logNotification(
 export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
   logger.info({ bank: bank.name, amount: bill.amount }, 'Processing new bill notifications')
 
+  if (bill.status === BillStatus.NO_PAYMENT) {
+    logger.info({ bank: bank.name, amount: bill.amount }, 'Bill has no payment required — skipping notifications')
+    return
+  }
+
   if (bank.autoDebit) {
     logger.info({ bank: bank.name }, 'Auto-debit bank — skipping new bill notifications')
     return

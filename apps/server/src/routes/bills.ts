@@ -17,7 +17,7 @@ const updateBillSchema = z.object({
   minimumPayment: z.number().int().positive().nullable().optional(),
   dueDate: z.string().datetime().optional(),
   billingPeriod: z.string().regex(/^\d{4}-\d{2}$/, 'billingPeriod 須為 YYYY-MM 格式').optional(),
-  status: z.enum([BillStatus.PENDING, BillStatus.PAID, BillStatus.OVERDUE]).optional(),
+  status: z.nativeEnum(BillStatus).optional(),
 })
 
 // Dashboard summary
