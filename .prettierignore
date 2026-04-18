@@ -1,0 +1,13 @@
+# GitHub Actions YAML — preserve repository maintainer formatting
+.github/
+
+# Build outputs / caches
+.output
+.nuxt
+.nitro
+dist
+generated
+*.tsbuildinfo
+
+# Lock files
+pnpm-lock.yaml
