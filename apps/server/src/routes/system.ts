@@ -1,13 +1,22 @@
 import { Hono } from 'hono'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
 import { getConnectionStatus, searchEmails, getEmailWithAttachments } from '@/services/gmail.js'
 import { extractPdfText, getPdfBuffers } from '@/services/pdf-parser.js'
 import { extractBillFromText } from '@/services/bill-extractor.js'
-import { parseBillWithLLM } from '@/services/llm-parser.js'
+import { parseBillWithLLM, suggestRuleWithLLM, testLlmConnection, getLlmProvider } from '@/services/llm-parser.js'
+import prisma from '@/prisma.js'
+import { DATA_DIR } from '@/paths.js'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { decryptPdf } from '@/services/pdf-parser.js'
 import { scanAndProcessEmails } from '@/services/email-parser.js'
 import { processNewBill } from '@/services/notification.js'
 import { sendTestMessage, isConfigured as telegramConfigured } from '@/services/telegram.js'
 import { isConfigured as calendarConfigured } from '@/services/calendar.js'
-import { getParser } from '@/parsers/registry.js'
+import { listParserCodes } from '@/parsers/registry.js'
+import { parseWithTemplateDetailed } from '@/parsers/template.js'
+import type { TemplateParserConfig } from '@bill-alarm/shared/template-parser'
 
 const app = new Hono()
 
@@ -57,10 +66,9 @@ app.get('/integrations/status', async (c) => {
   })
 })
 
-// --- Dev/Debug routes (development only) ---
-if (process.env.NODE_ENV !== 'production') {
+// --- Parser debug / test routes (available in production) ---
 
-// Debug: search Gmail and preview emails
+// Search Gmail and preview emails
 app.get('/gmail/search', async (c) => {
   const q = c.req.query('q') || 'newer_than:7d has:attachment'
   const max = Number(c.req.query('max')) || 10
@@ -68,7 +76,7 @@ app.get('/gmail/search', async (c) => {
   return c.json({ query: q, count: ids.length, messageIds: ids })
 })
 
-// Debug: get email details + attachments info
+// Get email details + attachments info
 app.get('/gmail/message/:id', async (c) => {
   const email = await getEmailWithAttachments(c.req.param('id'))
   if (!email) return c.json({ error: 'Email not found' }, 404)
@@ -86,7 +94,7 @@ app.get('/gmail/message/:id', async (c) => {
   })
 })
 
-// Debug: extract PDF text from an email attachment and try parsing
+// Extract PDF text from an email attachment and try parsing
 app.get('/gmail/message/:id/parse', async (c) => {
   const password = c.req.query('password') || undefined
   const bankCode = c.req.query('bank') || undefined
@@ -109,22 +117,24 @@ app.get('/gmail/message/:id/parse', async (c) => {
 
   if (!pdfText) return c.json({ error: extractError || 'Failed to extract PDF text' })
 
-  const parsed = extractBillFromText(pdfText, bankCode)
+  const extracted = extractBillFromText(pdfText, bankCode)
 
   return c.json({
-    pdfTextPreview: pdfText.substring(0, 2000),
+    pdfTextPreview: pdfText.substring(0, 3000),
+    pdfTextFull: pdfText,
     pdfTextLength: pdfText.length,
-    regexResult: parsed ? {
-      amount: parsed.amount,
-      minimumPayment: parsed.minimumPayment,
-      dueDate: parsed.dueDate.toISOString().split('T')[0],
-      billingPeriod: parsed.billingPeriod,
+    regexResult: extracted ? {
+      amount: extracted.bill.amount,
+      minimumPayment: extracted.bill.minimumPayment,
+      dueDate: extracted.bill.dueDate.toISOString().split('T')[0],
+      billingPeriod: extracted.bill.billingPeriod,
+      source: extracted.source,
     } : null,
   })
 })
 
-// Dev: upload PDF and test parser without any external services
-app.post('/dev/parse-pdf', async (c) => {
+// Upload PDF and test parser
+app.post('/parser/test-pdf', async (c) => {
   const formData = await c.req.formData()
   const file = formData.get('file') as File | null
   const bankCode = (formData.get('bank') as string) || undefined
@@ -144,12 +154,10 @@ app.post('/dev/parse-pdf', async (c) => {
 
   if (!pdfText) return c.json({ error: 'PDF text extraction returned empty', step: 'extract_text' }, 400)
 
-  // Try regex parser
-  const regexResult = extractBillFromText(pdfText, bankCode ?? null)
+  const extracted = extractBillFromText(pdfText, bankCode ?? null)
 
-  // Try LLM parser if requested
   let llmResult = null
-  if (useLlm && !regexResult) {
+  if (useLlm && !extracted) {
     try {
       llmResult = await parseBillWithLLM(pdfText, bankCode ?? 'unknown')
     } catch (e) {
@@ -161,26 +169,26 @@ app.post('/dev/parse-pdf', async (c) => {
     pdfText: pdfText.substring(0, 3000),
     pdfTextLength: pdfText.length,
     bankCode: bankCode ?? null,
-    parserUsed: bankCode ? getParser(bankCode).bankCode : 'generic',
-    regexResult: regexResult ? {
-      amount: regexResult.amount,
-      minimumPayment: regexResult.minimumPayment,
-      dueDate: regexResult.dueDate.toISOString().split('T')[0],
-      billingPeriod: regexResult.billingPeriod,
+    regexResult: extracted ? {
+      amount: extracted.bill.amount,
+      minimumPayment: extracted.bill.minimumPayment,
+      dueDate: extracted.bill.dueDate.toISOString().split('T')[0],
+      billingPeriod: extracted.bill.billingPeriod,
+      source: extracted.source,
     } : null,
     llmResult,
   })
 })
 
-// Dev: test parser with raw text input (no PDF needed)
-app.post('/dev/parse-text', async (c) => {
+// Test parser with raw text input (no PDF needed)
+app.post('/parser/test-text', async (c) => {
   const body = await c.req.json() as { text: string; bank?: string; llm?: boolean }
   if (!body.text) return c.json({ error: 'Missing text field' }, 400)
 
-  const regexResult = extractBillFromText(body.text, body.bank ?? null)
+  const extracted = extractBillFromText(body.text, body.bank ?? null)
 
   let llmResult = null
-  if (body.llm && !regexResult) {
+  if (body.llm && !extracted) {
     try {
       llmResult = await parseBillWithLLM(body.text, body.bank ?? 'unknown')
     } catch (e) {
@@ -190,29 +198,174 @@ app.post('/dev/parse-text', async (c) => {
 
   return c.json({
     bankCode: body.bank ?? null,
-    parserUsed: body.bank ? getParser(body.bank).bankCode : 'generic',
-    regexResult: regexResult ? {
-      amount: regexResult.amount,
-      minimumPayment: regexResult.minimumPayment,
-      dueDate: regexResult.dueDate.toISOString().split('T')[0],
-      billingPeriod: regexResult.billingPeriod,
+    regexResult: extracted ? {
+      amount: extracted.bill.amount,
+      minimumPayment: extracted.bill.minimumPayment,
+      dueDate: extracted.bill.dueDate.toISOString().split('T')[0],
+      billingPeriod: extracted.bill.billingPeriod,
+      source: extracted.source,
     } : null,
     llmResult,
   })
 })
 
-// Dev: list available parsers
-app.get('/dev/parsers', (c) => {
-  const parsers = ['esun', 'yuanta', 'ctbc', 'taishin', 'sinopac', 'ubot', 'cathay']
+// Test a template config inline (not stored) against provided text
+const fieldRuleSchema = z.object({
+  keyword: z.string().min(1),
+  type: z.enum(['amount', 'rocDate', 'adDate', 'yearMonth']),
+  nth: z.number().int().positive().optional(),
+})
+app.post('/parser/test-template', zValidator('json', z.object({
+  text: z.string().min(1),
+  config: z.object({
+    amount: fieldRuleSchema,
+    dueDate: fieldRuleSchema,
+    minimumPayment: fieldRuleSchema.optional(),
+    billingPeriod: fieldRuleSchema.optional(),
+  }),
+})), async (c) => {
+  const { text, config } = c.req.valid('json')
+  const detail = parseWithTemplateDetailed(text, config as TemplateParserConfig)
+
   return c.json({
-    parsers: parsers.map((code) => ({
-      code,
-      bankCode: getParser(code).bankCode,
-    })),
+    success: !!detail.bill,
+    result: detail.bill ? {
+      amount: detail.bill.amount,
+      minimumPayment: detail.bill.minimumPayment,
+      dueDate: detail.bill.dueDate.toISOString().split('T')[0],
+      billingPeriod: detail.bill.billingPeriod,
+    } : null,
+    matches: detail.matches,
+    errors: detail.errors,
+  })
+})
+
+// List registered parsers
+app.get('/parser/list', (c) => {
+  return c.json({
+    parsers: listParserCodes().map((code) => ({ code, bankCode: code })),
     fallback: 'generic',
   })
 })
 
-} // end dev-only routes
+// --- LLM routes ---
+
+// Current LLM provider status
+app.get('/llm/status', async (c) => {
+  const provider = await getLlmProvider()
+  return c.json({ provider })
+})
+
+// Test LLM connection (provider + config must already be saved)
+app.post('/llm/test', async (c) => {
+  const provider = await getLlmProvider()
+  if (provider === 'none') return c.json({ ok: false, message: 'LLM 提供者未設定' })
+  const result = await testLlmConnection(provider)
+  return c.json(result)
+})
+
+// Ask LLM to suggest a rule from a selection
+app.post('/llm/suggest-rule', zValidator('json', z.object({
+  text: z.string().min(1),
+  value: z.string().min(1),
+  startIndex: z.number().int().min(0),
+  fieldLabel: z.string().min(1),
+})), async (c) => {
+  const { text, value, startIndex, fieldLabel } = c.req.valid('json')
+  try {
+    const rule = await suggestRuleWithLLM(text, value, startIndex, fieldLabel)
+    if (!rule) return c.json({ error: 'LLM 回傳格式無法解析' }, 422)
+    return c.json({ rule })
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 500)
+  }
+})
+
+// Bootstrap parser editor from an existing bill:
+// - Loads bill + bank
+// - Re-extracts PDF text from the saved PDF
+// - Returns text + bank info so frontend can auto-fill the editor
+app.get('/parser/bootstrap/:billId', async (c) => {
+  const bill = await prisma.bill.findUnique({
+    where: { id: c.req.param('billId') },
+    include: { bank: true },
+  })
+  if (!bill) return c.json({ error: 'Bill not found' }, 404)
+  if (!bill.pdfPath) return c.json({ error: 'Bill has no saved PDF' }, 400)
+
+  let pdfText: string | null = null
+  try {
+    const filePath = path.join(DATA_DIR, bill.pdfPath)
+    const buffer = await fs.readFile(filePath)
+    const decrypted = await decryptPdf(buffer, bill.bank.pdfPassword ?? undefined)
+    // Re-extract text using mupdf
+    const mupdf = await import('mupdf')
+    const doc = mupdf.Document.openDocument(decrypted, 'application/pdf')
+    const pages: string[] = []
+    for (let i = 0; i < doc.countPages(); i++) {
+      const page = doc.loadPage(i)
+      pages.push(page.toStructuredText('preserve-whitespace').asText())
+    }
+    pdfText = pages.join('\n')
+  } catch (e) {
+    return c.json({ error: `Failed to read PDF: ${(e as Error).message}` }, 500)
+  }
+
+  return c.json({
+    pdfText,
+    bill: {
+      id: bill.id,
+      amount: bill.amount,
+      minimumPayment: bill.minimumPayment,
+      dueDate: bill.dueDate.toISOString().split('T')[0],
+      billingPeriod: bill.billingPeriod,
+      parseSource: bill.parseSource,
+    },
+    bank: {
+      id: bill.bank.id,
+      code: bill.bank.code,
+      name: bill.bank.name,
+      parserConfig: bill.bank.parserConfig,
+    },
+  })
+})
+
+// Parser health — per-bank recent parse method + success rate
+app.get('/parser/health', async (c) => {
+  const banks = await prisma.bank.findMany({
+    where: { isActive: true },
+    include: {
+      bills: {
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: { id: true, parseSource: true, billingPeriod: true, createdAt: true },
+      },
+    },
+  })
+
+  const health = banks.map((bank) => {
+    const recent = bank.bills
+    const lastBill = recent[0] ?? null
+    const sourceCounts: Record<string, number> = {}
+    for (const b of recent) {
+      const src = b.parseSource ?? 'unknown'
+      sourceCounts[src] = (sourceCounts[src] ?? 0) + 1
+    }
+    return {
+      bankId: bank.id,
+      bankCode: bank.code,
+      bankName: bank.name,
+      hasTemplate: !!bank.parserConfig,
+      lastParseSource: lastBill?.parseSource ?? null,
+      lastBillId: lastBill?.id ?? null,
+      lastBillingPeriod: lastBill?.billingPeriod ?? null,
+      recentCount: recent.length,
+      sourceCounts,
+    }
+  })
+
+  return c.json({ banks: health })
+})
+
 
 export default app

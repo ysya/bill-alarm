@@ -23,6 +23,7 @@ export interface BillDTO {
   status: BillStatus
   billingPeriod: string
   pdfPath?: string | null
+  parseSource?: 'template' | 'hardcoded' | 'generic' | 'llm' | null
 }
 
 /** API 回傳的帳單詳情 */

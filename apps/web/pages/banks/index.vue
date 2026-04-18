@@ -53,6 +53,10 @@ const customForm = ref({ name: '', emailSenderPattern: '', emailSubjectPattern: 
 const editDialogOpen = ref(false)
 const editingBank = ref<EnabledBank | null>(null)
 const editForm = ref({ emailSenderPattern: '', emailSubjectPattern: '', pdfPassword: '', autoDebit: false, bankAccountId: '' as string | null })
+const editingPreset = computed<BankPreset | null>(() => {
+  if (!editingBank.value?.code) return null
+  return presets.value.find((p) => p.code === editingBank.value!.code) ?? null
+})
 
 // Delete confirm
 const deleteDialogOpen = ref(false)
@@ -459,16 +463,40 @@ onMounted(fetchData)
       <DialogContent class="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>編輯 {{ editingBank?.name }}</DialogTitle>
-          <DialogDescription>微調 email 比對規則和 PDF 密碼。</DialogDescription>
+          <DialogDescription>調整 email 篩選規則和 PDF 密碼。只要 email 的寄件者與主旨都包含這兩個字串就會被掃描解析。</DialogDescription>
         </DialogHeader>
         <form class="space-y-4 py-2" @submit.prevent="handleEdit">
           <div class="space-y-2">
-            <Label for="eSender">寄件者比對</Label>
-            <Input id="eSender" v-model="editForm.emailSenderPattern" />
+            <div class="flex items-center justify-between">
+              <Label for="eSender">寄件者包含</Label>
+              <Button
+                v-if="editingPreset && editingPreset.emailSender !== editForm.emailSenderPattern"
+                type="button" size="sm" variant="ghost" class="h-6 px-2 text-xs"
+                @click="editForm.emailSenderPattern = editingPreset!.emailSender"
+              >
+                還原預設
+              </Button>
+            </div>
+            <Input id="eSender" v-model="editForm.emailSenderPattern" class="font-mono text-sm" />
+            <p v-if="editingPreset" class="text-xs text-muted-foreground">
+              預設: <code class="px-1 rounded bg-muted">{{ editingPreset.emailSender }}</code>
+            </p>
           </div>
           <div class="space-y-2">
-            <Label for="eSubject">主旨比對</Label>
-            <Input id="eSubject" v-model="editForm.emailSubjectPattern" />
+            <div class="flex items-center justify-between">
+              <Label for="eSubject">主旨包含</Label>
+              <Button
+                v-if="editingPreset && editingPreset.emailSubject !== editForm.emailSubjectPattern"
+                type="button" size="sm" variant="ghost" class="h-6 px-2 text-xs"
+                @click="editForm.emailSubjectPattern = editingPreset!.emailSubject"
+              >
+                還原預設
+              </Button>
+            </div>
+            <Input id="eSubject" v-model="editForm.emailSubjectPattern" class="font-mono text-sm" />
+            <p v-if="editingPreset" class="text-xs text-muted-foreground">
+              預設: <code class="px-1 rounded bg-muted">{{ editingPreset.emailSubject }}</code>
+            </p>
           </div>
           <div class="space-y-2">
             <Label for="ePwd">PDF 密碼</Label>

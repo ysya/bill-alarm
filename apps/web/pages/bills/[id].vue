@@ -35,48 +35,88 @@
 
     <!-- Bill Detail -->
     <template v-else-if="bill">
-      <!-- Header Card -->
-      <Card>
-        <CardHeader>
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle class="text-xl">{{ bill.bank?.name }}</CardTitle>
-            </div>
-            <Badge :class="statusBadgeClass(bill.status)" class="self-start text-sm px-3 py-1">
-              {{ statusLabel(bill.status) }}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent class="space-y-6">
-          <!-- Amount Section -->
-          <div class="space-y-3">
-            <div>
-              <Label class="text-muted-foreground text-xs uppercase tracking-wide">應繳金額</Label>
-              <p class="text-3xl font-bold mt-1">{{ formatAmount(bill.amount) }}</p>
-            </div>
-            <div v-if="bill.minimumPayment != null">
-              <Label class="text-muted-foreground text-xs uppercase tracking-wide">最低應繳</Label>
-              <p class="text-lg font-semibold mt-1 text-muted-foreground">
-                {{ formatAmount(bill.minimumPayment) }}
-              </p>
-            </div>
-          </div>
-
-          <Separator />
-
-          <!-- Details Grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div class="space-y-1">
-              <Label class="text-muted-foreground text-xs uppercase tracking-wide">繳費截止日</Label>
-              <div class="flex items-center gap-2">
-                <CalendarIcon class="h-4 w-4 text-muted-foreground" />
-                <span class="font-medium">{{ formatDate(bill.dueDate) }}</span>
-                <span :class="daysRemainingInfo.className" class="text-sm font-medium">
-                  ({{ daysRemainingInfo.text }})
-                </span>
+      <!-- 2-column layout when PDF exists -->
+      <div :class="bill.pdfPath ? 'grid grid-cols-1 lg:grid-cols-2 gap-4' : ''">
+        <!-- Left: Bill info + actions -->
+        <Card>
+          <CardHeader>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="space-y-1">
+                <CardTitle class="text-xl">{{ bill.bank?.name }}</CardTitle>
+                <div class="flex flex-wrap gap-2 items-center">
+                  <Badge :class="statusBadgeClass(bill.status)" class="text-xs px-2 py-0.5">
+                    {{ statusLabel(bill.status) }}
+                  </Badge>
+                  <span v-if="bill.parseSource" class="inline-flex items-center gap-1 text-xs" :class="parseSourceClass(bill.parseSource)">
+                    <span>{{ parseSourceIcon(bill.parseSource) }}</span>
+                    {{ parseSourceLabel(bill.parseSource) }}
+                  </span>
+                </div>
+              </div>
+              <div class="flex gap-1">
+                <Button
+                  v-if="!editing"
+                  size="sm"
+                  variant="outline"
+                  @click="startEdit"
+                >
+                  <Pencil class="h-3.5 w-3.5" />
+                  編輯
+                </Button>
+                <template v-else>
+                  <Button size="sm" variant="outline" :disabled="actionLoading" @click="cancelEdit">
+                    取消
+                  </Button>
+                  <Button size="sm" :disabled="actionLoading" @click="handleSaveEdit">
+                    <Loader2 v-if="actionLoading" class="h-3.5 w-3.5 animate-spin" />
+                    <Save v-else class="h-3.5 w-3.5" />
+                    儲存
+                  </Button>
+                </template>
               </div>
             </div>
 
+            <div v-if="bill.parseSource === 'llm'" class="mt-2 rounded-md bg-orange-500/10 border border-orange-500/30 p-2 text-xs">
+              <Sparkles class="inline h-3.5 w-3.5 mr-1 text-orange-500" />
+              此帳單由 AI 解析，數值可能有誤，建議核對 PDF 後使用編輯功能調整。
+            </div>
+          </CardHeader>
+
+          <CardContent class="space-y-4">
+            <!-- Amount -->
+            <div class="space-y-1">
+              <Label class="text-muted-foreground text-xs uppercase tracking-wide">應繳金額</Label>
+              <p v-if="!editing" class="text-3xl font-bold">{{ formatAmount(bill.amount) }}</p>
+              <Input v-else v-model.number="editForm.amount" type="number" class="text-xl font-bold" />
+            </div>
+
+            <!-- Minimum Payment -->
+            <div class="space-y-1">
+              <Label class="text-muted-foreground text-xs uppercase tracking-wide">最低應繳</Label>
+              <p v-if="!editing" class="text-base">
+                {{ bill.minimumPayment != null ? formatAmount(bill.minimumPayment) : '—' }}
+              </p>
+              <Input v-else v-model.number="editForm.minimumPayment" type="number" placeholder="無" />
+            </div>
+
+            <Separator />
+
+            <!-- Due Date -->
+            <div class="space-y-1">
+              <Label class="text-muted-foreground text-xs uppercase tracking-wide">繳費截止日</Label>
+              <template v-if="!editing">
+                <div class="flex items-center gap-2">
+                  <CalendarIcon class="h-4 w-4 text-muted-foreground" />
+                  <span class="font-medium">{{ formatDate(bill.dueDate) }}</span>
+                  <span :class="daysRemainingInfo.className" class="text-sm font-medium">
+                    ({{ daysRemainingInfo.text }})
+                  </span>
+                </div>
+              </template>
+              <Input v-else v-model="editForm.dueDate" type="date" />
+            </div>
+
+            <!-- Billing Period -->
             <div v-if="bill.billingPeriod" class="space-y-1">
               <Label class="text-muted-foreground text-xs uppercase tracking-wide">帳單週期</Label>
               <div class="flex items-center gap-2">
@@ -89,54 +129,81 @@
               <Label class="text-muted-foreground text-xs uppercase tracking-wide">建立時間</Label>
               <div class="flex items-center gap-2">
                 <Clock class="h-4 w-4 text-muted-foreground" />
-                <span class="font-medium">{{ formatDate(bill.createdAt) }}</span>
+                <span class="text-sm text-muted-foreground">{{ formatDate(bill.createdAt) }}</span>
               </div>
             </div>
-          </div>
-        </CardContent>
-        <CardFooter class="flex flex-col gap-2 sm:flex-row">
-          <Button
-            v-if="bill.status !== BillStatus.PAID"
-            class="w-full sm:w-auto"
-            :disabled="actionLoading"
-            @click="payDialogOpen = true; payDate = today(getLocalTimeZone())"
-          >
-            <CircleCheck class="h-4 w-4" />
-            標記已繳
-          </Button>
-          <Button
-            v-else
-            variant="outline"
-            class="w-full sm:w-auto"
-            :disabled="actionLoading"
-            @click="handleRevertToPending"
-          >
-            <Loader2 v-if="actionLoading" class="h-4 w-4 animate-spin" />
-            <Undo2 v-else class="h-4 w-4" />
-            {{ actionLoading ? '處理中...' : '恢復為待繳' }}
-          </Button>
-          <Button
-            v-if="bill.pdfPath"
-            variant="outline"
-            class="w-full sm:w-auto"
-            as="a"
-            :href="`/api/bills/${bill.id}/pdf`"
-            target="_blank"
-          >
-            <FileText class="h-4 w-4" />
-            檢視 PDF
-          </Button>
-          <Button
-            variant="outline"
-            class="w-full sm:w-auto text-destructive hover:text-destructive"
-            :disabled="actionLoading"
-            @click="deleteDialogOpen = true"
-          >
-            <Trash2 class="h-4 w-4" />
-            刪除帳單
-          </Button>
-        </CardFooter>
-      </Card>
+          </CardContent>
+
+          <CardFooter class="flex flex-col gap-2 sm:flex-row flex-wrap">
+            <Button
+              v-if="bill.status !== BillStatus.PAID"
+              :disabled="actionLoading || editing"
+              @click="payDialogOpen = true; payDate = today(getLocalTimeZone())"
+            >
+              <CircleCheck class="h-4 w-4" />
+              標記已繳
+            </Button>
+            <Button
+              v-else
+              variant="outline"
+              :disabled="actionLoading || editing"
+              @click="handleRevertToPending"
+            >
+              <Loader2 v-if="actionLoading" class="h-4 w-4 animate-spin" />
+              <Undo2 v-else class="h-4 w-4" />
+              恢復為待繳
+            </Button>
+            <Button
+              v-if="bill.pdfPath"
+              variant="outline"
+              :disabled="actionLoading || reparsing || editing"
+              @click="handleReparse"
+            >
+              <Loader2 v-if="reparsing" class="h-4 w-4 animate-spin" />
+              <Sparkles v-else class="h-4 w-4" />
+              {{ reparsing ? 'AI 解析中...' : 'AI 重新解析' }}
+            </Button>
+            <Button
+              variant="outline"
+              class="sm:ml-auto text-destructive hover:text-destructive"
+              :disabled="actionLoading || editing"
+              @click="deleteDialogOpen = true"
+            >
+              <Trash2 class="h-4 w-4" />
+              刪除
+            </Button>
+          </CardFooter>
+        </Card>
+
+        <!-- Right: PDF inline preview -->
+        <Card v-if="bill.pdfPath" class="lg:sticky lg:top-4 lg:self-start">
+          <CardHeader>
+            <div class="flex items-center justify-between">
+              <CardTitle class="text-base flex items-center gap-2">
+                <FileText class="h-4 w-4" />
+                原始 PDF
+              </CardTitle>
+              <Button
+                size="sm"
+                variant="ghost"
+                as="a"
+                :href="`/api/bills/${bill.id}/pdf`"
+                target="_blank"
+              >
+                <ExternalLink class="h-3.5 w-3.5" />
+                開新分頁
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <iframe
+              :src="`/api/bills/${bill.id}/pdf`"
+              class="w-full h-[70vh] rounded border"
+              title="PDF preview"
+            />
+          </CardContent>
+        </Card>
+      </div>
 
       <!-- Raw Email Snippet -->
       <Card v-if="bill.rawEmailSnippet">
@@ -265,6 +332,10 @@ import {
   Bell,
   BellOff,
   Trash2,
+  Pencil,
+  Save,
+  Sparkles,
+  ExternalLink,
 } from 'lucide-vue-next'
 import { getLocalTimeZone, today } from '@internationalized/date'
 import type { DateValue } from 'reka-ui'
@@ -295,16 +366,104 @@ function daysUntil(date: string | Date): number {
 const route = useRoute()
 const billId = computed(() => route.params.id as string)
 
-const { getById, markAsPaid, update, remove } = useBillApi()
+const { getById, markAsPaid, update, reparse, remove } = useBillApi()
 
 const bill = ref<BillDetailDTO | null>(null)
 const loading = ref(true)
 const error = ref(false)
 const actionLoading = ref(false)
+const reparsing = ref(false)
 const emailExpanded = ref(false)
 const deleteDialogOpen = ref(false)
 const payDialogOpen = ref(false)
 const payDate = ref(today(getLocalTimeZone())) as Ref<DateValue>
+
+// Edit mode
+const editing = ref(false)
+const editForm = ref<{
+  amount: number
+  minimumPayment: number | null
+  dueDate: string
+}>({
+  amount: 0,
+  minimumPayment: null,
+  dueDate: '',
+})
+
+function startEdit() {
+  if (!bill.value) return
+  editForm.value = {
+    amount: bill.value.amount,
+    minimumPayment: bill.value.minimumPayment ?? null,
+    dueDate: new Date(bill.value.dueDate).toISOString().split('T')[0],
+  }
+  editing.value = true
+}
+
+function cancelEdit() {
+  editing.value = false
+}
+
+async function handleSaveEdit() {
+  if (!bill.value) return
+  actionLoading.value = true
+  try {
+    const payload: Record<string, unknown> = {
+      amount: Math.round(editForm.value.amount),
+      dueDate: new Date(editForm.value.dueDate + 'T00:00:00').toISOString(),
+    }
+    // Only send minimumPayment if user entered a positive value
+    if (editForm.value.minimumPayment && editForm.value.minimumPayment > 0) {
+      payload.minimumPayment = Math.round(editForm.value.minimumPayment)
+    } else {
+      payload.minimumPayment = null
+    }
+    await update(bill.value.id, payload)
+    toast.success('帳單已更新')
+    editing.value = false
+    await fetchBill()
+  } catch (e: any) {
+    toast.error('儲存失敗', { description: e?.data?.error ?? String(e) })
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function handleReparse() {
+  if (!bill.value) return
+  reparsing.value = true
+  try {
+    await reparse(bill.value.id)
+    toast.success('AI 重新解析完成，請核對結果')
+    await fetchBill()
+  } catch (e: any) {
+    toast.error('AI 解析失敗', { description: e?.data?.error ?? String(e) })
+  } finally {
+    reparsing.value = false
+  }
+}
+
+function parseSourceLabel(src: string | null | undefined): string {
+  if (src === 'llm') return 'AI 解析'
+  if (src === 'template') return '自訂規則'
+  if (src === 'hardcoded') return '內建規則'
+  if (src === 'generic') return '通用規則'
+  return '未知'
+}
+
+function parseSourceIcon(src: string | null | undefined): string {
+  if (src === 'llm') return '🤖'
+  if (src === 'template' || src === 'hardcoded') return '✓'
+  if (src === 'generic') return '⚠'
+  return ''
+}
+
+function parseSourceClass(src: string | null | undefined): string {
+  if (src === 'llm') return 'text-orange-600 dark:text-orange-400'
+  if (src === 'template' || src === 'hardcoded') return 'text-green-600 dark:text-green-400'
+  if (src === 'generic') return 'text-yellow-600 dark:text-yellow-400'
+  return 'text-muted-foreground'
+}
 
 const notifications = computed<NotificationDTO[]>(() => bill.value?.notifications ?? [])
 

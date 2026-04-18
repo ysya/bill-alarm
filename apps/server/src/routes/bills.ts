@@ -7,6 +7,7 @@ import prisma from '@/prisma.js'
 import { handleBillPaid } from '@/services/notification.js'
 import { DATA_DIR } from '@/paths.js'
 import { decryptPdf } from '@/services/pdf-parser.js'
+import { parseBillWithLLM, getLlmProvider } from '@/services/llm-parser.js'
 import { BillStatus } from '@bill-alarm/shared/types'
 
 const app = new Hono()
@@ -144,6 +145,57 @@ app.patch('/:id/pay', zValidator('json', z.object({
   // Remove calendar event
   await handleBillPaid(bill.id)
   return c.json(bill)
+})
+
+// Re-parse a bill with LLM (user clicks "AI 重新解析")
+app.post('/:id/reparse', async (c) => {
+  const bill = await prisma.bill.findUnique({
+    where: { id: c.req.param('id') },
+    include: { bank: true },
+  })
+  if (!bill) return c.json({ error: 'Bill not found' }, 404)
+  if (!bill.pdfPath) return c.json({ error: '此帳單沒有 PDF，無法重新解析' }, 400)
+
+  const provider = await getLlmProvider()
+  if (provider === 'none') return c.json({ error: 'LLM 未設定，請先到設定啟用 Gemini 或 Ollama' }, 400)
+
+  // Extract PDF text
+  let pdfText = ''
+  try {
+    const filePath = path.join(DATA_DIR, bill.pdfPath)
+    const buffer = await fs.readFile(filePath)
+    const decrypted = await decryptPdf(buffer, bill.bank.pdfPassword ?? undefined)
+    const mupdf = await import('mupdf')
+    const doc = mupdf.Document.openDocument(decrypted, 'application/pdf')
+    const pages: string[] = []
+    for (let i = 0; i < doc.countPages(); i++) {
+      const page = doc.loadPage(i)
+      pages.push(page.toStructuredText('preserve-whitespace').asText())
+    }
+    pdfText = pages.join('\n')
+  } catch (e) {
+    return c.json({ error: `PDF 讀取失敗: ${(e as Error).message}` }, 500)
+  }
+
+  let parsed
+  try {
+    parsed = await parseBillWithLLM(pdfText, bill.bank.name)
+  } catch (e) {
+    return c.json({ error: `LLM 解析失敗: ${(e as Error).message}` }, 500)
+  }
+  if (!parsed) return c.json({ error: 'LLM 無法解析此帳單' }, 422)
+
+  const updated = await prisma.bill.update({
+    where: { id: bill.id },
+    data: {
+      amount: parsed.amount,
+      minimumPayment: parsed.minimumPayment,
+      dueDate: parsed.dueDate,
+      billingPeriod: parsed.billingPeriod,
+      parseSource: 'llm',
+    },
+  })
+  return c.json(updated)
 })
 
 // View PDF (decrypted with stored password)

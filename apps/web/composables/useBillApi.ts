@@ -1,5 +1,5 @@
 export function useBillApi() {
-  const { get, patch, del } = useApi()
+  const { get, post, patch, del } = useApi()
 
   return {
     getSummary: (month?: string) => {
@@ -22,6 +22,8 @@ export function useBillApi() {
     update: (id: string, data: Record<string, unknown>) => patch<any>(`/bills/${id}`, data),
 
     markAsPaid: (id: string, paidAt?: string) => patch<any>(`/bills/${id}/pay`, paidAt ? { paidAt } : {}),
+
+    reparse: (id: string) => post<any>(`/bills/${id}/reparse`),
 
     remove: (id: string) => del<any>(`/bills/${id}`),
   }

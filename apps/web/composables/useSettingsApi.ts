@@ -32,8 +32,9 @@ export function useSettingsApi() {
       google: { hasCredentials: boolean; isConnected: boolean; clientId: string | null }
       telegram: { isConfigured: boolean; chatId: string | null }
       calendar: { calendarId: string; enabled: boolean }
-      scan: { interval: number }
+      scan: { interval: number; rangeDays: number; queryExtra: string }
       gemini: { isConfigured: boolean }
+      llm: { provider: 'none' | 'gemini' | 'ollama'; geminiModel: string; ollamaBaseUrl: string; ollamaModel: string }
     }>('/oauth/status'),
 
     saveGoogleCredentials: (clientId: string, clientSecret: string) =>
@@ -53,9 +54,17 @@ export function useSettingsApi() {
       post<{ success: boolean; enabled: boolean }>('/oauth/calendar/toggle', { enabled }),
 
     saveScanInterval: (interval: number) =>
-      post<{ success: boolean; interval: number }>('/oauth/scan/config', { interval }),
+      post<{ success: boolean }>('/oauth/scan/config', { interval }),
+
+    saveScanConfig: (data: { interval?: number; rangeDays?: number; queryExtra?: string }) =>
+      post<{ success: boolean }>('/oauth/scan/config', data),
 
     saveGeminiConfig: (apiKey: string) =>
       post<{ success: boolean }>('/oauth/gemini/config', { apiKey }),
+
+    saveLlmConfig: (data: { provider: 'none' | 'gemini' | 'ollama'; geminiModel?: string; ollamaBaseUrl?: string; ollamaModel?: string }) =>
+      post<{ success: boolean }>('/oauth/llm/config', data),
+
+    testLlm: () => post<{ ok: boolean; message: string }>('/llm/test'),
   }
 }

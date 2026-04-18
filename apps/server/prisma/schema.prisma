@@ -26,6 +26,7 @@ model Bank {
   emailSenderPattern  String
   emailSubjectPattern String
   pdfPassword         String?
+  parserConfig        String?
   isBuiltin           Boolean      @default(false)
   isActive            Boolean      @default(true)
   autoDebit           Boolean      @default(false)
@@ -47,6 +48,7 @@ model Bill {
   minimumPayment   Int?
   dueDate          DateTime
   status           String            @default("pending")
+  parseSource      String?           // 'template' | 'hardcoded' | 'generic' | 'llm'
   paidAt           DateTime?
   calendarEventId  String?
   sourceEmailId    String?

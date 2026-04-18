@@ -6,15 +6,34 @@ import prisma from '@/prisma.js'
 import { searchEmails, getEmailWithAttachments } from './gmail.js'
 import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
 import { extractBillFromText } from './bill-extractor.js'
-import { parseBillWithLLM } from './llm-parser.js'
+import { parseBillWithLLM, getLlmProvider } from './llm-parser.js'
+import { getSetting, KEYS } from './settings.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
-import { BillStatus } from '@bill-alarm/shared/types'
+import { BillStatus, type ParsedBill } from '@bill-alarm/shared/types'
 
 
 export interface ScanResult {
   scanned: number
   newBills: Array<{ bill: Bill; bank: Bank }>
   errors: string[]
+}
+
+/**
+ * Sanity check parsed bill values to catch LLM hallucinations
+ * or obviously wrong extraction. Returns error string, or null if OK.
+ */
+function sanityCheck(parsed: ParsedBill): string | null {
+  if (!Number.isFinite(parsed.amount)) return '金額非數字'
+  if (Math.abs(parsed.amount) > 500_000) return `金額超出合理範圍 (${parsed.amount})`
+  if (parsed.minimumPayment != null && parsed.minimumPayment > Math.abs(parsed.amount)) {
+    return '最低應繳超過本期應繳總額'
+  }
+  const now = Date.now()
+  const diff = parsed.dueDate.getTime() - now
+  const days = diff / (1000 * 60 * 60 * 24)
+  if (days < -90) return '繳款截止日在過去 90 天以前'
+  if (days > 90) return '繳款截止日超過未來 90 天'
+  return null
 }
 
 export async function scanAndProcessEmails(): Promise<ScanResult> {
@@ -24,7 +43,12 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
   if (banks.length === 0) return result
 
   const senderPatterns = banks.map((b) => `from:(${b.emailSenderPattern})`).join(' OR ')
-  const query = `(${senderPatterns}) newer_than:60d has:attachment`
+  const rangeDaysRaw = await getSetting(KEYS.SCAN_RANGE_DAYS)
+  const rangeDays = rangeDaysRaw ? Math.max(1, parseInt(rangeDaysRaw)) : 60
+  const extraQuery = (await getSetting(KEYS.SCAN_GMAIL_QUERY_EXTRA)) || ''
+  const query = `(${senderPatterns}) newer_than:${rangeDays}d has:attachment${extraQuery ? ` ${extraQuery.trim()}` : ''}`
+
+  logger.info({ query, rangeDays }, 'Gmail scan query')
 
   let messageIds: string[]
   try {
@@ -80,18 +104,50 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
         continue
       }
 
-      let parsed = extractBillFromText(pdfText, bank.code)
-      if (!parsed) {
-        logger.info({ bank: bank.name }, 'Regex failed, trying LLM fallback')
-        try {
-          parsed = await parseBillWithLLM(pdfText, bank.name)
-        } catch (e) {
-          logger.warn({ bank: bank.name, error: (e as Error).message }, 'LLM fallback failed')
+      let parsed: ParsedBill | null = null
+      let source: 'template' | 'hardcoded' | 'generic' | 'llm' | null = null
+
+      // 1. Template (if user explicitly configured)
+      if (bank.parserConfig) {
+        const r = extractBillFromText(pdfText, bank.code, bank.parserConfig)
+        if (r?.source === 'template') {
+          parsed = r.bill
+          source = 'template'
         }
       }
+
+      // 2. LLM as primary (LLM-first for user to just-review-and-edit)
       if (!parsed) {
-        result.errors.push(`${bank.name}: 無法解析帳單內容（regex 和 LLM 都失敗）`)
+        const llmProvider = await getLlmProvider()
+        if (llmProvider !== 'none') {
+          try {
+            parsed = await parseBillWithLLM(pdfText, bank.name)
+            if (parsed) source = 'llm'
+          } catch (e) {
+            logger.warn({ bank: bank.name, error: (e as Error).message }, 'LLM parse failed, falling back to regex')
+          }
+        }
+      }
+
+      // 3. Hardcoded / generic fallback (offline safety net)
+      if (!parsed) {
+        const r = extractBillFromText(pdfText, bank.code)
+        if (r) {
+          parsed = r.bill
+          source = r.source
+        }
+      }
+
+      if (!parsed) {
+        result.errors.push(`${bank.name}: 無法解析帳單內容（template/LLM/regex 全部失敗）`)
         continue
+      }
+
+      // Sanity check — catch obvious LLM hallucinations
+      const sanityErr = sanityCheck(parsed)
+      if (sanityErr) {
+        logger.warn({ bank: bank.name, source, parsed, error: sanityErr }, 'Parsed bill failed sanity check')
+        result.errors.push(`${bank.name}: 解析結果異常（${sanityErr}），請手動確認`)
       }
 
       const existing = await prisma.bill.findUnique({
@@ -123,6 +179,7 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
           minimumPayment: parsed.minimumPayment,
           dueDate: parsed.dueDate,
           status: parsed.amount <= 0 ? BillStatus.PAID : BillStatus.PENDING,
+          parseSource: source,
           sourceEmailId: msgId,
           rawEmailSnippet: pdfText.substring(0, 500),
           pdfPath,

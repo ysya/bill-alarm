@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     "./types": "./types.ts",
-    "./constants": "./constants.ts"
+    "./constants": "./constants.ts",
+    "./template-parser": "./template-parser.ts"
   }
 }

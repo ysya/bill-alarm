@@ -53,17 +53,31 @@ function daysUntil(date: Date): number {
 
 export async function sendNewBillAlert(bill: Bill, bank: Bank): Promise<boolean> {
   const days = daysUntil(bill.dueDate)
-  const text = [
-    '<b>📨 收到新帳單</b>',
+  const usedLlm = bill.parseSource === 'llm'
+
+  const lines: string[] = [
+    usedLlm ? '<b>📨 收到新帳單（AI 解析）</b>' : '<b>📨 收到新帳單</b>',
     '',
     `🏦 ${bank.name}`,
     `💰 應繳金額：${formatAmount(bill.amount)}`,
-    bill.minimumPayment ? `📉 最低應繳：${formatAmount(bill.minimumPayment)}` : '',
-    `📅 截止日：${formatDate(bill.dueDate)}`,
-    `⏰ 還有 ${days} 天`,
-  ].filter(Boolean).join('\n')
+  ]
+  if (bill.minimumPayment) lines.push(`📉 最低應繳：${formatAmount(bill.minimumPayment)}`)
+  lines.push(`📅 截止日：${formatDate(bill.dueDate)}`)
+  lines.push(`⏰ 還有 ${days} 天`)
 
-  return sendMessage(text)
+  if (usedLlm) {
+    const baseUrl = await getSetting(KEYS.APP_BASE_URL)
+    if (baseUrl) {
+      const link = `${baseUrl.replace(/\/$/, '')}/bills/${bill.id}`
+      lines.push('')
+      lines.push(`🤖 此次由 AI 解析，<a href="${link}">核對數值</a>。`)
+    } else {
+      lines.push('')
+      lines.push('🤖 此次由 AI 解析，請到帳單詳情頁核對金額。')
+    }
+  }
+
+  return sendMessage(lines.join('\n'))
 }
 
 export async function sendBillReminder(bill: Bill, bank: Bank): Promise<boolean> {

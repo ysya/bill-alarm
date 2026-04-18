@@ -58,7 +58,7 @@
 
 <script setup lang="ts">
 import 'vue-sonner/style.css'
-import { LayoutDashboard, Receipt, CreditCard, Settings, Menu, FlaskConical } from 'lucide-vue-next'
+import { LayoutDashboard, Receipt, CreditCard, Settings, Menu } from 'lucide-vue-next'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Toaster as Sonner } from '@/components/ui/sonner'
@@ -68,13 +68,10 @@ onMounted(() => {
   document.documentElement.classList.add('dark')
 })
 
-const isDev = import.meta.dev
-
 const navItems = [
   { to: '/', label: '總覽', icon: LayoutDashboard },
   { to: '/bills', label: '帳單', icon: Receipt },
   { to: '/banks', label: '銀行', icon: CreditCard },
   { to: '/settings', label: '設定', icon: Settings },
-  ...(isDev ? [{ to: '/dev', label: '解析器測試', icon: FlaskConical }] : []),
 ]
 </script>

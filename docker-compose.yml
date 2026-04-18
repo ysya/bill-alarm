@@ -10,3 +10,50 @@ services:
     environment:
       - NODE_ENV=production
     restart: unless-stopped
+
+  # Local LLM for AI-assisted rule inference / bill parsing fallback.
+  # Idle cost: ~50MB RAM. Model loads into RAM on demand (~1.5GB for qwen2.5:1.5b),
+  # auto-unloads after 5 min idle.
+  # To disable: comment out both 'ollama' and 'ollama-pull' below.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    restart: unless-stopped
+    # Uncomment for GPU (requires nvidia-container-toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # One-shot init container: pulls the configured model on first startup.
+  # Exits after pull completes. Re-runs of `docker compose up` are no-op
+  # since Ollama skips already-pulled models.
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        echo 'Waiting for Ollama...' ;
+        until ollama list >/dev/null 2>&1; do sleep 2; done ;
+        MODEL="${OLLAMA_MODEL:-qwen2.5:1.5b}" ;
+        echo "Pulling $$MODEL (idempotent)..." ;
+        ollama pull "$$MODEL" ;
+        echo 'Ready.'
+    restart: "no"
+
+volumes:
+  ollama_data:

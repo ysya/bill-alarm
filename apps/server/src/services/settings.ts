@@ -9,9 +9,16 @@ export const KEYS = {
   TELEGRAM_CHAT_ID: 'telegram_chat_id',
   GOOGLE_CALENDAR_ID: 'google_calendar_id',
   GEMINI_API_KEY: 'gemini_api_key',
+  GEMINI_MODEL: 'gemini_model',         // e.g. gemini-2.5-flash
   CALENDAR_ENABLED: 'calendar_enabled',
   SCAN_INTERVAL: 'scan_interval',
+  SCAN_RANGE_DAYS: 'scan_range_days',          // default: 60
+  SCAN_GMAIL_QUERY_EXTRA: 'scan_gmail_query_extra', // extra gmail search operators appended to scan query
   LAST_SCAN_AT: 'last_scan_at',
+  LLM_PROVIDER: 'llm_provider',         // 'none' | 'gemini' | 'ollama'
+  OLLAMA_BASE_URL: 'ollama_base_url',   // e.g. http://ollama:11434
+  OLLAMA_MODEL: 'ollama_model',         // e.g. qwen2.5:1.5b
+  APP_BASE_URL: 'app_base_url',         // e.g. http://homelab.local:3100 — for Telegram deep links
 } as const
 
 const ENV_MAP: Record<string, string> = {
@@ -22,6 +29,11 @@ const ENV_MAP: Record<string, string> = {
   [KEYS.TELEGRAM_CHAT_ID]: 'TELEGRAM_CHAT_ID',
   [KEYS.GOOGLE_CALENDAR_ID]: 'GOOGLE_CALENDAR_ID',
   [KEYS.GEMINI_API_KEY]: 'GEMINI_API_KEY',
+  [KEYS.GEMINI_MODEL]: 'GEMINI_MODEL',
+  [KEYS.LLM_PROVIDER]: 'LLM_PROVIDER',
+  [KEYS.OLLAMA_BASE_URL]: 'OLLAMA_BASE_URL',
+  [KEYS.OLLAMA_MODEL]: 'OLLAMA_MODEL',
+  [KEYS.APP_BASE_URL]: 'APP_BASE_URL',
 }
 
 export async function getSetting(key: string): Promise<string | null> {

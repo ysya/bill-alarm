@@ -132,13 +132,17 @@ app.post('/calendar/toggle', zValidator('json', z.object({
   return c.json({ success: true, enabled })
 })
 
-// Set scan interval (hours). 0 = disabled, default = 24
+// Set scan config (interval + range + extra query)
 app.post('/scan/config', zValidator('json', z.object({
-  interval: z.number().int().min(0),
+  interval: z.number().int().min(0).optional(),
+  rangeDays: z.number().int().min(1).max(365).optional(),
+  queryExtra: z.string().max(500).optional(),
 })), async (c) => {
-  const { interval } = c.req.valid('json')
-  await setSetting(KEYS.SCAN_INTERVAL, String(interval))
-  return c.json({ success: true, interval })
+  const { interval, rangeDays, queryExtra } = c.req.valid('json')
+  if (interval != null) await setSetting(KEYS.SCAN_INTERVAL, String(interval))
+  if (rangeDays != null) await setSetting(KEYS.SCAN_RANGE_DAYS, String(rangeDays))
+  if (queryExtra != null) await setSetting(KEYS.SCAN_GMAIL_QUERY_EXTRA, queryExtra)
+  return c.json({ success: true })
 })
 
 // Save Gemini API key from settings page
@@ -147,6 +151,21 @@ app.post('/gemini/config', zValidator('json', z.object({
 })), async (c) => {
   const { apiKey } = c.req.valid('json')
   await setSetting(KEYS.GEMINI_API_KEY, apiKey)
+  return c.json({ success: true })
+})
+
+// Save LLM provider selection + model settings
+app.post('/llm/config', zValidator('json', z.object({
+  provider: z.enum(['none', 'gemini', 'ollama']),
+  geminiModel: z.string().min(1).optional(),
+  ollamaBaseUrl: z.string().url().optional(),
+  ollamaModel: z.string().min(1).optional(),
+})), async (c) => {
+  const { provider, geminiModel, ollamaBaseUrl, ollamaModel } = c.req.valid('json')
+  await setSetting(KEYS.LLM_PROVIDER, provider)
+  if (geminiModel) await setSetting(KEYS.GEMINI_MODEL, geminiModel)
+  if (ollamaBaseUrl) await setSetting(KEYS.OLLAMA_BASE_URL, ollamaBaseUrl)
+  if (ollamaModel) await setSetting(KEYS.OLLAMA_MODEL, ollamaModel)
   return c.json({ success: true })
 })
 
@@ -161,6 +180,12 @@ app.get('/status', async (c) => {
   const geminiKey = await getSetting(KEYS.GEMINI_API_KEY)
   const calendarEnabled = await getSetting(KEYS.CALENDAR_ENABLED)
   const scanInterval = await getSetting(KEYS.SCAN_INTERVAL)
+  const scanRangeDays = await getSetting(KEYS.SCAN_RANGE_DAYS)
+  const scanQueryExtra = await getSetting(KEYS.SCAN_GMAIL_QUERY_EXTRA)
+  const llmProvider = (await getSetting(KEYS.LLM_PROVIDER)) ?? 'none'
+  const geminiModel = await getSetting(KEYS.GEMINI_MODEL)
+  const ollamaBaseUrl = await getSetting(KEYS.OLLAMA_BASE_URL)
+  const ollamaModel = await getSetting(KEYS.OLLAMA_MODEL)
 
   return c.json({
     google: {
@@ -178,9 +203,17 @@ app.get('/status', async (c) => {
     },
     scan: {
       interval: scanInterval != null ? parseInt(scanInterval) : 24,
+      rangeDays: scanRangeDays != null ? parseInt(scanRangeDays) : 60,
+      queryExtra: scanQueryExtra ?? '',
     },
     gemini: {
       isConfigured: !!geminiKey,
+    },
+    llm: {
+      provider: llmProvider as 'none' | 'gemini' | 'ollama',
+      geminiModel: geminiModel || 'gemini-2.5-flash',
+      ollamaBaseUrl: ollamaBaseUrl || 'http://localhost:11434',
+      ollamaModel: ollamaModel || 'qwen2.5:1.5b',
     },
   })
 })

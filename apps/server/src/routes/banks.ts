@@ -70,6 +70,7 @@ app.patch('/:id', zValidator('json', z.object({
   emailSenderPattern: z.string().min(1).optional(),
   emailSubjectPattern: z.string().min(1).optional(),
   pdfPassword: z.string().nullable().optional(),
+  parserConfig: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
   autoDebit: z.boolean().optional(),
   bankAccountId: z.string().nullable().optional(),
