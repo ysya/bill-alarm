@@ -53,7 +53,7 @@
                   </span>
                 </div>
               </div>
-              <div class="flex gap-1">
+              <div class="flex gap-1 shrink-0">
                 <Button
                   v-if="!editing"
                   size="sm"
@@ -73,6 +73,17 @@
                     儲存
                   </Button>
                 </template>
+                <Button
+                  v-if="!editing"
+                  size="icon-sm"
+                  variant="ghost"
+                  class="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  :disabled="actionLoading"
+                  title="刪除帳單"
+                  @click="deleteDialogOpen = true"
+                >
+                  <Trash2 class="h-4 w-4" />
+                </Button>
               </div>
             </div>
 
@@ -152,7 +163,7 @@
             </div>
           </CardContent>
 
-          <CardFooter class="flex flex-col gap-2 sm:flex-row flex-wrap">
+          <CardFooter class="flex flex-wrap gap-2">
             <Button
               v-if="bill.status !== BillStatus.PAID"
               :disabled="actionLoading || editing"
@@ -181,15 +192,6 @@
               <Sparkles v-else class="h-4 w-4" />
               {{ reparsing ? 'AI 解析中...' : 'AI 重新解析' }}
             </Button>
-            <Button
-              variant="outline"
-              class="sm:ml-auto text-destructive hover:text-destructive"
-              :disabled="actionLoading || editing"
-              @click="deleteDialogOpen = true"
-            >
-              <Trash2 class="h-4 w-4" />
-              刪除
-            </Button>
           </CardFooter>
         </Card>
 
@@ -215,7 +217,7 @@
           </CardHeader>
           <CardContent>
             <iframe
-              :src="`/api/bills/${bill.id}/pdf#pagemode=none&view=FitH`"
+              :src="`/api/bills/${bill.id}/pdf#toolbar=0&navpanes=0&scrollbar=0&view=FitH&pagemode=none`"
               class="w-full h-[70vh] rounded border"
               title="PDF preview"
             />
