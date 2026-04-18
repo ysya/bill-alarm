@@ -86,18 +86,16 @@
             <!-- Hero: Amount -->
             <div>
               <Label class="text-muted-foreground text-xs uppercase tracking-wide">應繳金額</Label>
-              <div class="flex items-baseline gap-3 mt-1">
-                <p v-if="!editing" class="text-4xl font-bold leading-none">
-                  {{ formatAmount(bill.amount) }}
-                </p>
-                <Input v-else v-model.number="editForm.amount" type="number" class="text-2xl font-bold h-12" />
-                <span
-                  v-if="!editing && bill.minimumPayment != null && bill.minimumPayment > 0"
-                  class="text-sm text-muted-foreground"
-                >
-                  (最低 {{ formatAmount(bill.minimumPayment) }})
-                </span>
-              </div>
+              <p v-if="!editing" class="text-4xl font-bold leading-none mt-1">
+                {{ formatAmount(bill.amount) }}
+              </p>
+              <Input v-else v-model.number="editForm.amount" type="number" class="text-2xl font-bold h-12 mt-1" />
+              <p
+                v-if="!editing && bill.minimumPayment != null && bill.minimumPayment > 0"
+                class="text-sm text-muted-foreground mt-2"
+              >
+                最低應繳 {{ formatAmount(bill.minimumPayment) }}
+              </p>
               <Input
                 v-if="editing"
                 v-model.number="editForm.minimumPayment"
@@ -118,17 +116,17 @@
               </div>
             </div>
 
-            <!-- Dates grid -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Dates (stacked, 1-column to fit narrow panel) -->
+            <div class="space-y-4">
               <div>
                 <Label class="text-muted-foreground text-xs uppercase tracking-wide">繳費截止日</Label>
-                <div v-if="!editing" class="flex items-center gap-2 mt-1">
+                <div v-if="!editing" class="flex items-center gap-2 mt-1 flex-wrap">
                   <CalendarIcon class="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span class="font-medium">{{ formatDate(bill.dueDate) }}</span>
+                  <span class="font-medium whitespace-nowrap">{{ formatDate(bill.dueDate) }}</span>
                   <span
                     v-if="daysRemainingInfo.text"
                     :class="daysRemainingInfo.className"
-                    class="text-xs font-medium"
+                    class="text-xs font-medium whitespace-nowrap"
                   >
                     {{ daysRemainingInfo.text }}
                   </span>
@@ -148,7 +146,7 @@
                 <Label class="text-muted-foreground text-xs uppercase tracking-wide">建立時間</Label>
                 <div class="flex items-center gap-2 mt-1">
                   <Clock class="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span class="text-sm text-muted-foreground">{{ formatDate(bill.createdAt) }}</span>
+                  <span class="text-sm text-muted-foreground whitespace-nowrap">{{ formatDate(bill.createdAt) }}</span>
                 </div>
               </div>
             </div>
@@ -217,7 +215,7 @@
           </CardHeader>
           <CardContent>
             <iframe
-              :src="`/api/bills/${bill.id}/pdf`"
+              :src="`/api/bills/${bill.id}/pdf#pagemode=none&view=FitH`"
               class="w-full h-[70vh] rounded border"
               title="PDF preview"
             />
