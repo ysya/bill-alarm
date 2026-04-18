@@ -31,6 +31,7 @@ export interface BillDetailDTO extends BillDTO {
   rawEmailSnippet?: string
   notifications?: NotificationDTO[]
   createdAt?: string
+  paidAt?: string | null
 }
 
 export interface NotificationDTO {

@@ -82,54 +82,74 @@
             </div>
           </CardHeader>
 
-          <CardContent class="space-y-4">
-            <!-- Amount -->
-            <div class="space-y-1">
+          <CardContent class="space-y-5">
+            <!-- Hero: Amount -->
+            <div>
               <Label class="text-muted-foreground text-xs uppercase tracking-wide">應繳金額</Label>
-              <p v-if="!editing" class="text-3xl font-bold">{{ formatAmount(bill.amount) }}</p>
-              <Input v-else v-model.number="editForm.amount" type="number" class="text-xl font-bold" />
-            </div>
-
-            <!-- Minimum Payment -->
-            <div class="space-y-1">
-              <Label class="text-muted-foreground text-xs uppercase tracking-wide">最低應繳</Label>
-              <p v-if="!editing" class="text-base">
-                {{ bill.minimumPayment != null ? formatAmount(bill.minimumPayment) : '—' }}
-              </p>
-              <Input v-else v-model.number="editForm.minimumPayment" type="number" placeholder="無" />
+              <div class="flex items-baseline gap-3 mt-1">
+                <p v-if="!editing" class="text-4xl font-bold leading-none">
+                  {{ formatAmount(bill.amount) }}
+                </p>
+                <Input v-else v-model.number="editForm.amount" type="number" class="text-2xl font-bold h-12" />
+                <span
+                  v-if="!editing && bill.minimumPayment != null && bill.minimumPayment > 0"
+                  class="text-sm text-muted-foreground"
+                >
+                  (最低 {{ formatAmount(bill.minimumPayment) }})
+                </span>
+              </div>
+              <Input
+                v-if="editing"
+                v-model.number="editForm.minimumPayment"
+                type="number"
+                placeholder="最低應繳 (選填)"
+                class="mt-2"
+              />
             </div>
 
             <Separator />
 
-            <!-- Due Date -->
-            <div class="space-y-1">
-              <Label class="text-muted-foreground text-xs uppercase tracking-wide">繳費截止日</Label>
-              <template v-if="!editing">
-                <div class="flex items-center gap-2">
-                  <CalendarIcon class="h-4 w-4 text-muted-foreground" />
-                  <span class="font-medium">{{ formatDate(bill.dueDate) }}</span>
-                  <span :class="daysRemainingInfo.className" class="text-sm font-medium">
-                    ({{ daysRemainingInfo.text }})
-                  </span>
-                </div>
-              </template>
-              <Input v-else v-model="editForm.dueDate" type="date" />
-            </div>
-
-            <!-- Billing Period -->
-            <div v-if="bill.billingPeriod" class="space-y-1">
-              <Label class="text-muted-foreground text-xs uppercase tracking-wide">帳單週期</Label>
-              <div class="flex items-center gap-2">
-                <CalendarRange class="h-4 w-4 text-muted-foreground" />
-                <span class="font-medium">{{ bill.billingPeriod }}</span>
+            <!-- Paid info (if paid) -->
+            <div v-if="bill.status === BillStatus.PAID && bill.paidAt" class="rounded-md bg-green-500/10 border border-green-500/30 p-3">
+              <Label class="text-xs text-green-700 dark:text-green-400 uppercase tracking-wide">繳費時間</Label>
+              <div class="flex items-center gap-2 mt-1">
+                <CircleCheck class="h-4 w-4 text-green-500" />
+                <span class="font-medium">{{ formatDate(bill.paidAt) }}</span>
               </div>
             </div>
 
-            <div v-if="bill.createdAt" class="space-y-1">
-              <Label class="text-muted-foreground text-xs uppercase tracking-wide">建立時間</Label>
-              <div class="flex items-center gap-2">
-                <Clock class="h-4 w-4 text-muted-foreground" />
-                <span class="text-sm text-muted-foreground">{{ formatDate(bill.createdAt) }}</span>
+            <!-- Dates grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label class="text-muted-foreground text-xs uppercase tracking-wide">繳費截止日</Label>
+                <div v-if="!editing" class="flex items-center gap-2 mt-1">
+                  <CalendarIcon class="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span class="font-medium">{{ formatDate(bill.dueDate) }}</span>
+                  <span
+                    v-if="daysRemainingInfo.text"
+                    :class="daysRemainingInfo.className"
+                    class="text-xs font-medium"
+                  >
+                    {{ daysRemainingInfo.text }}
+                  </span>
+                </div>
+                <Input v-else v-model="editForm.dueDate" type="date" class="mt-1" />
+              </div>
+
+              <div v-if="bill.billingPeriod">
+                <Label class="text-muted-foreground text-xs uppercase tracking-wide">帳單週期</Label>
+                <div class="flex items-center gap-2 mt-1">
+                  <CalendarRange class="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span class="font-medium">{{ bill.billingPeriod }}</span>
+                </div>
+              </div>
+
+              <div v-if="bill.createdAt">
+                <Label class="text-muted-foreground text-xs uppercase tracking-wide">建立時間</Label>
+                <div class="flex items-center gap-2 mt-1">
+                  <Clock class="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span class="text-sm text-muted-foreground">{{ formatDate(bill.createdAt) }}</span>
+                </div>
               </div>
             </div>
           </CardContent>
