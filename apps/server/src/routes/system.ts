@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
+import { scanEvents, type ScanEvent } from '@/services/scan-events.js'
 import { getConnectionStatus, searchEmails, getEmailWithAttachments } from '@/services/gmail.js'
 import { extractPdfText, getPdfBuffers } from '@/services/pdf-parser.js'
 import { extractBillFromText } from '@/services/bill-extractor.js'
@@ -62,6 +64,52 @@ app.post('/gmail/scan', async (c) => {
       errors: [{ stage: 'unexpected', reason: (e as Error).message }],
     }, 500)
   }
+})
+
+// Live scan progress via Server-Sent Events.
+// Stays open and forwards events emitted from runScanWithLog().
+app.get('/scan-events', (c) => {
+  return streamSSE(c, async (stream) => {
+    let resolveDone: () => void = () => {}
+    const done = new Promise<void>((r) => { resolveDone = r })
+
+    const listener = (event: ScanEvent) => {
+      stream
+        .writeSSE({ event: event.type, data: JSON.stringify(event) })
+        .catch(() => { /* client disconnected mid-write */ })
+    }
+    scanEvents.on('scan', listener)
+
+    stream.onAbort(() => {
+      scanEvents.off('scan', listener)
+      resolveDone()
+    })
+
+    // Initial hello so EventSource considers the stream open.
+    await stream.writeSSE({ event: 'hello', data: '{}' })
+
+    // If a scan is in progress right now, replay the latest known state
+    // so a freshly-connected client (e.g. after page refresh) catches up
+    // instead of waiting for the next event.
+    const snapshot = scanEvents.getSnapshot()
+    if (snapshot) {
+      await stream.writeSSE({ event: 'start', data: JSON.stringify(snapshot.start) })
+      if (snapshot.progress) {
+        await stream.writeSSE({ event: 'progress', data: JSON.stringify(snapshot.progress) })
+      }
+    }
+
+    // Heartbeat every 30s to keep proxies / Nuxt devProxy happy.
+    const heartbeat = setInterval(() => {
+      stream.writeSSE({ event: 'ping', data: '{}' }).catch(() => {})
+    }, 30_000)
+
+    try {
+      await done
+    } finally {
+      clearInterval(heartbeat)
+    }
+  })
 })
 
 // Recent scan logs (most recent first)

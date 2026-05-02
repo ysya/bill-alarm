@@ -9,6 +9,7 @@ import { parseWithTemplate } from '@/parsers/template.js'
 import type { TemplateParserConfig } from '@bill-alarm/shared/template-parser'
 import { parseBillWithLLM, getLlmProvider, LlmProvider } from './llm-parser.js'
 import { getSetting, KEYS } from './settings.js'
+import { scanEvents } from './scan-events.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus, type ParsedBill } from '@bill-alarm/shared/types'
 
@@ -35,6 +36,15 @@ export interface ScanResult {
   errors: ScanError[]
 }
 
+export type ScanItemStatus = 'matched' | 'success' | 'error' | 'skipped'
+
+export interface ScanCallbacks {
+  /** Called once after Gmail search completes, with total messages to process. */
+  onStart?: (total: number) => void
+  /** Called after each email is processed (1-based idx). */
+  onProgress?: (idx: number, total: number, bank: string | undefined, status: ScanItemStatus, reason?: string) => void
+}
+
 /**
  * Sanity check parsed bill values to catch LLM hallucinations
  * or obviously wrong extraction. Returns error string, or null if OK.
@@ -53,11 +63,14 @@ function sanityCheck(parsed: ParsedBill): string | null {
   return null
 }
 
-export async function scanAndProcessEmails(): Promise<ScanResult> {
+export async function scanAndProcessEmails(callbacks?: ScanCallbacks): Promise<ScanResult> {
   const result: ScanResult = { scanned: 0, newBills: [], errors: [] }
 
   const banks = await prisma.bank.findMany({ where: { isActive: true } })
-  if (banks.length === 0) return result
+  if (banks.length === 0) {
+    callbacks?.onStart?.(0)
+    return result
+  }
 
   const senderPatterns = banks.map((b) => `from:(${b.emailSenderPattern})`).join(' OR ')
   const rangeDaysRaw = await getSetting(KEYS.SCAN_RANGE_DAYS)
@@ -75,26 +88,43 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
       stage: 'gmail_search',
       reason: `Gmail 搜尋失敗：${(e as Error).message}`,
     })
+    callbacks?.onStart?.(0)
     return result
   }
 
   result.scanned = messageIds.length
   logger.info({ count: messageIds.length }, 'Found emails to process')
+  callbacks?.onStart?.(messageIds.length)
 
-  for (const msgId of messageIds) {
+  for (let i = 0; i < messageIds.length; i++) {
+    const msgId = messageIds[i]
+    const idx = i + 1
+    const total = messageIds.length
+    let progressBank: string | undefined
+    let progressStatus: ScanItemStatus = 'skipped'
+    let progressReason: string | undefined
     try {
       const email = await getEmailWithAttachments(msgId)
-      if (!email) continue
+      if (!email) {
+        progressReason = '取信失敗或郵件不存在'
+        continue
+      }
 
       const bank = banks.find((b) =>
         email.from.toLowerCase().includes(b.emailSenderPattern.toLowerCase()) &&
         email.subject.includes(b.emailSubjectPattern),
       )
-      if (!bank) continue
+      if (!bank) {
+        progressReason = '無對應銀行'
+        continue
+      }
+      progressBank = bank.name
+      progressStatus = 'matched'
 
       const pdfBuffers = await getPdfBuffers(email.attachments)
       if (pdfBuffers.length === 0) {
         logger.debug({ msgId, bank: bank.name }, 'No PDF attachments found')
+        progressReason = '無 PDF 附件'
         continue
       }
 
@@ -116,14 +146,17 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
 
       if (!pdfText) {
         const isPasswordError = lastPdfError?.includes('密碼')
+        const reason = isPasswordError
+          ? 'PDF 密碼錯誤，請至銀行管理更新密碼'
+          : `PDF 文字擷取失敗${lastPdfError ? `（${lastPdfError}）` : ''}`
         result.errors.push({
           stage: isPasswordError ? 'pdf_password' : 'pdf_extract',
           bank: bank.name,
           msgId,
-          reason: isPasswordError
-            ? 'PDF 密碼錯誤，請至銀行管理更新密碼'
-            : `PDF 文字擷取失敗${lastPdfError ? `（${lastPdfError}）` : ''}`,
+          reason,
         })
+        progressStatus = 'error'
+        progressReason = reason
         continue
       }
 
@@ -148,35 +181,29 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
       if (!parsed) {
         const llmProvider = await getLlmProvider()
         if (llmProvider === LlmProvider.None) {
-          result.errors.push({
-            stage: 'parse_failed',
-            bank: bank.name,
-            msgId,
-            reason: 'LLM 未設定，無法解析帳單。請至設定 → LLM 啟用 Gemini 或 Ollama',
-          })
+          const reason = 'LLM 未設定，無法解析帳單。請至設定 → LLM 啟用 Gemini 或 Ollama'
+          result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
+          progressStatus = 'error'
+          progressReason = reason
           continue
         }
         try {
           parsed = await parseBillWithLLM(pdfText, bank.name)
           if (parsed) source = 'llm'
         } catch (e) {
-          result.errors.push({
-            stage: 'parse_failed',
-            bank: bank.name,
-            msgId,
-            reason: `LLM 解析失敗：${(e as Error).message}`,
-          })
+          const reason = `LLM 解析失敗：${(e as Error).message}`
+          result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
+          progressStatus = 'error'
+          progressReason = reason
           continue
         }
       }
 
       if (!parsed) {
-        result.errors.push({
-          stage: 'parse_failed',
-          bank: bank.name,
-          msgId,
-          reason: 'LLM 回傳結果無法解析為有效帳單',
-        })
+        const reason = 'LLM 回傳結果無法解析為有效帳單'
+        result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
+        progressStatus = 'error'
+        progressReason = reason
         continue
       }
 
@@ -184,12 +211,10 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
       const sanityErr = sanityCheck(parsed)
       if (sanityErr) {
         logger.warn({ bank: bank.name, source, parsed, error: sanityErr }, 'Parsed bill failed sanity check')
-        result.errors.push({
-          stage: 'sanity_check',
-          bank: bank.name,
-          msgId,
-          reason: `解析結果異常（${sanityErr}），請手動確認`,
-        })
+        const reason = `解析結果異常（${sanityErr}），請手動確認`
+        result.errors.push({ stage: 'sanity_check', bank: bank.name, msgId, reason })
+        progressStatus = 'error'
+        progressReason = reason
       }
 
       const existing = await prisma.bill.findUnique({
@@ -200,7 +225,10 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
           },
         },
       })
-      if (existing) continue
+      if (existing) {
+        progressReason = '已存在相同帳單'
+        continue
+      }
 
       // Save PDF to filesystem
       let pdfPath: string | undefined
@@ -230,10 +258,16 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
 
       logger.info({ bank: bank.name, amount: parsed.amount, dueDate: parsed.dueDate }, 'New bill created')
       result.newBills.push({ bill, bank })
+      // If sanity check already flagged an error, keep that status; otherwise success.
+      if (progressStatus !== 'error') progressStatus = 'success'
     } catch (e) {
       const msg = (e as Error).message ?? String(e)
       logger.error({ msgId, error: msg }, 'Failed to process email')
       result.errors.push({ stage: 'unexpected', msgId, reason: msg })
+      progressStatus = 'error'
+      progressReason = msg
+    } finally {
+      callbacks?.onProgress?.(idx, total, progressBank, progressStatus, progressReason)
     }
   }
 
@@ -258,7 +292,14 @@ export async function runScanWithLog(trigger: 'manual' | 'cron'): Promise<Record
   let result: ScanResult = { scanned: 0, newBills: [], errors: [] }
   let fatal: string | null = null
   try {
-    result = await scanAndProcessEmails()
+    result = await scanAndProcessEmails({
+      onStart: (total) => {
+        scanEvents.emitEvent({ type: 'start', scanLogId: log.id, total, trigger })
+      },
+      onProgress: (idx, total, bank, status, reason) => {
+        scanEvents.emitEvent({ type: 'progress', scanLogId: log.id, idx, total, bank, status, reason })
+      },
+    })
   } catch (e) {
     fatal = (e as Error).message ?? String(e)
     logger.error({ error: fatal }, 'Scan crashed unexpectedly')
@@ -280,6 +321,14 @@ export async function runScanWithLog(trigger: 'manual' | 'cron'): Promise<Record
     // Surface as a structured error so callers see the same shape.
     result.errors.push({ stage: 'unexpected', reason: fatal })
   }
+
+  scanEvents.emitEvent({
+    type: 'complete',
+    scanLogId: log.id,
+    scanned: result.scanned,
+    newBills: result.newBills.length,
+    errorCount: result.errors.length,
+  })
 
   return { result, scanLogId: log.id }
 }

@@ -106,6 +106,18 @@ async function handleDisconnect() {
 
 const scanLogList = ref<{ refresh: () => Promise<void> } | null>(null)
 
+const { state: scanProgress, onComplete } = useScanEvents()
+onComplete.value = () => {
+  scanLogList.value?.refresh()
+}
+
+const scanInProgress = computed(() => scanning.value || scanProgress.value.active)
+const progressPercent = computed(() =>
+  scanProgress.value.total > 0
+    ? Math.round((scanProgress.value.idx / scanProgress.value.total) * 100)
+    : 0,
+)
+
 async function handleScan() {
   scanning.value = true
   try {
@@ -308,9 +320,16 @@ async function handleSaveCalendar() {
 
       <!-- Action buttons -->
       <div class="flex gap-2">
-        <Button size="sm" variant="outline" :disabled="scanning" @click="handleScan">
+        <Button size="sm" variant="outline" :disabled="scanInProgress" @click="handleScan">
           <Mail class="mr-2 h-4 w-4" />
-          {{ scanning ? '掃描中...' : '立即掃描郵件' }}
+          <template v-if="scanProgress.active">
+            掃描中 {{ scanProgress.idx }}/{{ scanProgress.total }}
+            <span v-if="scanProgress.bank" class="ml-1 text-muted-foreground">
+              · {{ scanProgress.bank }}
+            </span>
+          </template>
+          <template v-else-if="scanning">啟動中...</template>
+          <template v-else>立即掃描郵件</template>
         </Button>
         <Button size="sm" variant="ghost" @click="showCredentials = !showCredentials">
           修改憑證
@@ -320,6 +339,27 @@ async function handleSaveCalendar() {
           <Unlink class="mr-2 h-4 w-4" />
           斷開連結
         </Button>
+      </div>
+
+      <!-- Live scan progress -->
+      <div v-if="scanProgress.active" class="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-medium">
+            {{ scanProgress.trigger === 'cron' ? '自動掃描中' : '手動掃描中' }}
+            · {{ scanProgress.idx }} / {{ scanProgress.total }}
+          </span>
+          <span class="text-muted-foreground">{{ progressPercent }}%</span>
+        </div>
+        <div class="h-1.5 w-full overflow-hidden rounded-full bg-border">
+          <div
+            class="h-full bg-primary transition-all duration-200"
+            :style="{ width: `${progressPercent}%` }"
+          />
+        </div>
+        <p v-if="scanProgress.bank || scanProgress.lastReason" class="truncate text-xs text-muted-foreground">
+          <span v-if="scanProgress.bank" class="font-medium">{{ scanProgress.bank }}</span>
+          <span v-if="scanProgress.lastReason" class="ml-1">— {{ scanProgress.lastReason }}</span>
+        </p>
       </div>
 
       <!-- Scan history -->
