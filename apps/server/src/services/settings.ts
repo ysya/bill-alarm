@@ -10,12 +10,15 @@ export const KEYS = {
   GOOGLE_CALENDAR_ID: 'google_calendar_id',
   GEMINI_API_KEY: 'gemini_api_key',
   GEMINI_MODEL: 'gemini_model',         // e.g. gemini-2.5-flash
+  OPENAI_API_KEY: 'openai_api_key',
+  OPENAI_MODEL: 'openai_model',         // e.g. gpt-4o-mini
+  OPENAI_BASE_URL: 'openai_base_url',   // e.g. https://api.openai.com/v1 (or OpenRouter, local proxy, etc.)
   CALENDAR_ENABLED: 'calendar_enabled',
   SCAN_INTERVAL: 'scan_interval',
   SCAN_RANGE_DAYS: 'scan_range_days',          // default: 60
   SCAN_GMAIL_QUERY_EXTRA: 'scan_gmail_query_extra', // extra gmail search operators appended to scan query
   LAST_SCAN_AT: 'last_scan_at',
-  LLM_PROVIDER: 'llm_provider',         // 'none' | 'gemini' | 'ollama'
+  LLM_PROVIDER: 'llm_provider',         // 'none' | 'gemini' | 'openai' | 'ollama'
   OLLAMA_BASE_URL: 'ollama_base_url',   // e.g. http://ollama:11434
   OLLAMA_MODEL: 'ollama_model',         // e.g. qwen2.5:1.5b
   APP_BASE_URL: 'app_base_url',         // e.g. http://homelab.local:3100 — for Telegram deep links
@@ -30,6 +33,9 @@ const ENV_MAP: Record<string, string> = {
   [KEYS.GOOGLE_CALENDAR_ID]: 'GOOGLE_CALENDAR_ID',
   [KEYS.GEMINI_API_KEY]: 'GEMINI_API_KEY',
   [KEYS.GEMINI_MODEL]: 'GEMINI_MODEL',
+  [KEYS.OPENAI_API_KEY]: 'OPENAI_API_KEY',
+  [KEYS.OPENAI_MODEL]: 'OPENAI_MODEL',
+  [KEYS.OPENAI_BASE_URL]: 'OPENAI_BASE_URL',
   [KEYS.LLM_PROVIDER]: 'LLM_PROVIDER',
   [KEYS.OLLAMA_BASE_URL]: 'OLLAMA_BASE_URL',
   [KEYS.OLLAMA_MODEL]: 'OLLAMA_MODEL',

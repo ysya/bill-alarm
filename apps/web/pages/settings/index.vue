@@ -108,6 +108,7 @@ onMounted(fetchData)
           <SettingsIntegrationLLM
             :llm="oauthStatus.llm"
             :gemini="oauthStatus.gemini"
+            :openai="oauthStatus.openai"
             @refresh="fetchData"
           />
         </template>

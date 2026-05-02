@@ -2,9 +2,19 @@
 import { Sparkles, Loader2, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
+type Provider = 'none' | 'gemini' | 'openai' | 'ollama'
+
 const props = defineProps<{
-  llm: { provider: 'none' | 'gemini' | 'ollama'; geminiModel: string; ollamaBaseUrl: string; ollamaModel: string }
+  llm: {
+    provider: Provider
+    geminiModel: string
+    openaiModel: string
+    openaiBaseUrl: string
+    ollamaBaseUrl: string
+    ollamaModel: string
+  }
   gemini: { isConfigured: boolean }
+  openai: { isConfigured: boolean }
 }>()
 
 const emit = defineEmits<{ refresh: [] }>()
@@ -14,12 +24,16 @@ const settingsApi = useSettingsApi()
 const form = ref({
   provider: props.llm.provider,
   geminiModel: props.llm.geminiModel || 'gemini-2.5-flash',
+  openaiModel: props.llm.openaiModel || 'gpt-4o-mini',
+  openaiBaseUrl: props.llm.openaiBaseUrl || 'https://api.openai.com/v1',
   ollamaBaseUrl: props.llm.ollamaBaseUrl || 'http://ollama:11434',
   ollamaModel: props.llm.ollamaModel || 'qwen2.5:1.5b',
   geminiApiKey: '',
+  openaiApiKey: '',
 })
 
 const showGeminiKey = ref(false)
+const showOpenAIKey = ref(false)
 const saving = ref(false)
 const testing = ref(false)
 const testResult = ref<{ ok: boolean; message: string } | null>(null)
@@ -27,23 +41,36 @@ const testResult = ref<{ ok: boolean; message: string } | null>(null)
 watch(() => props.llm, (v) => {
   form.value.provider = v.provider
   form.value.geminiModel = v.geminiModel || form.value.geminiModel
+  form.value.openaiModel = v.openaiModel || form.value.openaiModel
+  form.value.openaiBaseUrl = v.openaiBaseUrl || form.value.openaiBaseUrl
   form.value.ollamaBaseUrl = v.ollamaBaseUrl || form.value.ollamaBaseUrl
   form.value.ollamaModel = v.ollamaModel || form.value.ollamaModel
 })
+
+const PROVIDER_LABELS: Record<Provider, string> = {
+  none: '未啟用',
+  gemini: 'Gemini (雲端)',
+  openai: 'OpenAI (雲端)',
+  ollama: 'Ollama (本地)',
+}
 
 async function handleSave() {
   saving.value = true
   testResult.value = null
   try {
-    // Save Gemini key if user typed one
     if (form.value.geminiApiKey) {
       await settingsApi.saveGeminiConfig(form.value.geminiApiKey)
       form.value.geminiApiKey = ''
     }
-    // Save LLM provider + Ollama settings
+    if (form.value.openaiApiKey) {
+      await settingsApi.saveOpenAIConfig(form.value.openaiApiKey)
+      form.value.openaiApiKey = ''
+    }
     await settingsApi.saveLlmConfig({
       provider: form.value.provider,
       geminiModel: form.value.provider === 'gemini' ? form.value.geminiModel : undefined,
+      openaiModel: form.value.provider === 'openai' ? form.value.openaiModel : undefined,
+      openaiBaseUrl: form.value.provider === 'openai' ? form.value.openaiBaseUrl : undefined,
       ollamaBaseUrl: form.value.provider === 'ollama' ? form.value.ollamaBaseUrl : undefined,
       ollamaModel: form.value.provider === 'ollama' ? form.value.ollamaModel : undefined,
     })
@@ -85,7 +112,7 @@ async function handleTest() {
             class="inline-block h-2 w-2 rounded-full shrink-0"
             :class="llm.provider === 'none' ? 'bg-muted-foreground' : 'bg-green-500'"
           />
-          {{ llm.provider === 'none' ? '未啟用' : llm.provider === 'gemini' ? 'Gemini (雲端)' : 'Ollama (本地)' }}
+          {{ PROVIDER_LABELS[llm.provider] }}
         </span>
       </div>
     </div>
@@ -103,6 +130,7 @@ async function handleTest() {
         <SelectContent>
           <SelectItem value="none">關閉（不使用 AI）</SelectItem>
           <SelectItem value="gemini">Gemini (Google 雲端，免費額度)</SelectItem>
+          <SelectItem value="openai">OpenAI (GPT 系列，付費)</SelectItem>
           <SelectItem value="ollama">Ollama (本地自架，隱私保護)</SelectItem>
         </SelectContent>
       </Select>
@@ -143,6 +171,52 @@ async function handleTest() {
           <code class="px-1 rounded bg-background">gemini-2.5-flash-lite</code>（15 RPM / 1,000 RPD，最寬鬆）、
           <code class="px-1 rounded bg-background">gemini-2.5-pro</code>（5 RPM / 100 RPD，最強）。
           <a href="https://ai.google.dev/gemini-api/docs/models" target="_blank" class="underline">完整清單</a>
+        </p>
+      </div>
+    </div>
+
+    <!-- OpenAI config -->
+    <div v-if="form.provider === 'openai'" class="space-y-3 rounded-md border p-3 bg-muted/30">
+      <div class="space-y-1">
+        <div class="flex items-center justify-between">
+          <Label class="text-xs">OpenAI API Key</Label>
+          <span v-if="openai.isConfigured" class="text-xs text-green-600 dark:text-green-400">✓ 已設定</span>
+        </div>
+        <div class="relative">
+          <Input
+            v-model="form.openaiApiKey"
+            :type="showOpenAIKey ? 'text' : 'password'"
+            :placeholder="openai.isConfigured ? '輸入新的 API Key 以覆蓋' : 'sk-...'"
+            class="pr-10"
+          />
+          <button
+            type="button"
+            class="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+            @click="showOpenAIKey = !showOpenAIKey"
+          >
+            <Eye v-if="!showOpenAIKey" class="h-4 w-4" />
+            <EyeOff v-else class="h-4 w-4" />
+          </button>
+        </div>
+        <p class="text-xs text-muted-foreground">
+          到 <a href="https://platform.openai.com/api-keys" target="_blank" class="underline">OpenAI Platform</a> 建立 API Key（需綁定付費）
+        </p>
+      </div>
+      <div class="space-y-1">
+        <Label class="text-xs">Model</Label>
+        <Input v-model="form.openaiModel" placeholder="gpt-4o-mini" class="font-mono text-sm" />
+        <p class="text-xs text-muted-foreground">
+          推薦：<code class="px-1 rounded bg-background">gpt-4o-mini</code>（CP 值高）、
+          <code class="px-1 rounded bg-background">gpt-4o</code>（更準）、
+          <code class="px-1 rounded bg-background">gpt-5-mini</code>（新一代）。
+          需支援 Structured Outputs（JSON Schema）。
+        </p>
+      </div>
+      <div class="space-y-1">
+        <Label class="text-xs">Base URL</Label>
+        <Input v-model="form.openaiBaseUrl" placeholder="https://api.openai.com/v1" class="font-mono text-sm" />
+        <p class="text-xs text-muted-foreground">
+          官方為 <code class="px-1 rounded bg-background">https://api.openai.com/v1</code>。也可指向相容服務（OpenRouter、本地代理等）。
         </p>
       </div>
     </div>

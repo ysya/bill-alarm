@@ -6,6 +6,7 @@ import type { FieldRule, FieldType } from '@bill-alarm/shared/template-parser'
 export enum LlmProvider {
   None = 'none',
   Gemini = 'gemini',
+  OpenAI = 'openai',
   Ollama = 'ollama',
 }
 
@@ -117,12 +118,14 @@ export async function testLlmConnection(provider: LlmProvider): Promise<{ ok: bo
 // --- Provider implementations ---
 async function invokeLlm(provider: LlmProvider, prompt: string, schema: object): Promise<string> {
   if (provider === LlmProvider.Gemini) return invokeGemini(prompt, schema)
+  if (provider === LlmProvider.OpenAI) return invokeOpenAI(prompt, schema)
   if (provider === LlmProvider.Ollama) return invokeOllama(prompt, schema)
   throw new Error('Invalid LLM provider')
 }
 
 async function invokeLlmPlain(provider: LlmProvider, prompt: string): Promise<string> {
   if (provider === LlmProvider.Gemini) return invokeGemini(prompt)
+  if (provider === LlmProvider.OpenAI) return invokeOpenAI(prompt)
   if (provider === LlmProvider.Ollama) return invokeOllama(prompt)
   throw new Error('Invalid LLM provider')
 }
@@ -144,6 +147,46 @@ async function invokeGemini(prompt: string, schema?: object): Promise<string> {
     }),
   })
   return response.text?.trim() ?? ''
+}
+
+async function invokeOpenAI(prompt: string, schema?: object): Promise<string> {
+  const apiKey = await getSetting(KEYS.OPENAI_API_KEY)
+  if (!apiKey) throw new Error('OpenAI API key 未設定')
+  const model = (await getSetting(KEYS.OPENAI_MODEL)) ?? 'gpt-4o-mini'
+  const baseUrl = ((await getSetting(KEYS.OPENAI_BASE_URL)) ?? 'https://api.openai.com/v1').replace(/\/$/, '')
+
+  const body: Record<string, unknown> = {
+    model,
+    messages: [{ role: 'user', content: prompt }],
+  }
+  if (schema) {
+    body.response_format = {
+      type: 'json_schema',
+      json_schema: {
+        name: 'extraction',
+        strict: true,
+        schema: { ...schema, additionalProperties: false },
+      },
+    }
+  }
+
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`OpenAI 請求失敗 (${res.status}): ${txt || res.statusText}`)
+  }
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>
+  }
+  return (data.choices?.[0]?.message?.content ?? '').trim()
 }
 
 async function invokeOllama(prompt: string, schema?: object): Promise<string> {

@@ -155,16 +155,29 @@ app.post('/gemini/config', zValidator('json', z.object({
   return c.json({ success: true })
 })
 
+// Save OpenAI API key from settings page
+app.post('/openai/config', zValidator('json', z.object({
+  apiKey: z.string().min(1),
+})), async (c) => {
+  const { apiKey } = c.req.valid('json')
+  await setSetting(KEYS.OPENAI_API_KEY, apiKey)
+  return c.json({ success: true })
+})
+
 // Save LLM provider selection + model settings
 app.post('/llm/config', zValidator('json', z.object({
   provider: z.nativeEnum(LlmProvider),
   geminiModel: z.string().min(1).optional(),
+  openaiModel: z.string().min(1).optional(),
+  openaiBaseUrl: z.string().url().optional(),
   ollamaBaseUrl: z.string().url().optional(),
   ollamaModel: z.string().min(1).optional(),
 })), async (c) => {
-  const { provider, geminiModel, ollamaBaseUrl, ollamaModel } = c.req.valid('json')
+  const { provider, geminiModel, openaiModel, openaiBaseUrl, ollamaBaseUrl, ollamaModel } = c.req.valid('json')
   await setSetting(KEYS.LLM_PROVIDER, provider)
   if (geminiModel) await setSetting(KEYS.GEMINI_MODEL, geminiModel)
+  if (openaiModel) await setSetting(KEYS.OPENAI_MODEL, openaiModel)
+  if (openaiBaseUrl) await setSetting(KEYS.OPENAI_BASE_URL, openaiBaseUrl)
   if (ollamaBaseUrl) await setSetting(KEYS.OLLAMA_BASE_URL, ollamaBaseUrl)
   if (ollamaModel) await setSetting(KEYS.OLLAMA_MODEL, ollamaModel)
   return c.json({ success: true })
@@ -179,12 +192,15 @@ app.get('/status', async (c) => {
   const chatId = await getSetting(KEYS.TELEGRAM_CHAT_ID)
   const calendarId = await getSetting(KEYS.GOOGLE_CALENDAR_ID)
   const geminiKey = await getSetting(KEYS.GEMINI_API_KEY)
+  const openaiKey = await getSetting(KEYS.OPENAI_API_KEY)
   const calendarEnabled = await getSetting(KEYS.CALENDAR_ENABLED)
   const scanInterval = await getSetting(KEYS.SCAN_INTERVAL)
   const scanRangeDays = await getSetting(KEYS.SCAN_RANGE_DAYS)
   const scanQueryExtra = await getSetting(KEYS.SCAN_GMAIL_QUERY_EXTRA)
   const llmProvider = (await getSetting(KEYS.LLM_PROVIDER)) ?? LlmProvider.None
   const geminiModel = await getSetting(KEYS.GEMINI_MODEL)
+  const openaiModel = await getSetting(KEYS.OPENAI_MODEL)
+  const openaiBaseUrl = await getSetting(KEYS.OPENAI_BASE_URL)
   const ollamaBaseUrl = await getSetting(KEYS.OLLAMA_BASE_URL)
   const ollamaModel = await getSetting(KEYS.OLLAMA_MODEL)
 
@@ -210,9 +226,14 @@ app.get('/status', async (c) => {
     gemini: {
       isConfigured: !!geminiKey,
     },
+    openai: {
+      isConfigured: !!openaiKey,
+    },
     llm: {
       provider: llmProvider as LlmProvider,
       geminiModel: geminiModel || 'gemini-2.5-flash',
+      openaiModel: openaiModel || 'gpt-4o-mini',
+      openaiBaseUrl: openaiBaseUrl || 'https://api.openai.com/v1',
       ollamaBaseUrl: ollamaBaseUrl || 'http://localhost:11434',
       ollamaModel: ollamaModel || 'qwen2.5:1.5b',
     },

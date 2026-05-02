@@ -66,7 +66,15 @@ export function useSettingsApi() {
       calendar: { calendarId: string; enabled: boolean }
       scan: { interval: number; rangeDays: number; queryExtra: string }
       gemini: { isConfigured: boolean }
-      llm: { provider: 'none' | 'gemini' | 'ollama'; geminiModel: string; ollamaBaseUrl: string; ollamaModel: string }
+      openai: { isConfigured: boolean }
+      llm: {
+        provider: 'none' | 'gemini' | 'openai' | 'ollama'
+        geminiModel: string
+        openaiModel: string
+        openaiBaseUrl: string
+        ollamaBaseUrl: string
+        ollamaModel: string
+      }
     }>('/oauth/status'),
 
     saveGoogleCredentials: (clientId: string, clientSecret: string) =>
@@ -94,8 +102,17 @@ export function useSettingsApi() {
     saveGeminiConfig: (apiKey: string) =>
       post<{ success: boolean }>('/oauth/gemini/config', { apiKey }),
 
-    saveLlmConfig: (data: { provider: 'none' | 'gemini' | 'ollama'; geminiModel?: string; ollamaBaseUrl?: string; ollamaModel?: string }) =>
-      post<{ success: boolean }>('/oauth/llm/config', data),
+    saveOpenAIConfig: (apiKey: string) =>
+      post<{ success: boolean }>('/oauth/openai/config', { apiKey }),
+
+    saveLlmConfig: (data: {
+      provider: 'none' | 'gemini' | 'openai' | 'ollama'
+      geminiModel?: string
+      openaiModel?: string
+      openaiBaseUrl?: string
+      ollamaBaseUrl?: string
+      ollamaModel?: string
+    }) => post<{ success: boolean }>('/oauth/llm/config', data),
 
     testLlm: () => post<{ ok: boolean; message: string }>('/llm/test'),
   }
