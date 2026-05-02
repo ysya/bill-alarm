@@ -414,42 +414,4 @@ app.get('/parser/bootstrap/:billId', async (c) => {
   })
 })
 
-// Parser health — per-bank recent parse method + success rate
-app.get('/parser/health', async (c) => {
-  const banks = await prisma.bank.findMany({
-    where: { isActive: true },
-    include: {
-      bills: {
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-        select: { id: true, parseSource: true, billingPeriod: true, createdAt: true },
-      },
-    },
-  })
-
-  const health = banks.map((bank) => {
-    const recent = bank.bills
-    const lastBill = recent[0] ?? null
-    const sourceCounts: Record<string, number> = {}
-    for (const b of recent) {
-      const src = b.parseSource ?? 'unknown'
-      sourceCounts[src] = (sourceCounts[src] ?? 0) + 1
-    }
-    return {
-      bankId: bank.id,
-      bankCode: bank.code,
-      bankName: bank.name,
-      hasTemplate: !!bank.parserConfig,
-      lastParseSource: lastBill?.parseSource ?? null,
-      lastBillId: lastBill?.id ?? null,
-      lastBillingPeriod: lastBill?.billingPeriod ?? null,
-      recentCount: recent.length,
-      sourceCounts,
-    }
-  })
-
-  return c.json({ banks: health })
-})
-
-
 export default app

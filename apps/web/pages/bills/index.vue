@@ -4,11 +4,39 @@
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex items-center gap-3">
         <h2 class="text-2xl font-bold tracking-tight">帳單管理</h2>
-        <Button variant="outline" size="sm" :disabled="scanning" @click="handleScan">
-          <RefreshCw class="mr-2 h-4 w-4" :class="scanning ? 'animate-spin' : ''" />
-          {{ scanning ? '掃描中...' : '掃描信件' }}
+        <Button variant="outline" size="sm" :disabled="scanInProgress" @click="handleScan">
+          <RefreshCw class="mr-2 h-4 w-4" :class="scanInProgress ? 'animate-spin' : ''" />
+          <template v-if="scanProgress.active">
+            掃描中 {{ scanProgress.idx }}/{{ scanProgress.total }}
+            <span v-if="scanProgress.bank" class="ml-1 text-muted-foreground">
+              · {{ scanProgress.bank }}
+            </span>
+          </template>
+          <template v-else-if="scanning">啟動中...</template>
+          <template v-else>掃描信件</template>
         </Button>
       </div>
+    </div>
+
+    <!-- Live scan progress -->
+    <div v-if="scanProgress.active" class="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+      <div class="flex items-center justify-between text-xs">
+        <span class="font-medium">
+          {{ scanProgress.trigger === 'cron' ? '自動掃描中' : '手動掃描中' }}
+          · {{ scanProgress.idx }} / {{ scanProgress.total }}
+        </span>
+        <span class="text-muted-foreground">{{ progressPercent }}%</span>
+      </div>
+      <div class="h-1.5 w-full overflow-hidden rounded-full bg-border">
+        <div
+          class="h-full bg-primary transition-all duration-200"
+          :style="{ width: `${progressPercent}%` }"
+        />
+      </div>
+      <p v-if="scanProgress.bank || scanProgress.lastReason" class="truncate text-xs text-muted-foreground">
+        <span v-if="scanProgress.bank" class="font-medium">{{ scanProgress.bank }}</span>
+        <span v-if="scanProgress.lastReason" class="ml-1">— {{ scanProgress.lastReason }}</span>
+      </p>
     </div>
 
     <!-- Status Tabs -->
@@ -203,7 +231,18 @@ function formatPeriodLabel(period: string): string {
 const PAGE_SIZE = 20
 
 const { list, markAsPaid } = useBillApi()
-const { post } = useApi()
+const settingsApi = useSettingsApi()
+
+const { state: scanProgress, onComplete: onScanComplete } = useScanEvents()
+onScanComplete.value = () => {
+  fetchBills()
+}
+const scanInProgress = computed(() => scanning.value || scanProgress.value.active)
+const progressPercent = computed(() =>
+  scanProgress.value.total > 0
+    ? Math.round((scanProgress.value.idx / scanProgress.value.total) * 100)
+    : 0,
+)
 
 const bills = ref<BillDTO[]>([])
 const total = ref(0)
@@ -280,7 +319,7 @@ async function handleConfirmPaid() {
 async function handleScan() {
   scanning.value = true
   try {
-    const result = await post<{ scanned: number; newBills: number; errors: string[] }>('/gmail/scan')
+    const result = await settingsApi.triggerScan()
     if (result.newBills > 0) {
       toast.success(`掃描完成，新增 ${result.newBills} 筆帳單`)
       await fetchBills()
@@ -289,8 +328,9 @@ async function handleScan() {
     } else {
       toast.info(`已檢查 ${result.scanned} 封信件，沒有新帳單`)
     }
-    if (result.errors.length > 0) {
-      toast.warning('部分信件處理失敗', { description: result.errors.join('\n') })
+    if (result.errors?.length > 0) {
+      const detail = result.errors.map((e) => `${e.bank ?? '未知'}: ${e.reason}`).join('\n')
+      toast.warning(`部分信件處理失敗（${result.errors.length}）`, { description: detail })
     }
   } catch {
     toast.error('掃描失敗', { description: '請確認 Gmail 已連線' })

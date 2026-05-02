@@ -213,44 +213,6 @@
       </div>
     </div>
 
-    <!-- Parser Health -->
-    <div v-if="parserHealth.length > 0" class="space-y-4">
-      <div class="flex items-center gap-2">
-        <Wrench class="h-5 w-5" />
-        <h3 class="text-lg font-semibold">解析器狀態</h3>
-      </div>
-      <Card>
-        <CardContent class="pt-6">
-          <div class="space-y-2">
-            <div
-              v-for="b in parserHealth"
-              :key="b.bankId"
-              class="flex items-center justify-between gap-2 py-2 border-b last:border-b-0"
-            >
-              <div class="flex items-center gap-3 min-w-0">
-                <span
-                  class="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                  :class="healthColorClass(b)"
-                />
-                <span class="font-medium truncate">{{ b.bankName }}</span>
-              </div>
-              <div class="flex items-center gap-3 text-xs shrink-0">
-                <span class="text-muted-foreground" :class="parseSourceBadgeClass(b.lastParseSource)">
-                  {{ parseSourceLabel(b.lastParseSource) }}
-                </span>
-                <NuxtLink
-                  v-if="b.lastBillId"
-                  :to="`/bills/${b.lastBillId}`"
-                  class="text-primary hover:underline"
-                >
-                  檢視
-                </NuxtLink>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
   </div>
 </template>
 
@@ -264,7 +226,6 @@ import {
   ArrowRight,
   Calendar,
   Loader2,
-  Wrench,
 } from 'lucide-vue-next'
 import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
 import type { BillDTO, MonthlySummaryDTO } from '@bill-alarm/shared/types'
@@ -352,58 +313,20 @@ const pendingBills = ref<BillDTO[]>([])
 const loading = ref(true)
 const markingPaid = ref<Set<string>>(new Set())
 
-interface ParserHealthItem {
-  bankId: string
-  bankCode: string | null
-  bankName: string
-  hasTemplate: boolean
-  lastParseSource: 'template' | 'hardcoded' | 'generic' | 'llm' | null
-  lastBillId: string | null
-  lastBillingPeriod: string | null
-  recentCount: number
-  sourceCounts: Record<string, number>
-}
-const parserHealth = ref<ParserHealthItem[]>([])
-
 async function fetchData() {
   loading.value = true
   try {
-    const [summaryData, billsData, healthData] = await Promise.all([
+    const [summaryData, billsData] = await Promise.all([
       getSummary(selectedMonth.value),
       list({ status: BillStatus.PENDING }),
-      $fetch<{ banks: ParserHealthItem[] }>('/api/parser/health').catch(() => ({ banks: [] })),
     ])
     summary.value = summaryData
     pendingBills.value = billsData.data
-    parserHealth.value = healthData.banks.filter((b) => b.recentCount > 0)
   } catch {
     toast.error('載入資料失敗', { description: '請稍後再試' })
   } finally {
     loading.value = false
   }
-}
-
-function parseSourceLabel(src: string | null): string {
-  if (!src) return '尚未掃描'
-  if (src === 'template') return '自訂規則 ✓'
-  if (src === 'hardcoded') return '內建規則 ✓'
-  if (src === 'generic') return '通用規則 ⚠'
-  if (src === 'llm') return 'AI 解析 ⚠'
-  return src
-}
-
-function parseSourceBadgeClass(src: string | null): string {
-  if (src === 'template' || src === 'hardcoded') return 'text-green-600 dark:text-green-400'
-  if (src === 'llm') return 'text-orange-600 dark:text-orange-400'
-  if (src === 'generic') return 'text-yellow-600 dark:text-yellow-400'
-  return 'text-muted-foreground'
-}
-
-function healthColorClass(b: ParserHealthItem): string {
-  if (b.lastParseSource === 'template' || b.lastParseSource === 'hardcoded') return 'bg-green-500'
-  if (b.lastParseSource === 'llm') return 'bg-orange-500'
-  if (b.lastParseSource === 'generic') return 'bg-yellow-500'
-  return 'bg-muted-foreground'
 }
 
 async function handleMarkAsPaid(id: string) {
