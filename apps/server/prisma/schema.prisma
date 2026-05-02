@@ -98,3 +98,19 @@ model Setting {
 
   @@map("settings")
 }
+
+model ScanLog {
+  id            String    @id @default(uuid(7))
+  trigger       String    // 'manual' | 'cron'
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  scanned       Int       @default(0)
+  newBillsCount Int       @default(0)
+  errorCount    Int       @default(0)
+  // JSON-stringified array of { stage, bank?, msgId?, reason }
+  errors        String?
+  fatalError    String?
+
+  @@index([startedAt])
+  @@map("scan_logs")
+}

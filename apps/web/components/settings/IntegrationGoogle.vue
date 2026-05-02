@@ -104,15 +104,23 @@ async function handleDisconnect() {
 
 // --- Actions ---
 
+const scanLogList = ref<{ refresh: () => Promise<void> } | null>(null)
+
 async function handleScan() {
   scanning.value = true
   try {
     const result = await settingsApi.triggerScan()
-    toast.success('郵件掃描完成', {
-      description: `掃描 ${result.scanned} 封郵件，發現 ${result.newBills} 筆新帳單。`,
-    })
+    const errorCount = result.errors?.length ?? 0
+    const desc = `掃描 ${result.scanned} 封郵件，發現 ${result.newBills} 筆新帳單${errorCount > 0 ? `，${errorCount} 個錯誤（請見下方掃描紀錄）` : ''}。`
+    if (errorCount > 0) {
+      toast.warning('郵件掃描完成（有錯誤）', { description: desc })
+    } else {
+      toast.success('郵件掃描完成', { description: desc })
+    }
+    await scanLogList.value?.refresh()
   } catch (error) {
     toast.error('掃描失敗', { description: String(error) })
+    await scanLogList.value?.refresh()
   } finally {
     scanning.value = false
   }
@@ -313,6 +321,9 @@ async function handleSaveCalendar() {
           斷開連結
         </Button>
       </div>
+
+      <!-- Scan history -->
+      <SettingsScanLogList ref="scanLogList" />
 
       <!-- Expandable credentials form -->
       <form v-if="showCredentials" class="space-y-3 rounded-lg border border-border p-3" @submit.prevent="handleSaveCredentials">

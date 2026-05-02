@@ -5,17 +5,34 @@ import { logger } from '@/index.js'
 import prisma from '@/prisma.js'
 import { searchEmails, getEmailWithAttachments } from './gmail.js'
 import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
-import { extractBillFromText } from './bill-extractor.js'
+import { parseWithTemplate } from '@/parsers/template.js'
+import type { TemplateParserConfig } from '@bill-alarm/shared/template-parser'
 import { parseBillWithLLM, getLlmProvider, LlmProvider } from './llm-parser.js'
 import { getSetting, KEYS } from './settings.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus, type ParsedBill } from '@bill-alarm/shared/types'
 
+export type ScanErrorStage =
+  | 'gmail_search'
+  | 'email_fetch'
+  | 'pdf_password'
+  | 'pdf_extract'
+  | 'parse_failed'
+  | 'sanity_check'
+  | 'unexpected'
+  | 'notification'
+
+export interface ScanError {
+  stage: ScanErrorStage
+  reason: string
+  bank?: string
+  msgId?: string
+}
 
 export interface ScanResult {
   scanned: number
   newBills: Array<{ bill: Bill; bank: Bank }>
-  errors: string[]
+  errors: ScanError[]
 }
 
 /**
@@ -54,7 +71,10 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
   try {
     messageIds = await searchEmails(query)
   } catch (e) {
-    result.errors.push(`Gmail search failed: ${(e as Error).message}`)
+    result.errors.push({
+      stage: 'gmail_search',
+      reason: `Gmail 搜尋失敗：${(e as Error).message}`,
+    })
     return result
   }
 
@@ -96,50 +116,67 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
 
       if (!pdfText) {
         const isPasswordError = lastPdfError?.includes('密碼')
-        result.errors.push(
-          isPasswordError
-            ? `${bank.name}: PDF 密碼錯誤，請至銀行管理更新密碼`
-            : `${bank.name}: PDF 文字擷取失敗${lastPdfError ? `（${lastPdfError}）` : ''}`,
-        )
+        result.errors.push({
+          stage: isPasswordError ? 'pdf_password' : 'pdf_extract',
+          bank: bank.name,
+          msgId,
+          reason: isPasswordError
+            ? 'PDF 密碼錯誤，請至銀行管理更新密碼'
+            : `PDF 文字擷取失敗${lastPdfError ? `（${lastPdfError}）` : ''}`,
+        })
         continue
       }
 
       let parsed: ParsedBill | null = null
-      let source: 'template' | 'hardcoded' | 'generic' | 'llm' | null = null
+      let source: 'template' | 'llm' | null = null
 
-      // 1. Template (if user explicitly configured)
+      // 1. Template (only when user has explicitly configured one)
       if (bank.parserConfig) {
-        const r = extractBillFromText(pdfText, bank.code, bank.parserConfig)
-        if (r?.source === 'template') {
-          parsed = r.bill
-          source = 'template'
+        try {
+          const config = JSON.parse(bank.parserConfig) as TemplateParserConfig
+          const r = parseWithTemplate(pdfText, config)
+          if (r) {
+            parsed = r
+            source = 'template'
+          }
+        } catch (e) {
+          logger.warn({ bank: bank.name, error: (e as Error).message }, 'Template parse failed, falling back to LLM')
         }
       }
 
-      // 2. LLM as primary (LLM-first for user to just-review-and-edit)
+      // 2. LLM (mandatory primary path — no hardcoded fallback)
       if (!parsed) {
         const llmProvider = await getLlmProvider()
-        if (llmProvider !== LlmProvider.None) {
-          try {
-            parsed = await parseBillWithLLM(pdfText, bank.name)
-            if (parsed) source = 'llm'
-          } catch (e) {
-            logger.warn({ bank: bank.name, error: (e as Error).message }, 'LLM parse failed, falling back to regex')
-          }
+        if (llmProvider === LlmProvider.None) {
+          result.errors.push({
+            stage: 'parse_failed',
+            bank: bank.name,
+            msgId,
+            reason: 'LLM 未設定，無法解析帳單。請至設定 → LLM 啟用 Gemini 或 Ollama',
+          })
+          continue
+        }
+        try {
+          parsed = await parseBillWithLLM(pdfText, bank.name)
+          if (parsed) source = 'llm'
+        } catch (e) {
+          result.errors.push({
+            stage: 'parse_failed',
+            bank: bank.name,
+            msgId,
+            reason: `LLM 解析失敗：${(e as Error).message}`,
+          })
+          continue
         }
       }
 
-      // 3. Hardcoded / generic fallback (offline safety net)
       if (!parsed) {
-        const r = extractBillFromText(pdfText, bank.code)
-        if (r) {
-          parsed = r.bill
-          source = r.source
-        }
-      }
-
-      if (!parsed) {
-        result.errors.push(`${bank.name}: 無法解析帳單內容（template/LLM/regex 全部失敗）`)
+        result.errors.push({
+          stage: 'parse_failed',
+          bank: bank.name,
+          msgId,
+          reason: 'LLM 回傳結果無法解析為有效帳單',
+        })
         continue
       }
 
@@ -147,7 +184,12 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
       const sanityErr = sanityCheck(parsed)
       if (sanityErr) {
         logger.warn({ bank: bank.name, source, parsed, error: sanityErr }, 'Parsed bill failed sanity check')
-        result.errors.push(`${bank.name}: 解析結果異常（${sanityErr}），請手動確認`)
+        result.errors.push({
+          stage: 'sanity_check',
+          bank: bank.name,
+          msgId,
+          reason: `解析結果異常（${sanityErr}），請手動確認`,
+        })
       }
 
       const existing = await prisma.bill.findUnique({
@@ -191,9 +233,72 @@ export async function scanAndProcessEmails(): Promise<ScanResult> {
     } catch (e) {
       const msg = (e as Error).message ?? String(e)
       logger.error({ msgId, error: msg }, 'Failed to process email')
-      result.errors.push(`Email ${msgId}: ${msg}`)
+      result.errors.push({ stage: 'unexpected', msgId, reason: msg })
     }
   }
 
   return result
+}
+
+export interface RecordedScan {
+  result: ScanResult
+  scanLogId: string
+}
+
+/**
+ * Run a scan and persist a ScanLog row capturing counts + structured errors.
+ * Caller is responsible for any post-scan side effects (notifications),
+ * which can be appended via `appendScanLogErrors`.
+ */
+export async function runScanWithLog(trigger: 'manual' | 'cron'): Promise<RecordedScan> {
+  const log = await prisma.scanLog.create({
+    data: { trigger, startedAt: new Date() },
+  })
+
+  let result: ScanResult = { scanned: 0, newBills: [], errors: [] }
+  let fatal: string | null = null
+  try {
+    result = await scanAndProcessEmails()
+  } catch (e) {
+    fatal = (e as Error).message ?? String(e)
+    logger.error({ error: fatal }, 'Scan crashed unexpectedly')
+  }
+
+  await prisma.scanLog.update({
+    where: { id: log.id },
+    data: {
+      finishedAt: new Date(),
+      scanned: result.scanned,
+      newBillsCount: result.newBills.length,
+      errorCount: result.errors.length + (fatal ? 1 : 0),
+      errors: result.errors.length > 0 ? JSON.stringify(result.errors) : null,
+      fatalError: fatal,
+    },
+  })
+
+  if (fatal) {
+    // Surface as a structured error so callers see the same shape.
+    result.errors.push({ stage: 'unexpected', reason: fatal })
+  }
+
+  return { result, scanLogId: log.id }
+}
+
+/**
+ * Append additional structured errors (e.g. notification failures) to an existing
+ * ScanLog row. Merges with existing errors and updates errorCount.
+ */
+export async function appendScanLogErrors(scanLogId: string, extra: ScanError[]): Promise<void> {
+  if (extra.length === 0) return
+  const log = await prisma.scanLog.findUnique({ where: { id: scanLogId } })
+  if (!log) return
+  const existing: ScanError[] = log.errors ? JSON.parse(log.errors) : []
+  const merged = [...existing, ...extra]
+  await prisma.scanLog.update({
+    where: { id: scanLogId },
+    data: {
+      errors: JSON.stringify(merged),
+      errorCount: merged.length + (log.fatalError ? 1 : 0),
+    },
+  })
 }

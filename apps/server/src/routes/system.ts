@@ -10,7 +10,7 @@ import { DATA_DIR } from '@/paths.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { decryptPdf } from '@/services/pdf-parser.js'
-import { scanAndProcessEmails } from '@/services/email-parser.js'
+import { runScanWithLog, appendScanLogErrors, type ScanError } from '@/services/email-parser.js'
 import { processNewBill } from '@/services/notification.js'
 import { sendTestMessage, isConfigured as telegramConfigured } from '@/services/telegram.js'
 import { isConfigured as calendarConfigured } from '@/services/calendar.js'
@@ -29,25 +29,61 @@ app.get('/gmail/status', async (c) => {
 // Manual email scan trigger
 app.post('/gmail/scan', async (c) => {
   try {
-    const result = await scanAndProcessEmails()
+    const { result, scanLogId } = await runScanWithLog('manual')
 
     // Send notifications for new bills
+    const notifyErrors: ScanError[] = []
     for (const { bill, bank } of result.newBills) {
       try {
         await processNewBill(bill, bank)
       } catch (e) {
-        result.errors.push(`Notification failed for ${bank.name}: ${(e as Error).message}`)
+        notifyErrors.push({
+          stage: 'notification',
+          bank: bank.name,
+          reason: `通知發送失敗：${(e as Error).message}`,
+        })
       }
+    }
+    if (notifyErrors.length > 0) {
+      await appendScanLogErrors(scanLogId, notifyErrors)
     }
 
     return c.json({
+      scanLogId,
       scanned: result.scanned,
       newBills: result.newBills.length,
-      errors: result.errors,
+      errors: [...result.errors, ...notifyErrors],
     })
   } catch (e) {
-    return c.json({ error: (e as Error).message, scanned: 0, newBills: 0, errors: [(e as Error).message] }, 500)
+    return c.json({
+      error: (e as Error).message,
+      scanned: 0,
+      newBills: 0,
+      errors: [{ stage: 'unexpected', reason: (e as Error).message }],
+    }, 500)
   }
+})
+
+// Recent scan logs (most recent first)
+app.get('/scan-logs', async (c) => {
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '20'), 1), 100)
+  const logs = await prisma.scanLog.findMany({
+    orderBy: { startedAt: 'desc' },
+    take: limit,
+  })
+  return c.json({
+    logs: logs.map((l) => ({
+      id: l.id,
+      trigger: l.trigger,
+      startedAt: l.startedAt.toISOString(),
+      finishedAt: l.finishedAt?.toISOString() ?? null,
+      scanned: l.scanned,
+      newBillsCount: l.newBillsCount,
+      errorCount: l.errorCount,
+      errors: l.errors ? JSON.parse(l.errors) as ScanError[] : [],
+      fatalError: l.fatalError,
+    })),
+  })
 })
 
 // Telegram test

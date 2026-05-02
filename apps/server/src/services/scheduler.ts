@@ -1,6 +1,6 @@
 import cron from 'node-cron'
 import { logger } from '@/index.js'
-import { scanAndProcessEmails } from './email-parser.js'
+import { runScanWithLog, appendScanLogErrors } from './email-parser.js'
 import { processNewBill, processReminderRules, processOverdueBills } from './notification.js'
 import { getSetting, setSetting, KEYS } from './settings.js'
 
@@ -37,16 +37,28 @@ export function startScheduler() {
 
     logger.info('Scanning emails...')
     try {
-      const result = await scanAndProcessEmails()
+      const { result, scanLogId } = await runScanWithLog('cron')
       await setSetting(KEYS.LAST_SCAN_AT, new Date().toISOString())
       logger.info({ scanned: result.scanned, newBills: result.newBills.length }, 'Email scan complete')
 
+      const notifyErrors = []
       for (const { bill, bank } of result.newBills) {
-        await processNewBill(bill, bank)
+        try {
+          await processNewBill(bill, bank)
+        } catch (e) {
+          notifyErrors.push({
+            stage: 'notification' as const,
+            bank: bank.name,
+            reason: `通知發送失敗：${(e as Error).message}`,
+          })
+        }
+      }
+      if (notifyErrors.length > 0) {
+        await appendScanLogErrors(scanLogId, notifyErrors)
       }
 
-      if (result.errors.length > 0) {
-        logger.warn({ errors: result.errors }, 'Email scan had errors')
+      if (result.errors.length > 0 || notifyErrors.length > 0) {
+        logger.warn({ errors: [...result.errors, ...notifyErrors] }, 'Email scan had errors')
       }
     } catch (err) {
       logger.error(err, 'Email scan failed')

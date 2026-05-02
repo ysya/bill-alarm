@@ -1,3 +1,32 @@
+export type ScanErrorStage =
+  | 'gmail_search'
+  | 'email_fetch'
+  | 'pdf_password'
+  | 'pdf_extract'
+  | 'parse_failed'
+  | 'sanity_check'
+  | 'unexpected'
+  | 'notification'
+
+export interface ScanError {
+  stage: ScanErrorStage
+  reason: string
+  bank?: string
+  msgId?: string
+}
+
+export interface ScanLogDTO {
+  id: string
+  trigger: 'manual' | 'cron'
+  startedAt: string
+  finishedAt: string | null
+  scanned: number
+  newBillsCount: number
+  errorCount: number
+  errors: ScanError[]
+  fatalError: string | null
+}
+
 export function useSettingsApi() {
   const { get, post, patch, del } = useApi()
 
@@ -22,7 +51,10 @@ export function useSettingsApi() {
     }>('/integrations/status'),
 
     // Gmail
-    triggerScan: () => post<{ scanned: number; newBills: number; errors: string[] }>('/gmail/scan'),
+    triggerScan: () => post<{ scanLogId?: string; scanned: number; newBills: number; errors: ScanError[] }>('/gmail/scan'),
+
+    listScanLogs: (limit = 20) =>
+      get<{ logs: ScanLogDTO[] }>(`/scan-logs?limit=${limit}`),
 
     // Telegram
     testTelegram: () => post<{ success: boolean }>('/telegram/test'),
