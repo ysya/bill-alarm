@@ -4,7 +4,6 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import prisma from '@/prisma.js'
-import { handleBillPaid } from '@/services/notification.js'
 import { DATA_DIR } from '@/paths.js'
 import { decryptPdf } from '@/services/pdf-parser.js'
 import { parseBillWithLLM, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
@@ -143,8 +142,6 @@ app.patch('/:id/pay', zValidator('json', z.object({
     where: { id: c.req.param('id') },
     data: { status: BillStatus.PAID, paidAt },
   })
-  // Remove calendar event
-  await handleBillPaid(bill.id)
   return c.json(bill)
 })
 

@@ -7,13 +7,29 @@ export interface NotificationRule {
   isActive: boolean
 }
 
-export interface OAuthStatus {
-  google: { hasCredentials: boolean; isConnected: boolean; email: string | null }
+export interface ConfigStatus {
+  email: {
+    provider: 'gmail-imap'
+    hasCredentials: boolean
+    isConnected: boolean
+    message: string
+    user: string | null
+    host: string
+    port: number
+  }
   telegram: { isConfigured: boolean; chatId: string | null }
-  calendar: { calendarId: string; enabled: boolean }
+  calendar: { feedUrl: string; feedPath: string; token: string }
   scan: { interval: number; rangeDays: number; queryExtra: string }
   gemini: { isConfigured: boolean }
-  llm: { provider: 'none' | 'gemini' | 'ollama'; geminiModel: string; ollamaBaseUrl: string; ollamaModel: string }
+  openai: { isConfigured: boolean }
+  llm: {
+    provider: 'none' | 'gemini' | 'openai' | 'ollama'
+    geminiModel: string
+    openaiModel: string
+    openaiBaseUrl: string
+    ollamaBaseUrl: string
+    ollamaModel: string
+  }
 }
 
 export const SCAN_INTERVAL_OPTIONS = [
@@ -27,5 +43,4 @@ export const SCAN_INTERVAL_OPTIONS = [
 
 export const CHANNEL_OPTIONS = [
   { value: 'telegram', label: 'Telegram' },
-  { value: 'calendar', label: 'Google Calendar' },
 ] as const

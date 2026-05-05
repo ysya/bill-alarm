@@ -1,8 +1,6 @@
 import prisma from '@/prisma.js'
 import { logger } from '@/index.js'
 import { sendNewBillAlert, sendBillReminder, sendOverdueWarning } from './telegram.js'
-import { createDueDateEvent, deleteDueDateEvent } from './calendar.js'
-import { getSetting, KEYS } from './settings.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus } from '@bill-alarm/shared/types'
 
@@ -35,30 +33,6 @@ export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
   const telegramOk = await sendNewBillAlert(bill, bank)
   await logNotification(bill.id, null, 'telegram', '新帳單通知', telegramOk)
   logger.info({ bank: bank.name, telegramOk }, 'Telegram notification sent')
-
-  const calendarEnabled = await getSetting(KEYS.CALENDAR_ENABLED)
-  if (calendarEnabled !== 'true') {
-    logger.info({ bank: bank.name }, 'Calendar disabled by user — skipping event creation')
-    return
-  }
-
-  try {
-    if (bill.calendarEventId) {
-      logger.info({ bank: bank.name, eventId: bill.calendarEventId }, 'Calendar event already exists, skipping')
-    }
-    const eventId = !bill.calendarEventId ? await createDueDateEvent(bill, bank) : null
-    if (eventId) {
-      await prisma.bill.update({
-        where: { id: bill.id },
-        data: { calendarEventId: eventId },
-      })
-      await logNotification(bill.id, null, 'calendar', '建立行事曆事件', true)
-      logger.info({ bank: bank.name, eventId }, 'Calendar event created')
-    }
-  } catch (e) {
-    await logNotification(bill.id, null, 'calendar', '建立行事曆事件', false, (e as Error).message)
-    logger.error({ bank: bank.name, error: (e as Error).message }, 'Calendar event creation failed')
-  }
 }
 
 export async function processReminderRules(): Promise<void> {
@@ -145,15 +119,3 @@ export async function processOverdueBills(): Promise<void> {
   }
 }
 
-export async function handleBillPaid(billId: string): Promise<void> {
-  const bill = await prisma.bill.findUnique({ where: { id: billId } })
-  if (!bill) return
-
-  if (bill.calendarEventId) {
-    await deleteDueDateEvent(bill.calendarEventId)
-    await prisma.bill.update({
-      where: { id: billId },
-      data: { calendarEventId: null },
-    })
-  }
-}

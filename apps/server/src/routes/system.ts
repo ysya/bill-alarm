@@ -3,7 +3,7 @@ import { streamSSE } from 'hono/streaming'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { scanEvents, type ScanEvent } from '@/services/scan-events.js'
-import { getConnectionStatus, searchEmails, getEmailWithAttachments } from '@/services/gmail.js'
+import { verifyConnection, getEmailProvider } from '@/services/email/index.js'
 import { extractPdfText, getPdfBuffers } from '@/services/pdf-parser.js'
 import { extractBillFromText } from '@/services/bill-extractor.js'
 import { parseBillWithLLM, suggestRuleWithLLM, testLlmConnection, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
@@ -15,21 +15,20 @@ import { decryptPdf } from '@/services/pdf-parser.js'
 import { runScanWithLog, appendScanLogErrors, type ScanError } from '@/services/email-parser.js'
 import { processNewBill } from '@/services/notification.js'
 import { sendTestMessage, isConfigured as telegramConfigured } from '@/services/telegram.js'
-import { isConfigured as calendarConfigured } from '@/services/calendar.js'
 import { listParserCodes } from '@/parsers/registry.js'
 import { parseWithTemplateDetailed } from '@/parsers/template.js'
 import type { TemplateParserConfig } from '@bill-alarm/shared/template-parser'
 
 const app = new Hono()
 
-// Gmail connection status
-app.get('/gmail/status', async (c) => {
-  const status = await getConnectionStatus()
+// Email connection status
+app.get('/email/status', async (c) => {
+  const status = await verifyConnection()
   return c.json(status)
 })
 
 // Manual email scan trigger
-app.post('/gmail/scan', async (c) => {
+app.post('/email/scan', async (c) => {
   try {
     const { result, scanLogId } = await runScanWithLog('manual')
 
@@ -142,47 +141,52 @@ app.post('/telegram/test', async (c) => {
 
 // Integration status overview
 app.get('/integrations/status', async (c) => {
-  const gmail = await getConnectionStatus()
+  const email = await verifyConnection()
   return c.json({
-    gmail,
+    email: { connected: email.connected, message: email.message },
     telegram: { configured: await telegramConfigured() },
-    calendar: { configured: await calendarConfigured() },
   })
 })
 
 // --- Parser debug / test routes (available in production) ---
 
-// Search Gmail and preview emails
-app.get('/gmail/search', async (c) => {
+// Search inbox and preview emails
+app.get('/email/search', async (c) => {
   const q = c.req.query('q') || 'newer_than:7d has:attachment'
   const max = Number(c.req.query('max')) || 10
-  const ids = await searchEmails(q, max)
-  return c.json({ query: q, count: ids.length, messageIds: ids })
+  const provider = await getEmailProvider()
+  if (!provider) return c.json({ error: 'Email provider not configured' }, 400)
+  const refs = await provider.search({ query: q, sinceDays: 30, maxResults: max })
+  return c.json({ query: q, count: refs.length, messageIds: refs.map((r) => r.id) })
 })
 
 // Get email details + attachments info
-app.get('/gmail/message/:id', async (c) => {
-  const email = await getEmailWithAttachments(c.req.param('id'))
+app.get('/email/message/:id', async (c) => {
+  const provider = await getEmailProvider()
+  if (!provider) return c.json({ error: 'Email provider not configured' }, 400)
+  const email = await provider.fetch({ id: c.req.param('id') })
   if (!email) return c.json({ error: 'Email not found' }, 404)
   return c.json({
     id: email.id,
     subject: email.subject,
     from: email.from,
     date: email.date,
-    bodyTextPreview: email.bodyText?.substring(0, 500),
+    bodyTextPreview: email.text.substring(0, 500),
     attachments: email.attachments.map((a) => ({
       filename: a.filename,
-      mimeType: a.mimeType,
+      contentType: a.contentType,
       size: a.data.length,
     })),
   })
 })
 
 // Extract PDF text from an email attachment and try parsing
-app.get('/gmail/message/:id/parse', async (c) => {
+app.get('/email/message/:id/parse', async (c) => {
   const password = c.req.query('password') || undefined
   const bankCode = c.req.query('bank') || undefined
-  const email = await getEmailWithAttachments(c.req.param('id'))
+  const provider = await getEmailProvider()
+  if (!provider) return c.json({ error: 'Email provider not configured' }, 400)
+  const email = await provider.fetch({ id: c.req.param('id') })
   if (!email) return c.json({ error: 'Email not found' }, 404)
 
   const pdfBuffers = await getPdfBuffers(email.attachments)

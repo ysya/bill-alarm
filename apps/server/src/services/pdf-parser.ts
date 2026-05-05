@@ -1,4 +1,4 @@
-import type { EmailAttachment } from './gmail.js'
+import type { Attachment } from './email/types.js'
 
 async function parsePdf(buffer: Buffer, password?: string): Promise<string> {
   const mupdf = await import('mupdf')
@@ -88,15 +88,15 @@ export async function extractPdfsFromZip(zipBuffer: Buffer): Promise<Array<{ fil
  * (handling both direct PDFs and PDFs inside ZIPs).
  */
 export async function getPdfBuffers(
-  attachments: EmailAttachment[],
+  attachments: Attachment[],
   zipPassword?: string,
 ): Promise<Buffer[]> {
   const pdfs: Buffer[] = []
 
   for (const att of attachments) {
-    if (att.mimeType === 'application/pdf' || att.filename.endsWith('.pdf')) {
+    if (att.contentType === 'application/pdf' || att.filename.endsWith('.pdf')) {
       pdfs.push(att.data)
-    } else if (att.mimeType === 'application/zip' || att.filename.endsWith('.zip')) {
+    } else if (att.contentType === 'application/zip' || att.filename.endsWith('.zip')) {
       try {
         const extracted = await extractPdfsFromZip(att.data)
         pdfs.push(...extracted.map((e) => e.data))

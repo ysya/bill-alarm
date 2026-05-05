@@ -2,35 +2,48 @@ import prisma from '@/prisma.js'
 
 // Setting keys
 export const KEYS = {
-  GOOGLE_CLIENT_ID: 'google_client_id',
-  GOOGLE_CLIENT_SECRET: 'google_client_secret',
-  GOOGLE_REFRESH_TOKEN: 'google_refresh_token',
+  // Email provider abstraction
+  EMAIL_PROVIDER: 'email_provider',     // 'gmail-imap' | future providers
+  IMAP_HOST: 'imap_host',               // default: imap.gmail.com
+  IMAP_PORT: 'imap_port',               // default: 993
+  IMAP_USER: 'imap_user',               // email address
+  IMAP_PASSWORD: 'imap_password',       // app password
+
+  // Calendar (ICS feed)
+  ICS_FEED_TOKEN: 'ics_feed_token',     // random URL token
+
+  // Telegram
   TELEGRAM_BOT_TOKEN: 'telegram_bot_token',
   TELEGRAM_CHAT_ID: 'telegram_chat_id',
-  GOOGLE_CALENDAR_ID: 'google_calendar_id',
+
+  // LLM
   GEMINI_API_KEY: 'gemini_api_key',
   GEMINI_MODEL: 'gemini_model',         // e.g. gemini-2.5-flash
   OPENAI_API_KEY: 'openai_api_key',
-  OPENAI_MODEL: 'openai_model',         // e.g. gpt-4o-mini
-  OPENAI_BASE_URL: 'openai_base_url',   // e.g. https://api.openai.com/v1 (or OpenRouter, local proxy, etc.)
-  CALENDAR_ENABLED: 'calendar_enabled',
-  SCAN_INTERVAL: 'scan_interval',
-  SCAN_RANGE_DAYS: 'scan_range_days',          // default: 60
-  SCAN_GMAIL_QUERY_EXTRA: 'scan_gmail_query_extra', // extra gmail search operators appended to scan query
-  LAST_SCAN_AT: 'last_scan_at',
+  OPENAI_MODEL: 'openai_model',
+  OPENAI_BASE_URL: 'openai_base_url',
   LLM_PROVIDER: 'llm_provider',         // 'none' | 'gemini' | 'openai' | 'ollama'
-  OLLAMA_BASE_URL: 'ollama_base_url',   // e.g. http://ollama:11434
-  OLLAMA_MODEL: 'ollama_model',         // e.g. qwen2.5:1.5b
-  APP_BASE_URL: 'app_base_url',         // e.g. http://homelab.local:3100 — for Telegram deep links
+  OLLAMA_BASE_URL: 'ollama_base_url',
+  OLLAMA_MODEL: 'ollama_model',
+
+  // Scan
+  SCAN_INTERVAL: 'scan_interval',
+  SCAN_RANGE_DAYS: 'scan_range_days',
+  SCAN_GMAIL_QUERY_EXTRA: 'scan_gmail_query_extra',
+  LAST_SCAN_AT: 'last_scan_at',
+
+  // App
+  APP_BASE_URL: 'app_base_url',
 } as const
 
 const ENV_MAP: Record<string, string> = {
-  [KEYS.GOOGLE_CLIENT_ID]: 'GOOGLE_CLIENT_ID',
-  [KEYS.GOOGLE_CLIENT_SECRET]: 'GOOGLE_CLIENT_SECRET',
-  [KEYS.GOOGLE_REFRESH_TOKEN]: 'GOOGLE_REFRESH_TOKEN',
+  [KEYS.EMAIL_PROVIDER]: 'EMAIL_PROVIDER',
+  [KEYS.IMAP_HOST]: 'IMAP_HOST',
+  [KEYS.IMAP_PORT]: 'IMAP_PORT',
+  [KEYS.IMAP_USER]: 'IMAP_USER',
+  [KEYS.IMAP_PASSWORD]: 'IMAP_PASSWORD',
   [KEYS.TELEGRAM_BOT_TOKEN]: 'TELEGRAM_BOT_TOKEN',
   [KEYS.TELEGRAM_CHAT_ID]: 'TELEGRAM_CHAT_ID',
-  [KEYS.GOOGLE_CALENDAR_ID]: 'GOOGLE_CALENDAR_ID',
   [KEYS.GEMINI_API_KEY]: 'GEMINI_API_KEY',
   [KEYS.GEMINI_MODEL]: 'GEMINI_MODEL',
   [KEYS.OPENAI_API_KEY]: 'OPENAI_API_KEY',
@@ -71,4 +84,21 @@ export async function getMultiple(keys: string[]): Promise<Record<string, string
     result[key] = await getSetting(key)
   }
   return result
+}
+
+/** Returns the existing ICS feed token, generating one if absent. */
+export async function getOrCreateIcsFeedToken(): Promise<string> {
+  let token = await getSetting(KEYS.ICS_FEED_TOKEN)
+  if (!token) {
+    token = crypto.randomUUID().replace(/-/g, '')
+    await setSetting(KEYS.ICS_FEED_TOKEN, token)
+  }
+  return token
+}
+
+/** Force-rotates the ICS feed token. */
+export async function rotateIcsFeedToken(): Promise<string> {
+  const token = crypto.randomUUID().replace(/-/g, '')
+  await setSetting(KEYS.ICS_FEED_TOKEN, token)
+  return token
 }

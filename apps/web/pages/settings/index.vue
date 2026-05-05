@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
-import type { NotificationRule, OAuthStatus } from '~/types/settings'
+import type { NotificationRule, ConfigStatus } from '~/types/settings'
 
 const settingsApi = useSettingsApi()
 
 const rules = ref<NotificationRule[]>([])
-const oauthStatus = ref<OAuthStatus | null>(null)
+const configStatus = ref<ConfigStatus | null>(null)
 const loading = ref(true)
 
 // Rule dialog state
@@ -20,13 +20,12 @@ const activeTab = ref('integrations')
 async function fetchData() {
   loading.value = true
   try {
-    const [ruleList, , oauth] = await Promise.all([
+    const [ruleList, status] = await Promise.all([
       settingsApi.listRules(),
-      settingsApi.getIntegrationStatus(),
-      settingsApi.getOAuthStatus(),
+      settingsApi.getConfigStatus(),
     ])
     rules.value = ruleList
-    oauthStatus.value = oauth
+    configStatus.value = status
   } catch (error) {
     toast.error('載入設定失敗', { description: String(error) })
   } finally {
@@ -92,23 +91,27 @@ onMounted(fetchData)
           </div>
         </div>
 
-        <template v-else-if="oauthStatus">
-          <SettingsIntegrationGoogle
-            :google="oauthStatus.google"
-            :calendar="oauthStatus.calendar"
-            :scan="oauthStatus.scan"
+        <template v-else-if="configStatus">
+          <SettingsIntegrationEmail
+            :email="configStatus.email"
+            :scan="configStatus.scan"
+            @refresh="fetchData"
+          />
+          <Separator />
+          <SettingsIntegrationCalendar
+            :calendar="configStatus.calendar"
             @refresh="fetchData"
           />
           <Separator />
           <SettingsIntegrationTelegram
-            :status="oauthStatus.telegram"
+            :status="configStatus.telegram"
             @refresh="fetchData"
           />
           <Separator />
           <SettingsIntegrationLLM
-            :llm="oauthStatus.llm"
-            :gemini="oauthStatus.gemini"
-            :openai="oauthStatus.openai"
+            :llm="configStatus.llm"
+            :gemini="configStatus.gemini"
+            :openai="configStatus.openai"
             @refresh="fetchData"
           />
         </template>

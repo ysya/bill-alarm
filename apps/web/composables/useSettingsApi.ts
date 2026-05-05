@@ -1,5 +1,5 @@
 export type ScanErrorStage =
-  | 'gmail_search'
+  | 'email_search'
   | 'email_fetch'
   | 'pdf_password'
   | 'pdf_extract'
@@ -27,6 +27,13 @@ export interface ScanLogDTO {
   fatalError: string | null
 }
 
+export interface EmailConfigPayload {
+  host?: string
+  port?: number
+  user: string
+  password: string
+}
+
 export function useSettingsApi() {
   const { get, post, patch, del } = useApi()
 
@@ -43,15 +50,14 @@ export function useSettingsApi() {
       patch<any>(`/notification-rules/${id}`, data),
     deleteRule: (id: string) => del<any>(`/notification-rules/${id}`),
 
-    // Integration status
+    // Integration status (legacy overview)
     getIntegrationStatus: () => get<{
-      gmail: { connected: boolean; message: string }
+      email: { connected: boolean; message: string }
       telegram: { configured: boolean }
-      calendar: { configured: boolean }
     }>('/integrations/status'),
 
-    // Gmail
-    triggerScan: () => post<{ scanLogId?: string; scanned: number; newBills: number; errors: ScanError[] }>('/gmail/scan'),
+    // Email scan
+    triggerScan: () => post<{ scanLogId?: string; scanned: number; newBills: number; errors: ScanError[] }>('/email/scan'),
 
     listScanLogs: (limit = 20) =>
       get<{ logs: ScanLogDTO[] }>(`/scan-logs?limit=${limit}`),
@@ -59,11 +65,47 @@ export function useSettingsApi() {
     // Telegram
     testTelegram: () => post<{ success: boolean }>('/telegram/test'),
 
-    // OAuth / Config
-    getOAuthStatus: () => get<{
-      google: { hasCredentials: boolean; isConnected: boolean; clientId: string | null }
+    // Email (IMAP)
+    testEmailConnection: (data: EmailConfigPayload) =>
+      post<{ ok: boolean; email?: string; error?: string }>('/email/test', {
+        host: data.host ?? 'imap.gmail.com',
+        port: data.port ?? 993,
+        user: data.user,
+        password: data.password,
+      }),
+
+    saveEmailConfig: (data: EmailConfigPayload) =>
+      post<{ success: boolean }>('/email/save', {
+        provider: 'gmail-imap',
+        host: data.host ?? 'imap.gmail.com',
+        port: data.port ?? 993,
+        user: data.user,
+        password: data.password,
+      }),
+
+    getEmailStatus: () =>
+      get<{ connected: boolean; message: string; email?: string }>('/email/status'),
+
+    // Calendar (ICS feed)
+    getCalendarFeed: () =>
+      get<{ token: string; feedUrl: string; feedPath: string }>('/calendar/info'),
+
+    rotateCalendarToken: () =>
+      post<{ token: string; feedUrl: string; feedPath: string }>('/calendar/rotate'),
+
+    // Aggregated config status
+    getConfigStatus: () => get<{
+      email: {
+        provider: 'gmail-imap'
+        hasCredentials: boolean
+        isConnected: boolean
+        message: string
+        user: string | null
+        host: string
+        port: number
+      }
       telegram: { isConfigured: boolean; chatId: string | null }
-      calendar: { calendarId: string; enabled: boolean }
+      calendar: { feedUrl: string; feedPath: string; token: string }
       scan: { interval: number; rangeDays: number; queryExtra: string }
       gemini: { isConfigured: boolean }
       openai: { isConfigured: boolean }
@@ -75,35 +117,22 @@ export function useSettingsApi() {
         ollamaBaseUrl: string
         ollamaModel: string
       }
-    }>('/oauth/status'),
-
-    saveGoogleCredentials: (clientId: string, clientSecret: string) =>
-      post<{ success: boolean }>('/oauth/google/credentials', { clientId, clientSecret }),
-
-    startGoogleOAuth: () => get<{ url: string }>('/oauth/google/start'),
-
-    disconnectGoogle: () => post<{ success: boolean }>('/oauth/google/disconnect'),
+    }>('/config/status'),
 
     saveTelegramConfig: (botToken: string, chatId: string) =>
-      post<{ success: boolean }>('/oauth/telegram/config', { botToken, chatId }),
-
-    saveCalendarConfig: (calendarId: string) =>
-      post<{ success: boolean }>('/oauth/calendar/config', { calendarId }),
-
-    toggleCalendar: (enabled: boolean) =>
-      post<{ success: boolean; enabled: boolean }>('/oauth/calendar/toggle', { enabled }),
+      post<{ success: boolean }>('/config/telegram', { botToken, chatId }),
 
     saveScanInterval: (interval: number) =>
-      post<{ success: boolean }>('/oauth/scan/config', { interval }),
+      post<{ success: boolean }>('/config/scan', { interval }),
 
     saveScanConfig: (data: { interval?: number; rangeDays?: number; queryExtra?: string }) =>
-      post<{ success: boolean }>('/oauth/scan/config', data),
+      post<{ success: boolean }>('/config/scan', data),
 
     saveGeminiConfig: (apiKey: string) =>
-      post<{ success: boolean }>('/oauth/gemini/config', { apiKey }),
+      post<{ success: boolean }>('/config/gemini', { apiKey }),
 
     saveOpenAIConfig: (apiKey: string) =>
-      post<{ success: boolean }>('/oauth/openai/config', { apiKey }),
+      post<{ success: boolean }>('/config/openai', { apiKey }),
 
     saveLlmConfig: (data: {
       provider: 'none' | 'gemini' | 'openai' | 'ollama'
@@ -112,7 +141,7 @@ export function useSettingsApi() {
       openaiBaseUrl?: string
       ollamaBaseUrl?: string
       ollamaModel?: string
-    }) => post<{ success: boolean }>('/oauth/llm/config', data),
+    }) => post<{ success: boolean }>('/config/llm', data),
 
     testLlm: () => post<{ ok: boolean; message: string }>('/llm/test'),
   }

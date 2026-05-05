@@ -45,7 +45,7 @@ function durationMs(start: string, end: string | null): string {
 }
 
 const STAGE_LABELS: Record<ScanErrorStage, string> = {
-  gmail_search: 'Gmail 搜尋',
+  email_search: '信箱搜尋',
   email_fetch: '取信',
   pdf_password: 'PDF 密碼',
   pdf_extract: 'PDF 解析',

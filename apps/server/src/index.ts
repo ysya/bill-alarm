@@ -8,7 +8,9 @@ import bankAccountRoutes from './routes/bank-accounts.js'
 import billRoutes from './routes/bills.js'
 import settingsRoutes from './routes/settings.js'
 import systemRoutes from './routes/system.js'
-import oauthRoutes from './routes/oauth.js'
+import configRoutes from './routes/config.js'
+import emailRoutes from './routes/email.js'
+import calendarFeedRoutes from './routes/calendar-feed.js'
 import { startScheduler } from './services/scheduler.js'
 
 const isDev = process.env.NODE_ENV !== 'production'
@@ -43,7 +45,9 @@ app.route('/api/bank-accounts', bankAccountRoutes)
 app.route('/api/bills', billRoutes)
 app.route('/api/notification-rules', settingsRoutes)
 app.route('/api', systemRoutes)
-app.route('/api/oauth', oauthRoutes)
+app.route('/api/config', configRoutes)
+app.route('/api/email', emailRoutes)
+app.route('/api/calendar', calendarFeedRoutes)
 
 // Start scheduler
 startScheduler()

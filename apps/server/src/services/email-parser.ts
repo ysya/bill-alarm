@@ -3,7 +3,7 @@ import path from 'node:path'
 import { PDF_DIR } from '@/paths.js'
 import { logger } from '@/index.js'
 import prisma from '@/prisma.js'
-import { searchEmails, getEmailWithAttachments } from './gmail.js'
+import { getEmailProvider } from './email/index.js'
 import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
 import { parseWithTemplate } from '@/parsers/template.js'
 import type { TemplateParserConfig } from '@bill-alarm/shared/template-parser'
@@ -14,7 +14,7 @@ import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus, type ParsedBill } from '@bill-alarm/shared/types'
 
 export type ScanErrorStage =
-  | 'gmail_search'
+  | 'email_search'
   | 'email_fetch'
   | 'pdf_password'
   | 'pdf_extract'
@@ -78,33 +78,44 @@ export async function scanAndProcessEmails(callbacks?: ScanCallbacks): Promise<S
   const extraQuery = (await getSetting(KEYS.SCAN_GMAIL_QUERY_EXTRA)) || ''
   const query = `(${senderPatterns}) newer_than:${rangeDays}d has:attachment${extraQuery ? ` ${extraQuery.trim()}` : ''}`
 
-  logger.info({ query, rangeDays }, 'Gmail scan query')
+  logger.info({ query, rangeDays }, 'Email scan query')
 
-  let messageIds: string[]
-  try {
-    messageIds = await searchEmails(query)
-  } catch (e) {
+  const provider = await getEmailProvider()
+  if (!provider) {
     result.errors.push({
-      stage: 'gmail_search',
-      reason: `Gmail 搜尋失敗：${(e as Error).message}`,
+      stage: 'email_search',
+      reason: '信箱未設定（請至設定頁填入 IMAP 帳密）',
     })
     callbacks?.onStart?.(0)
     return result
   }
 
-  result.scanned = messageIds.length
-  logger.info({ count: messageIds.length }, 'Found emails to process')
-  callbacks?.onStart?.(messageIds.length)
+  let messageRefs: { id: string }[]
+  try {
+    messageRefs = await provider.search({ query, sinceDays: rangeDays })
+  } catch (e) {
+    result.errors.push({
+      stage: 'email_search',
+      reason: `郵件搜尋失敗：${(e as Error).message}`,
+    })
+    callbacks?.onStart?.(0)
+    return result
+  }
 
-  for (let i = 0; i < messageIds.length; i++) {
-    const msgId = messageIds[i]
+  result.scanned = messageRefs.length
+  logger.info({ count: messageRefs.length }, 'Found emails to process')
+  callbacks?.onStart?.(messageRefs.length)
+
+  for (let i = 0; i < messageRefs.length; i++) {
+    const msgRef = messageRefs[i]
+    const msgId = msgRef.id
     const idx = i + 1
-    const total = messageIds.length
+    const total = messageRefs.length
     let progressBank: string | undefined
     let progressStatus: ScanItemStatus = 'skipped'
     let progressReason: string | undefined
     try {
-      const email = await getEmailWithAttachments(msgId)
+      const email = await provider.fetch(msgRef)
       if (!email) {
         progressReason = '取信失敗或郵件不存在'
         continue
