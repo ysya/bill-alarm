@@ -90,199 +90,205 @@ export async function scanAndProcessEmails(callbacks?: ScanCallbacks): Promise<S
     return result
   }
 
-  let messageRefs: { id: string }[]
   try {
-    messageRefs = await provider.search({ query, sinceDays: rangeDays })
+    return await provider.withSession(async (session) => {
+      let messageRefs: { id: string }[]
+      try {
+        messageRefs = await session.search({ query, sinceDays: rangeDays })
+      } catch (e) {
+        result.errors.push({
+          stage: 'email_search',
+          reason: `郵件搜尋失敗：${(e as Error).message}`,
+        })
+        callbacks?.onStart?.(0)
+        return result
+      }
+
+      result.scanned = messageRefs.length
+      logger.info({ count: messageRefs.length }, 'Found emails to process')
+      callbacks?.onStart?.(messageRefs.length)
+
+      for (let i = 0; i < messageRefs.length; i++) {
+        const msgRef = messageRefs[i]
+        const msgId = msgRef.id
+        const idx = i + 1
+        const total = messageRefs.length
+        let progressBank: string | undefined
+        let progressStatus: ScanItemStatus = 'skipped'
+        let progressReason: string | undefined
+        try {
+          const email = await session.fetch(msgRef)
+          if (!email) {
+            progressReason = '取信失敗或郵件不存在'
+            continue
+          }
+
+          const bank = banks.find((b) =>
+            email.from.toLowerCase().includes(b.emailSenderPattern.toLowerCase()) &&
+            email.subject.includes(b.emailSubjectPattern),
+          )
+          if (!bank) {
+            progressReason = '無對應銀行'
+            continue
+          }
+          progressBank = bank.name
+          progressStatus = 'matched'
+
+          const pdfBuffers = await getPdfBuffers(email.attachments)
+          if (pdfBuffers.length === 0) {
+            logger.debug({ msgId, bank: bank.name }, 'No PDF attachments found')
+            progressReason = '無 PDF 附件'
+            continue
+          }
+
+          let pdfText: string | null = null
+          let matchedPdfBuf: Buffer | null = null
+          let lastPdfError: string | null = null
+          for (const pdfBuf of pdfBuffers) {
+            try {
+              pdfText = await extractPdfText(pdfBuf, bank.pdfPassword ?? undefined)
+              if (pdfText) {
+                matchedPdfBuf = pdfBuf
+                break
+              }
+            } catch (e) {
+              lastPdfError = (e as Error).message
+              logger.warn({ bank: bank.name, error: lastPdfError }, 'PDF extraction failed')
+            }
+          }
+
+          if (!pdfText) {
+            const isPasswordError = lastPdfError?.includes('密碼')
+            const reason = isPasswordError
+              ? 'PDF 密碼錯誤，請至銀行管理更新密碼'
+              : `PDF 文字擷取失敗${lastPdfError ? `（${lastPdfError}）` : ''}`
+            result.errors.push({
+              stage: isPasswordError ? 'pdf_password' : 'pdf_extract',
+              bank: bank.name,
+              msgId,
+              reason,
+            })
+            progressStatus = 'error'
+            progressReason = reason
+            continue
+          }
+
+          let parsed: ParsedBill | null = null
+          let source: 'template' | 'llm' | null = null
+
+          if (bank.parserConfig) {
+            try {
+              const config = JSON.parse(bank.parserConfig) as TemplateParserConfig
+              const r = parseWithTemplate(pdfText, config)
+              if (r) {
+                parsed = r
+                source = 'template'
+              }
+            } catch (e) {
+              logger.warn({ bank: bank.name, error: (e as Error).message }, 'Template parse failed, falling back to LLM')
+            }
+          }
+
+          if (!parsed) {
+            const llmProvider = await getLlmProvider()
+            if (llmProvider === LlmProvider.None) {
+              const reason = 'LLM 未設定，無法解析帳單。請至設定 → LLM 啟用 Gemini 或 Ollama'
+              result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
+              progressStatus = 'error'
+              progressReason = reason
+              continue
+            }
+            try {
+              parsed = await parseBillWithLLM(pdfText, bank.name)
+              if (parsed) source = 'llm'
+            } catch (e) {
+              const reason = `LLM 解析失敗：${(e as Error).message}`
+              result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
+              progressStatus = 'error'
+              progressReason = reason
+              continue
+            }
+          }
+
+          if (!parsed) {
+            const reason = 'LLM 回傳結果無法解析為有效帳單'
+            result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
+            progressStatus = 'error'
+            progressReason = reason
+            continue
+          }
+
+          const sanityErr = sanityCheck(parsed)
+          if (sanityErr) {
+            logger.warn({ bank: bank.name, source, parsed, error: sanityErr }, 'Parsed bill failed sanity check')
+            const reason = `解析結果異常（${sanityErr}），請手動確認`
+            result.errors.push({ stage: 'sanity_check', bank: bank.name, msgId, reason })
+            progressStatus = 'error'
+            progressReason = reason
+          }
+
+          const existing = await prisma.bill.findUnique({
+            where: {
+              bankId_billingPeriod: {
+                bankId: bank.id,
+                billingPeriod: parsed.billingPeriod,
+              },
+            },
+          })
+          if (existing) {
+            progressReason = '已存在相同帳單'
+            continue
+          }
+
+          let pdfPath: string | undefined
+          if (matchedPdfBuf) {
+            const filename = `${bank.code ?? bank.id}_${parsed.billingPeriod}.pdf`
+            await fs.mkdir(PDF_DIR, { recursive: true })
+            const filePath = path.join(PDF_DIR, filename)
+            await fs.writeFile(filePath, matchedPdfBuf)
+            pdfPath = `pdfs/${filename}`
+            logger.info({ pdfPath }, 'PDF saved')
+          }
+
+          const bill = await prisma.bill.create({
+            data: {
+              bankId: bank.id,
+              billingPeriod: parsed.billingPeriod,
+              amount: parsed.amount,
+              minimumPayment: parsed.minimumPayment,
+              dueDate: parsed.dueDate,
+              status: parsed.amount <= 0 ? BillStatus.NO_PAYMENT : BillStatus.PENDING,
+              parseSource: source,
+              sourceEmailId: msgId,
+              rawEmailSnippet: pdfText.substring(0, 500),
+              pdfPath,
+            },
+          })
+
+          logger.info({ bank: bank.name, amount: parsed.amount, dueDate: parsed.dueDate }, 'New bill created')
+          result.newBills.push({ bill, bank })
+          if (progressStatus !== 'error') progressStatus = 'success'
+        } catch (e) {
+          const msg = (e as Error).message ?? String(e)
+          logger.error({ msgId, error: msg }, 'Failed to process email')
+          result.errors.push({ stage: 'unexpected', msgId, reason: msg })
+          progressStatus = 'error'
+          progressReason = msg
+        } finally {
+          callbacks?.onProgress?.(idx, total, progressBank, progressStatus, progressReason)
+        }
+      }
+
+      return result
+    })
   } catch (e) {
     result.errors.push({
       stage: 'email_search',
-      reason: `郵件搜尋失敗：${(e as Error).message}`,
+      reason: `信箱連線失敗：${(e as Error).message}`,
     })
     callbacks?.onStart?.(0)
     return result
   }
-
-  result.scanned = messageRefs.length
-  logger.info({ count: messageRefs.length }, 'Found emails to process')
-  callbacks?.onStart?.(messageRefs.length)
-
-  for (let i = 0; i < messageRefs.length; i++) {
-    const msgRef = messageRefs[i]
-    const msgId = msgRef.id
-    const idx = i + 1
-    const total = messageRefs.length
-    let progressBank: string | undefined
-    let progressStatus: ScanItemStatus = 'skipped'
-    let progressReason: string | undefined
-    try {
-      const email = await provider.fetch(msgRef)
-      if (!email) {
-        progressReason = '取信失敗或郵件不存在'
-        continue
-      }
-
-      const bank = banks.find((b) =>
-        email.from.toLowerCase().includes(b.emailSenderPattern.toLowerCase()) &&
-        email.subject.includes(b.emailSubjectPattern),
-      )
-      if (!bank) {
-        progressReason = '無對應銀行'
-        continue
-      }
-      progressBank = bank.name
-      progressStatus = 'matched'
-
-      const pdfBuffers = await getPdfBuffers(email.attachments)
-      if (pdfBuffers.length === 0) {
-        logger.debug({ msgId, bank: bank.name }, 'No PDF attachments found')
-        progressReason = '無 PDF 附件'
-        continue
-      }
-
-      let pdfText: string | null = null
-      let matchedPdfBuf: Buffer | null = null
-      let lastPdfError: string | null = null
-      for (const pdfBuf of pdfBuffers) {
-        try {
-          pdfText = await extractPdfText(pdfBuf, bank.pdfPassword ?? undefined)
-          if (pdfText) {
-            matchedPdfBuf = pdfBuf
-            break
-          }
-        } catch (e) {
-          lastPdfError = (e as Error).message
-          logger.warn({ bank: bank.name, error: lastPdfError }, 'PDF extraction failed')
-        }
-      }
-
-      if (!pdfText) {
-        const isPasswordError = lastPdfError?.includes('密碼')
-        const reason = isPasswordError
-          ? 'PDF 密碼錯誤，請至銀行管理更新密碼'
-          : `PDF 文字擷取失敗${lastPdfError ? `（${lastPdfError}）` : ''}`
-        result.errors.push({
-          stage: isPasswordError ? 'pdf_password' : 'pdf_extract',
-          bank: bank.name,
-          msgId,
-          reason,
-        })
-        progressStatus = 'error'
-        progressReason = reason
-        continue
-      }
-
-      let parsed: ParsedBill | null = null
-      let source: 'template' | 'llm' | null = null
-
-      // 1. Template (only when user has explicitly configured one)
-      if (bank.parserConfig) {
-        try {
-          const config = JSON.parse(bank.parserConfig) as TemplateParserConfig
-          const r = parseWithTemplate(pdfText, config)
-          if (r) {
-            parsed = r
-            source = 'template'
-          }
-        } catch (e) {
-          logger.warn({ bank: bank.name, error: (e as Error).message }, 'Template parse failed, falling back to LLM')
-        }
-      }
-
-      // 2. LLM (mandatory primary path — no hardcoded fallback)
-      if (!parsed) {
-        const llmProvider = await getLlmProvider()
-        if (llmProvider === LlmProvider.None) {
-          const reason = 'LLM 未設定，無法解析帳單。請至設定 → LLM 啟用 Gemini 或 Ollama'
-          result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
-          progressStatus = 'error'
-          progressReason = reason
-          continue
-        }
-        try {
-          parsed = await parseBillWithLLM(pdfText, bank.name)
-          if (parsed) source = 'llm'
-        } catch (e) {
-          const reason = `LLM 解析失敗：${(e as Error).message}`
-          result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
-          progressStatus = 'error'
-          progressReason = reason
-          continue
-        }
-      }
-
-      if (!parsed) {
-        const reason = 'LLM 回傳結果無法解析為有效帳單'
-        result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
-        progressStatus = 'error'
-        progressReason = reason
-        continue
-      }
-
-      // Sanity check — catch obvious LLM hallucinations
-      const sanityErr = sanityCheck(parsed)
-      if (sanityErr) {
-        logger.warn({ bank: bank.name, source, parsed, error: sanityErr }, 'Parsed bill failed sanity check')
-        const reason = `解析結果異常（${sanityErr}），請手動確認`
-        result.errors.push({ stage: 'sanity_check', bank: bank.name, msgId, reason })
-        progressStatus = 'error'
-        progressReason = reason
-      }
-
-      const existing = await prisma.bill.findUnique({
-        where: {
-          bankId_billingPeriod: {
-            bankId: bank.id,
-            billingPeriod: parsed.billingPeriod,
-          },
-        },
-      })
-      if (existing) {
-        progressReason = '已存在相同帳單'
-        continue
-      }
-
-      // Save PDF to filesystem
-      let pdfPath: string | undefined
-      if (matchedPdfBuf) {
-        const filename = `${bank.code ?? bank.id}_${parsed.billingPeriod}.pdf`
-        await fs.mkdir(PDF_DIR, { recursive: true })
-        const filePath = path.join(PDF_DIR, filename)
-        await fs.writeFile(filePath, matchedPdfBuf)
-        pdfPath = `pdfs/${filename}`
-        logger.info({ pdfPath }, 'PDF saved')
-      }
-
-      const bill = await prisma.bill.create({
-        data: {
-          bankId: bank.id,
-          billingPeriod: parsed.billingPeriod,
-          amount: parsed.amount,
-          minimumPayment: parsed.minimumPayment,
-          dueDate: parsed.dueDate,
-          status: parsed.amount <= 0 ? BillStatus.NO_PAYMENT : BillStatus.PENDING,
-          parseSource: source,
-          sourceEmailId: msgId,
-          rawEmailSnippet: pdfText.substring(0, 500),
-          pdfPath,
-        },
-      })
-
-      logger.info({ bank: bank.name, amount: parsed.amount, dueDate: parsed.dueDate }, 'New bill created')
-      result.newBills.push({ bill, bank })
-      // If sanity check already flagged an error, keep that status; otherwise success.
-      if (progressStatus !== 'error') progressStatus = 'success'
-    } catch (e) {
-      const msg = (e as Error).message ?? String(e)
-      logger.error({ msgId, error: msg }, 'Failed to process email')
-      result.errors.push({ stage: 'unexpected', msgId, reason: msg })
-      progressStatus = 'error'
-      progressReason = msg
-    } finally {
-      callbacks?.onProgress?.(idx, total, progressBank, progressStatus, progressReason)
-    }
-  }
-
-  return result
 }
 
 export interface RecordedScan {
