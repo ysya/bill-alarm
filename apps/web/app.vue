@@ -58,7 +58,7 @@
 
 <script setup lang="ts">
 import 'vue-sonner/style.css'
-import { LayoutDashboard, Receipt, CreditCard, Settings, Menu } from 'lucide-vue-next'
+import { LayoutDashboard, Receipt, CreditCard, History, Settings, Menu } from 'lucide-vue-next'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Toaster as Sonner } from '@/components/ui/sonner'
@@ -72,6 +72,7 @@ const navItems = [
   { to: '/', label: '總覽', icon: LayoutDashboard },
   { to: '/bills', label: '帳單', icon: Receipt },
   { to: '/banks', label: '銀行', icon: CreditCard },
+  { to: '/scan-logs', label: '掃描紀錄', icon: History },
   { to: '/settings', label: '設定', icon: Settings },
 ]
 </script>

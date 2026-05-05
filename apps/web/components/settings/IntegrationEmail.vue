@@ -104,9 +104,7 @@ async function handleSaveScanConfig() {
   }
 }
 
-const scanLogList = ref<{ refresh: () => Promise<void> } | null>(null)
-const { state: scanProgress, onComplete } = useScanEvents()
-onComplete.value = () => { scanLogList.value?.refresh() }
+const { state: scanProgress } = useScanEvents()
 
 const scanInProgress = computed(() => scanning.value || scanProgress.value.active)
 const progressPercent = computed(() =>
@@ -120,16 +118,15 @@ async function handleScan() {
   try {
     const result = await settingsApi.triggerScan()
     const errorCount = result.errors?.length ?? 0
-    const desc = `掃描 ${result.scanned} 封郵件，發現 ${result.newBills} 筆新帳單${errorCount > 0 ? `，${errorCount} 個錯誤（請見下方掃描紀錄）` : ''}。`
+    const desc = `掃描 ${result.scanned} 封郵件，發現 ${result.newBills} 筆新帳單${errorCount > 0 ? `，${errorCount} 個錯誤` : ''}。`
+    const action = { label: '查看紀錄', onClick: () => navigateTo('/scan-logs') }
     if (errorCount > 0) {
-      toast.warning('郵件掃描完成（有錯誤）', { description: desc })
+      toast.warning('郵件掃描完成（有錯誤）', { description: desc, action })
     } else {
-      toast.success('郵件掃描完成', { description: desc })
+      toast.success('郵件掃描完成', { description: desc, action })
     }
-    await scanLogList.value?.refresh()
   } catch (e) {
     toast.error('掃描失敗', { description: String(e) })
-    await scanLogList.value?.refresh()
   } finally {
     scanning.value = false
   }
@@ -316,8 +313,6 @@ async function handleScanIntervalChange(value: string) {
         </p>
       </div>
 
-      <!-- Scan history -->
-      <SettingsScanLogList ref="scanLogList" />
     </template>
 
     <!-- App Password 取得方式 Dialog -->
