@@ -34,7 +34,7 @@ const { default: prisma } = await import('@/prisma.js')
 describe('sessions', () => {
   it('creates a session validatable by its token', async () => {
     const { token } = await createSession()
-    expect(await validateSession(token)).toBe(true)
+    expect((await validateSession(token)).valid).toBe(true)
   })
 
   it('stores only the token hash, not the token', async () => {
@@ -44,23 +44,25 @@ describe('sessions', () => {
   })
 
   it('rejects unknown and destroyed tokens', async () => {
-    expect(await validateSession('deadbeef')).toBe(false)
+    expect((await validateSession('deadbeef')).valid).toBe(false)
     const { token } = await createSession()
     await destroySession(token)
-    expect(await validateSession(token)).toBe(false)
+    expect((await validateSession(token)).valid).toBe(false)
   })
 
   it('rejects expired sessions', async () => {
     const { token } = await createSession()
     await prisma.session.updateMany({ where: { tokenHash: hashToken(token) }, data: { expiresAt: new Date(Date.now() - 1000) } })
-    expect(await validateSession(token)).toBe(false)
+    expect((await validateSession(token)).valid).toBe(false)
   })
 
   it('extends expiry when last extension is older than 24h', async () => {
     const { token } = await createSession()
     const old = new Date(Date.now() - 25 * 60 * 60 * 1000)
     await prisma.session.updateMany({ where: { tokenHash: hashToken(token) }, data: { lastExtendedAt: old } })
-    expect(await validateSession(token)).toBe(true)
+    const result = await validateSession(token)
+    expect(result.valid).toBe(true)
+    expect(result.extended).toBe(true)
     const row = await prisma.session.findUnique({ where: { tokenHash: hashToken(token) } })
     expect(row).not.toBeNull()
     expect(row!.lastExtendedAt.getTime()).toBeGreaterThan(old.getTime())

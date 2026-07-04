@@ -36,16 +36,26 @@ export async function createSession(): Promise<{ token: string; expiresAt: Date 
   return { token, expiresAt }
 }
 
-export async function validateSession(token: string): Promise<boolean> {
+export interface SessionValidation {
+  valid: boolean
+  extended: boolean
+  expiresAt: Date | null
+}
+
+export async function validateSession(token: string): Promise<SessionValidation> {
   const session = await prisma.session.findUnique({ where: { tokenHash: tokenHash(token) } })
-  if (!session || session.expiresAt.getTime() < Date.now()) return false
-  if (Date.now() - session.lastExtendedAt.getTime() > EXTEND_AFTER_MS) {
-    await prisma.session.update({
-      where: { id: session.id },
-      data: { expiresAt: new Date(Date.now() + SESSION_TTL_MS), lastExtendedAt: new Date() },
-    })
+  if (!session || session.expiresAt.getTime() < Date.now()) {
+    return { valid: false, extended: false, expiresAt: null }
   }
-  return true
+  if (Date.now() - session.lastExtendedAt.getTime() > EXTEND_AFTER_MS) {
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
+    await prisma.session.updateMany({
+      where: { id: session.id },
+      data: { expiresAt, lastExtendedAt: new Date() },
+    })
+    return { valid: true, extended: true, expiresAt }
+  }
+  return { valid: true, extended: false, expiresAt: session.expiresAt }
 }
 
 export async function destroySession(token: string): Promise<void> {

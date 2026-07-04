@@ -102,7 +102,15 @@ export async function authGuard(c: Context, next: () => Promise<void>): Promise<
   if (isPublic) return next()
 
   const token = getCookie(c, SESSION_COOKIE)
-  if (token && await validateSession(token)) return next()
+  if (token) {
+    const session = await validateSession(token)
+    if (session.valid) {
+      if (session.extended && session.expiresAt) {
+        setSessionCookie(c, token, session.expiresAt)
+      }
+      return next()
+    }
+  }
   return c.json({ error: 'unauthorized' }, 401)
 }
 
