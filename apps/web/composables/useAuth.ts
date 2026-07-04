@@ -4,9 +4,13 @@ export function useAuth() {
   const authed = useAuthed()
 
   async function logout(): Promise<void> {
-    await $fetch('/api/auth/logout', { method: 'POST' })
-    authed.value = false
-    await navigateTo('/login')
+    try {
+      await $fetch('/api/auth/logout', { method: 'POST' })
+    }
+    finally {
+      authed.value = false
+      await navigateTo('/login')
+    }
   }
 
   return { authed, logout }
