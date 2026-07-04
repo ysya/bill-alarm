@@ -34,7 +34,11 @@ export const hsbcTwParser: BillEmailParser = {
 function extractDueDate(text: string): Date | null {
   const match = text.match(/(\d{4})\/(\d{2})\/(\d{2})/)
   if (!match) return null
-  const date = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]))
+  const date = new Date(
+    parseInt(match[1]),
+    parseInt(match[2]) - 1,
+    parseInt(match[3]),
+  )
   if (!isNaN(date.getTime()) && date.getFullYear() >= 2020) return date
   return null
 }
@@ -76,7 +80,10 @@ function extractAmount(text: string): number | null {
  * 1. 表頭區利率後的第 6 個數字
  * 2. 備用：`應繳金額\n最低應繳\n\n[16位卡號]`
  */
-function extractMinimumPayment(text: string, totalAmount: number): number | undefined {
+function extractMinimumPayment(
+  text: string,
+  totalAmount: number,
+): number | undefined {
   // 策略 1：表頭區第 6 個數字
   const rateIdx = text.indexOf('%')
   if (rateIdx !== -1) {
