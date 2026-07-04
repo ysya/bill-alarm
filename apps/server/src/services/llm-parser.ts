@@ -139,12 +139,13 @@ async function invokeGemini(prompt: string, schema?: object): Promise<string> {
   const response = await ai.models.generateContent({
     model,
     contents: prompt,
-    ...(schema && {
-      config: {
+    config: {
+      temperature: 0,
+      ...(schema && {
         responseMimeType: 'application/json',
         responseJsonSchema: schema,
-      },
-    }),
+      }),
+    },
   })
   return response.text?.trim() ?? ''
 }
@@ -158,6 +159,7 @@ async function invokeOpenAI(prompt: string, schema?: object): Promise<string> {
   const body: Record<string, unknown> = {
     model,
     messages: [{ role: 'user', content: prompt }],
+    temperature: 0,
   }
   if (schema) {
     body.response_format = {
@@ -202,7 +204,7 @@ async function invokeOllama(prompt: string, schema?: object): Promise<string> {
       prompt,
       stream: false,
       ...(schema && { format: schema }),
-      options: { temperature: 0.1 },
+      options: { temperature: 0 },
     }),
   })
 
