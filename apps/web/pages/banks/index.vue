@@ -514,7 +514,7 @@ onMounted(fetchData)
               <Label>自動扣款</Label>
               <p class="text-xs text-muted-foreground">啟用後將不再發送繳費提醒</p>
             </div>
-            <Switch v-model:checked="editForm.autoDebit" />
+            <Switch v-model="editForm.autoDebit" />
           </div>
           <div v-if="editForm.autoDebit" class="space-y-2">
             <Label for="eBankAccount">扣款帳戶</Label>

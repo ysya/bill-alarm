@@ -123,7 +123,7 @@ async function handleSubmit() {
             <Label for="ruleIsActive" class="cursor-pointer">啟用狀態</Label>
             <p class="text-xs text-muted-foreground">停用後此規則將不會觸發通知。</p>
           </div>
-          <Switch id="ruleIsActive" :checked="form.isActive" @update:checked="form.isActive = $event" />
+          <Switch id="ruleIsActive" :model-value="form.isActive" @update:model-value="form.isActive = $event" />
         </div>
         <DialogFooter class="gap-2 sm:gap-0">
           <DialogClose as-child><Button type="button" variant="outline">取消</Button></DialogClose>

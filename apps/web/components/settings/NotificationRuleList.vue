@@ -83,7 +83,7 @@ async function handleToggleActive(rule: NotificationRule) {
               <p class="text-xs text-muted-foreground">到期前 {{ rule.daysBefore }} 天，於 {{ rule.timeOfDay }} 發送通知</p>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <Switch :checked="rule.isActive" @update:checked="handleToggleActive(rule)" />
+              <Switch :model-value="rule.isActive" @update:model-value="handleToggleActive(rule)" />
               <Button variant="ghost" size="icon" class="h-8 w-8" @click="emit('edit', rule)"><Pencil class="h-4 w-4" /><span class="sr-only">編輯</span></Button>
               <Button variant="ghost" size="icon" class="h-8 w-8 text-destructive hover:text-destructive" @click="emit('delete', rule)"><Trash2 class="h-4 w-4" /><span class="sr-only">刪除</span></Button>
             </div>
