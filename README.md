@@ -57,6 +57,21 @@ Open `http://localhost:3100` and configure Gmail OAuth, Telegram bot, and banks 
 docker compose pull && docker compose up -d
 ```
 
+## 認證
+
+單一使用者帳密登入。首次啟動造訪任一頁面會導向 `/setup` 建立帳號密碼，
+session 有效 30 天（活躍使用自動續期）。
+
+### 忘記密碼
+
+進入容器刪除密碼設定後，重新造訪網站會回到 `/setup`：
+
+    docker compose exec bill-alarm node -e "
+      const db = require('better-sqlite3')('/app/data/bill-alarm.db');
+      db.prepare(\"DELETE FROM settings WHERE key IN ('auth_username','auth_password_hash')\").run();
+      db.prepare('DELETE FROM sessions').run();
+    "
+
 ## Development
 
 ```bash
