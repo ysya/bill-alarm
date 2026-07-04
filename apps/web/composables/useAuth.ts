@@ -7,6 +7,9 @@ export function useAuth() {
     try {
       await $fetch('/api/auth/logout', { method: 'POST' })
     }
+    catch {
+      // ignore — local state is cleared and user is redirected regardless
+    }
     finally {
       authed.value = false
       await navigateTo('/login')
