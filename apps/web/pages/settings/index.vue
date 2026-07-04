@@ -17,6 +17,8 @@ const submitting = ref(false)
 
 const activeTab = ref('integrations')
 
+const { logout } = useAuth()
+
 async function fetchData() {
   loading.value = true
   try {
@@ -151,5 +153,7 @@ onMounted(fetchData)
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Button variant="destructive" class="mt-6" @click="logout">登出</Button>
   </div>
 </template>

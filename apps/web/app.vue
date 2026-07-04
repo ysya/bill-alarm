@@ -1,6 +1,9 @@
 <template>
   <div class="min-h-screen bg-background text-foreground">
-    <div class="flex">
+    <template v-if="bareShell">
+      <NuxtPage />
+    </template>
+    <div v-else class="flex">
       <!-- Desktop Sidebar -->
       <aside class="hidden md:flex w-60 flex-col border-r border-border min-h-screen p-4 gap-2">
         <h1 class="text-lg font-bold px-3 py-2 mb-4">Bill Alarm</h1>
@@ -67,6 +70,9 @@ import { Toaster as Sonner } from '@/components/ui/sonner'
 onMounted(() => {
   document.documentElement.classList.add('dark')
 })
+
+const route = useRoute()
+const bareShell = computed(() => route.path === '/login' || route.path === '/setup')
 
 const navItems = [
   { to: '/', label: '總覽', icon: LayoutDashboard },
