@@ -28,6 +28,11 @@ export function getParser(bankCode: string | null): BillEmailParser {
   return (bankCode && parsers.get(bankCode)) || genericParser
 }
 
+/** Bank-specific parser only — null when the bank has none (no generic fallback). */
+export function getHardcodedParser(bankCode: string | null): BillEmailParser | null {
+  return (bankCode && parsers.get(bankCode)) || null
+}
+
 /** List all registered bank-specific parser codes (excluding generic) */
 export function listParserCodes(): string[] {
   return Array.from(parsers.keys())

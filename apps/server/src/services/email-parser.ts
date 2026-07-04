@@ -6,6 +6,7 @@ import prisma from '@/prisma.js'
 import { getEmailProvider } from './email/index.js'
 import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
 import { parseWithTemplate } from '@/parsers/template.js'
+import { getHardcodedParser } from '@/parsers/registry.js'
 import type { TemplateParserConfig } from '@bill-alarm/shared/template-parser'
 import { parseBillWithLLM, getLlmProvider, LlmProvider } from './llm-parser.js'
 import { getSetting, KEYS } from './settings.js'
@@ -189,7 +190,7 @@ export async function scanAndProcessEmails(callbacks?: ScanCallbacks): Promise<S
           }
 
           let parsed: ParsedBill | null = null
-          let source: 'template' | 'llm' | null = null
+          let source: 'template' | 'hardcoded' | 'llm' | null = null
 
           if (bank.parserConfig) {
             try {
@@ -201,6 +202,17 @@ export async function scanAndProcessEmails(callbacks?: ScanCallbacks): Promise<S
               }
             } catch (e) {
               logger.warn({ bank: bank.name, error: (e as Error).message }, 'Template parse failed, falling back to LLM')
+            }
+          }
+
+          if (!parsed) {
+            const hardcoded = getHardcodedParser(bank.code)
+            if (hardcoded) {
+              const bill = hardcoded.parse(pdfText)
+              if (bill) {
+                parsed = bill
+                source = 'hardcoded'
+              }
             }
           }
 
