@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import { createHash } from 'node:crypto'
 import { setupTestDb } from './helpers/test-db.js'
 
 setupTestDb()
+
+const hashToken = (t: string) => createHash('sha256').update(t).digest('hex')
 
 const { hashPassword, verifyPassword } = await import('../auth.js')
 
@@ -49,16 +52,17 @@ describe('sessions', () => {
 
   it('rejects expired sessions', async () => {
     const { token } = await createSession()
-    await prisma.session.updateMany({ data: { expiresAt: new Date(Date.now() - 1000) } })
+    await prisma.session.updateMany({ where: { tokenHash: hashToken(token) }, data: { expiresAt: new Date(Date.now() - 1000) } })
     expect(await validateSession(token)).toBe(false)
   })
 
   it('extends expiry when last extension is older than 24h', async () => {
     const { token } = await createSession()
     const old = new Date(Date.now() - 25 * 60 * 60 * 1000)
-    await prisma.session.updateMany({ data: { lastExtendedAt: old } })
+    await prisma.session.updateMany({ where: { tokenHash: hashToken(token) }, data: { lastExtendedAt: old } })
     expect(await validateSession(token)).toBe(true)
-    const row = (await prisma.session.findMany())[0]
-    expect(row.lastExtendedAt.getTime()).toBeGreaterThan(old.getTime())
+    const row = await prisma.session.findUnique({ where: { tokenHash: hashToken(token) } })
+    expect(row).not.toBeNull()
+    expect(row!.lastExtendedAt.getTime()).toBeGreaterThan(old.getTime())
   })
 })
