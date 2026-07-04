@@ -63,6 +63,17 @@ function sanityCheck(parsed: ParsedBill): string | null {
   return null
 }
 
+/** True if this email already produced a bill (stable-ID dedup, first line of defense). */
+export async function emailAlreadyProcessed(msgId: string): Promise<boolean> {
+  return (await prisma.bill.count({ where: { sourceEmailId: msgId } })) > 0
+}
+
+/** True if a bill with the same bank/amount/dueDate exists — catches the same
+ *  statement re-ingested under a different email ID (e.g. provider migration). */
+export async function duplicateBillExists(bankId: string, amount: number, dueDate: Date): Promise<boolean> {
+  return (await prisma.bill.count({ where: { bankId, amount, dueDate } })) > 0
+}
+
 export async function scanAndProcessEmails(callbacks?: ScanCallbacks): Promise<ScanResult> {
   const result: ScanResult = { scanned: 0, newBills: [], errors: [] }
 
@@ -117,6 +128,10 @@ export async function scanAndProcessEmails(callbacks?: ScanCallbacks): Promise<S
         let progressStatus: ScanItemStatus = 'skipped'
         let progressReason: string | undefined
         try {
+          if (await emailAlreadyProcessed(msgId)) {
+            progressReason = '此信件已建立過帳單'
+            continue
+          }
           const email = await session.fetch(msgRef)
           if (!email) {
             progressReason = '取信失敗或郵件不存在'
@@ -240,9 +255,14 @@ export async function scanAndProcessEmails(callbacks?: ScanCallbacks): Promise<S
             continue
           }
 
+          if (await duplicateBillExists(bank.id, parsed.amount, parsed.dueDate)) {
+            progressReason = '已存在同金額同到期日帳單'
+            continue
+          }
+
           let pdfPath: string | undefined
           if (matchedPdfBuf) {
-            const filename = `${bank.code ?? bank.id}_${parsed.billingPeriod}.pdf`
+            const filename = `${bank.code ?? bank.id}_${msgId.replace(/[^A-Za-z0-9_-]/g, '')}.pdf`
             await fs.mkdir(PDF_DIR, { recursive: true })
             const filePath = path.join(PDF_DIR, filename)
             await fs.writeFile(filePath, matchedPdfBuf)

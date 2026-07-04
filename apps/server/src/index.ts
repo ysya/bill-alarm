@@ -49,8 +49,8 @@ app.route('/api/config', configRoutes)
 app.route('/api/email', emailRoutes)
 app.route('/api/calendar', calendarFeedRoutes)
 
-// Start scheduler
-startScheduler()
+// Start scheduler (skipped under vitest — importing the app must not start cron)
+if (!process.env.VITEST) startScheduler()
 
 // Vite dev server uses this export; production uses serve.ts
 export default app
