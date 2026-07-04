@@ -1,4 +1,5 @@
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import prisma from '@/prisma.js'
 
 // scrypt parameters — interactive-login strength, no native deps
 const SCRYPT = { N: 16384, r: 8, p: 1 }
@@ -17,4 +18,36 @@ export function verifyPassword(password: string, stored: string): boolean {
   if (expected.length !== KEYLEN) return false
   const actual = scryptSync(password, Buffer.from(saltHex, 'hex'), KEYLEN, SCRYPT)
   return timingSafeEqual(actual, expected)
+}
+
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days, rolling
+const EXTEND_AFTER_MS = 24 * 60 * 60 * 1000
+
+function tokenHash(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+export async function createSession(): Promise<{ token: string; expiresAt: Date }> {
+  const token = randomBytes(32).toString('hex')
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
+  await prisma.session.create({ data: { tokenHash: tokenHash(token), expiresAt } })
+  // opportunistic cleanup of expired rows
+  await prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } })
+  return { token, expiresAt }
+}
+
+export async function validateSession(token: string): Promise<boolean> {
+  const session = await prisma.session.findUnique({ where: { tokenHash: tokenHash(token) } })
+  if (!session || session.expiresAt.getTime() < Date.now()) return false
+  if (Date.now() - session.lastExtendedAt.getTime() > EXTEND_AFTER_MS) {
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { expiresAt: new Date(Date.now() + SESSION_TTL_MS), lastExtendedAt: new Date() },
+    })
+  }
+  return true
+}
+
+export async function destroySession(token: string): Promise<void> {
+  await prisma.session.deleteMany({ where: { tokenHash: tokenHash(token) } })
 }
