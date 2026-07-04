@@ -11,6 +11,7 @@ import systemRoutes from './routes/system.js'
 import configRoutes from './routes/config.js'
 import emailRoutes from './routes/email.js'
 import calendarFeedRoutes from './routes/calendar-feed.js'
+import authRoutes, { authGuard } from './routes/auth.js'
 import { startScheduler } from './services/scheduler.js'
 
 const isDev = process.env.NODE_ENV !== 'production'
@@ -37,9 +38,11 @@ app.use(pinoLogger({
   },
 }))
 app.use('/api/*', cors())
+app.use('/api/*', authGuard)
 
 // API routes
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }))
+app.route('/api/auth', authRoutes)
 app.route('/api/banks', bankRoutes)
 app.route('/api/bank-accounts', bankAccountRoutes)
 app.route('/api/bills', billRoutes)
