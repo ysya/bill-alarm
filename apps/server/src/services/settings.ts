@@ -34,6 +34,10 @@ export const KEYS = {
 
   // App
   APP_BASE_URL: 'app_base_url',
+
+  // Auth (single user)
+  AUTH_USERNAME: 'auth_username',
+  AUTH_PASSWORD_HASH: 'auth_password_hash',  // scrypt, "saltHex:hashHex"
 } as const
 
 const ENV_MAP: Record<string, string> = {

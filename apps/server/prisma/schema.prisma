@@ -114,3 +114,13 @@ model ScanLog {
   @@index([startedAt])
   @@map("scan_logs")
 }
+
+model Session {
+  id             String   @id @default(uuid(7))
+  tokenHash      String   @unique
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+  lastExtendedAt DateTime @default(now())
+
+  @@map("sessions")
+}
