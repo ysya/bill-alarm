@@ -10,7 +10,9 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "tsx src/db/seed.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@bill-alarm/shared": "workspace:*",
@@ -22,10 +24,10 @@
     "adm-zip": "^0.5.16",
     "dotenv": "^17.3.1",
     "hono": "^4.12.9",
+    "hono-pino": "^0.10.3",
     "ics": "^3.8.1",
     "imapflow": "^1.0.190",
     "mailparser": "^3.7.4",
-    "hono-pino": "^0.10.3",
     "mupdf": "^1.27.0",
     "node-cron": "^4.2.1",
     "pino": "^10.3.1",
@@ -42,6 +44,7 @@
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
-    "vite": "^8.0.3"
+    "vite": "^8.0.3",
+    "vitest": "^4.1.9"
   }
 }

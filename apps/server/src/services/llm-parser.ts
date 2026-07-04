@@ -215,7 +215,7 @@ async function invokeOllama(prompt: string, schema?: object): Promise<string> {
 }
 
 // --- Response parsing ---
-function parseBillResponse(raw: string): ParsedBill | null {
+export function parseBillResponse(raw: string): ParsedBill | null {
   if (!raw) return null
   try {
     const data = JSON.parse(raw)
@@ -228,9 +228,13 @@ function parseBillResponse(raw: string): ParsedBill | null {
     if (typeof data.billingPeriod === 'string' && /^\d{4}-\d{2}$/.test(data.billingPeriod)) {
       billingPeriod = data.billingPeriod
     } else {
-      const d = new Date(dueDate)
-      d.setMonth(d.getMonth() - 1)
-      billingPeriod = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      // Derive previous month from due date; month arithmetic only, so
+      // end-of-month dates (29-31) can't overflow into the wrong month.
+      const y = dueDate.getUTCFullYear()
+      const m = dueDate.getUTCMonth() // 0-based; equals previous month in 1-based terms
+      const prevYear = m === 0 ? y - 1 : y
+      const prevMonth = m === 0 ? 12 : m
+      billingPeriod = `${prevYear}-${String(prevMonth).padStart(2, '0')}`
     }
 
     return {
