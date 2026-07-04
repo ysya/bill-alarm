@@ -66,11 +66,21 @@ session 有效 30 天（活躍使用自動續期）。
 
 進入容器刪除密碼設定後，重新造訪網站會回到 `/setup`：
 
+主要方式（data 目錄是 bind mount，直接在主機上操作）：
+
+    sqlite3 data/bill-alarm.db "DELETE FROM settings WHERE key IN ('auth_username','auth_password_hash'); DELETE FROM sessions;"
+
+主機沒有 sqlite3 時，可在容器內執行（透過 Prisma adapter 的相依解析）：
+
     docker compose exec bill-alarm node -e "
-      const db = require('better-sqlite3')('/app/data/bill-alarm.db');
+      const { createRequire } = require('node:module');
+      const req = createRequire(require.resolve('@prisma/adapter-better-sqlite3'));
+      const db = req('better-sqlite3')('/app/data/bill-alarm.db');
       db.prepare(\"DELETE FROM settings WHERE key IN ('auth_username','auth_password_hash')\").run();
       db.prepare('DELETE FROM sessions').run();
     "
+
+刪除後重新造訪網站即會回到 /setup，無需重啟容器。
 
 ## Development
 
