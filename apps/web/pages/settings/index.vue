@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarCheck, LogOut, Mail, Send, Sparkles, User } from 'lucide-vue-next'
+import { CalendarCheck, KeyRound, LogOut, Mail, Send, Sparkles, User } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -18,6 +18,7 @@ const editingRule = ref<NotificationRule | null>(null)
 const deleteDialogOpen = ref(false)
 const deletingRule = ref<NotificationRule | null>(null)
 const submitting = ref(false)
+const changePwOpen = ref(false)
 
 const { logout } = useAuth()
 
@@ -157,14 +158,20 @@ onMounted(fetchData)
             <p class="truncate text-xs text-muted-foreground">{{ me?.username ?? '—' }}</p>
           </div>
         </div>
-        <Button
-          variant="outline" size="sm"
-          class="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          @click="logout"
-        >
-          <LogOut class="mr-2 h-4 w-4" />
-          登出
-        </Button>
+        <div class="flex items-center gap-2">
+          <Button variant="outline" size="sm" @click="changePwOpen = true">
+            <KeyRound class="mr-2 h-4 w-4" />
+            修改密碼
+          </Button>
+          <Button
+            variant="outline" size="sm"
+            class="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            @click="logout"
+          >
+            <LogOut class="mr-2 h-4 w-4" />
+            登出
+          </Button>
+        </div>
       </Card>
     </section>
 
@@ -175,6 +182,8 @@ onMounted(fetchData)
       @update:open="dialogOpen = $event"
       @saved="fetchData"
     />
+
+    <SettingsChangePasswordDialog v-model:open="changePwOpen" />
 
     <!-- Delete Confirmation -->
     <Dialog v-model:open="deleteDialogOpen">

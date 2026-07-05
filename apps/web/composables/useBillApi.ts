@@ -23,6 +23,8 @@ export function useBillApi() {
 
     markAsPaid: (id: string, paidAt?: string) => patch<any>(`/bills/${id}/pay`, paidAt ? { paidAt } : {}),
 
+    unpay: (id: string) => post<any>(`/bills/${id}/unpay`),
+
     reparse: (id: string) => post<any>(`/bills/${id}/reparse`),
 
     remove: (id: string) => del<any>(`/bills/${id}`),

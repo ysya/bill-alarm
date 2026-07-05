@@ -54,7 +54,7 @@
               </div>
               <div class="flex gap-1 shrink-0">
                 <Button
-                  v-if="!editing"
+                  v-if="!editing && isAdmin"
                   size="sm"
                   variant="outline"
                   @click="startEdit"
@@ -62,7 +62,7 @@
                   <Pencil class="h-3.5 w-3.5" />
                   編輯
                 </Button>
-                <template v-else>
+                <template v-else-if="editing">
                   <Button size="sm" variant="outline" :disabled="actionLoading" @click="cancelEdit">
                     取消
                   </Button>
@@ -73,7 +73,7 @@
                   </Button>
                 </template>
                 <Button
-                  v-if="!editing"
+                  v-if="!editing && isAdmin"
                   size="icon-sm"
                   variant="ghost"
                   class="text-destructive hover:text-destructive hover:bg-destructive/10"
@@ -197,7 +197,7 @@
               恢復為待繳
             </Button>
             <Button
-              v-if="bill.pdfPath"
+              v-if="bill.pdfPath && isAdmin"
               variant="outline"
               :disabled="actionLoading || reparsing || editing"
               @click="handleReparse"
@@ -403,7 +403,8 @@ function daysUntil(date: string | Date): number {
 const route = useRoute()
 const billId = computed(() => route.params.id as string)
 
-const { getById, markAsPaid, update, reparse, remove } = useBillApi()
+const { getById, markAsPaid, update, reparse, remove, unpay } = useBillApi()
+const { isAdmin } = useAuth()
 
 const bill = ref<BillDetailDTO | null>(null)
 const loading = ref(true)
@@ -562,7 +563,7 @@ async function handleConfirmPaid() {
 async function handleRevertToPending() {
   actionLoading.value = true
   try {
-    await update(billId.value, { status: BillStatus.PENDING })
+    await unpay(billId.value)
     toast.success('帳單已恢復為待繳')
     await fetchBill()
   } catch {
