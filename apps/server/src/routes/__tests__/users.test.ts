@@ -91,4 +91,12 @@ describe('users management', () => {
       method: 'DELETE', headers: { Cookie: adminCookie },
     })).status).toBe(404)
   })
+
+  it('concurrent duplicate creates: one 201, one 409 (never 500)', async () => {
+    const [a, b] = await Promise.all([
+      createUser('race-user', 'race-password-1'),
+      createUser('race-user', 'race-password-1'),
+    ])
+    expect([a.status, b.status].sort()).toEqual([201, 409])
+  })
 })
