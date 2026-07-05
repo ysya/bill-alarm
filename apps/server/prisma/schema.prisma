@@ -115,9 +115,24 @@ model ScanLog {
   @@map("scan_logs")
 }
 
+model User {
+  id             String    @id @default(uuid(7))
+  username       String    @unique
+  passwordHash   String
+  role           String    @default("member") // 'admin' | 'member'
+  telegramChatId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  sessions       Session[]
+
+  @@map("users")
+}
+
 model Session {
   id             String   @id @default(uuid(7))
   tokenHash      String   @unique
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt      DateTime @default(now())
   expiresAt      DateTime
   lastExtendedAt DateTime @default(now())

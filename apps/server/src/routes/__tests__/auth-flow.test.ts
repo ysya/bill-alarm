@@ -85,7 +85,7 @@ describe('auth flow', () => {
 
     const me = await app.request('/api/auth/me', { headers: { Cookie: cookie } })
     expect(me.status).toBe(200)
-    expect(await me.json()).toEqual({ username: 'frank' })
+    expect(await me.json()).toEqual({ username: 'frank', role: 'admin', telegramBound: false })
 
     await app.request('/api/auth/logout', { method: 'POST', headers: { Cookie: cookie } })
     expect((await app.request('/api/auth/me', { headers: { Cookie: cookie } })).status).toBe(401)
@@ -143,5 +143,83 @@ describe('auth flow', () => {
       body: JSON.stringify(CREDS),
     })
     expect(login.status).toBe(200)
+  })
+
+  it('lockout is per-username: locking frank does not lock other usernames', async () => {
+    for (let i = 0; i < 5; i++) {
+      await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'frank', password: 'nope-nope-nope' }),
+      })
+    }
+    const frankLocked = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(CREDS),
+    })
+    expect(frankLocked.status).toBe(429)
+
+    // an unrelated (even nonexistent) username is not locked out
+    const other = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'someone-else', password: 'whatever-123' }),
+    })
+    expect(other.status).toBe(401)
+  })
+
+  it('change password: wrong current is 400, success revokes other sessions but keeps current', async () => {
+    const login1 = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(CREDS),
+    })
+    const cookie1 = cookieOf(login1)
+    const login2 = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(CREDS),
+    })
+    const cookie2 = cookieOf(login2)
+
+    const wrong = await app.request('/api/auth/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie1 },
+      body: JSON.stringify({ currentPassword: 'not-the-password', newPassword: 'new-secret-pw-1' }),
+    })
+    expect(wrong.status).toBe(400)
+
+    const ok = await app.request('/api/auth/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie1 },
+      body: JSON.stringify({ currentPassword: CREDS.password, newPassword: 'new-secret-pw-1' }),
+    })
+    expect(ok.status).toBe(200)
+
+    // current session survives, the other one is revoked
+    expect((await app.request('/api/auth/me', { headers: { Cookie: cookie1 } })).status).toBe(200)
+    expect((await app.request('/api/auth/me', { headers: { Cookie: cookie2 } })).status).toBe(401)
+
+    // new password works, old one does not
+    const oldPw = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(CREDS),
+    })
+    expect(oldPw.status).toBe(401)
+    const newPw = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'frank', password: 'new-secret-pw-1' }),
+    })
+    expect(newPw.status).toBe(200)
+    // restore for later tests (file runs sequentially): change back
+    const restore = await app.request('/api/auth/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookieOf(newPw) },
+      body: JSON.stringify({ currentPassword: 'new-secret-pw-1', newPassword: CREDS.password }),
+    })
+    expect(restore.status).toBe(200)
   })
 })
