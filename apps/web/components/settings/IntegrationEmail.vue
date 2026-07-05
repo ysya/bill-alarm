@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { CheckCircle, ChevronDown, ChevronUp, Clock, ExternalLink, HelpCircle, Mail, XCircle } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { SCAN_INTERVAL_OPTIONS } from '~/types/settings'
 
 const props = defineProps<{
@@ -156,19 +157,6 @@ async function handleScanIntervalChange(value: string) {
 
 <template>
   <div class="space-y-3">
-    <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <Mail class="h-5 w-5" />
-        <h3 class="text-sm font-semibold">信箱（Gmail IMAP）</h3>
-        <span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <span class="inline-block h-2 w-2 rounded-full shrink-0"
-            :class="email.isConnected ? 'bg-green-500' : email.hasCredentials ? 'bg-yellow-500' : 'bg-red-500'" />
-          {{ email.isConnected ? '已連線' : email.hasCredentials ? '已設定，連線失敗' : '未設定' }}
-        </span>
-      </div>
-    </div>
-
     <!-- State 1: No credentials yet — show form -->
     <template v-if="!email.hasCredentials || showCredentials">
       <div class="flex items-start justify-between gap-2">
@@ -207,29 +195,34 @@ async function handleScanIntervalChange(value: string) {
           <span>{{ testResult.message }}</span>
         </div>
 
-        <div class="flex gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <Button type="button" size="sm" variant="outline" :disabled="testing" @click="handleTestConnection">
             {{ testing ? '測試中...' : '測試連線' }}
           </Button>
-          <Button type="submit" size="sm" :disabled="submitting">
-            {{ submitting ? '儲存中...' : '儲存' }}
-          </Button>
-          <Button v-if="email.hasCredentials" type="button" size="sm" variant="ghost" @click="showCredentials = false">
-            取消
-          </Button>
+          <div class="flex gap-2">
+            <Button v-if="email.hasCredentials" type="button" size="sm" variant="ghost" @click="showCredentials = false">
+              取消
+            </Button>
+            <Button type="submit" size="sm" :disabled="submitting">
+              {{ submitting ? '儲存中...' : '儲存' }}
+            </Button>
+          </div>
         </div>
       </form>
     </template>
 
     <!-- State 2: Configured -->
     <template v-else>
-      <div class="flex items-center gap-2 text-sm">
-        <CheckCircle v-if="email.isConnected" class="h-4 w-4 text-green-500" />
-        <XCircle v-else class="h-4 w-4 text-red-500" />
-        <span>{{ email.isConnected ? '信箱已連線' : '信箱連線失敗' }}</span>
+      <Alert v-if="!email.isConnected" variant="destructive">
+        <XCircle class="h-4 w-4" />
+        <AlertTitle>信箱連線失敗</AlertTitle>
+        <AlertDescription>{{ email.message }}</AlertDescription>
+      </Alert>
+      <div v-else class="flex items-center gap-2 text-sm">
+        <CheckCircle class="h-4 w-4 text-green-500" />
+        <span>信箱已連線</span>
         <span v-if="email.user" class="text-muted-foreground">({{ email.user }})</span>
       </div>
-      <p v-if="!email.isConnected" class="text-xs text-red-500">{{ email.message }}</p>
 
       <!-- Settings rows -->
       <div class="space-y-2">
@@ -283,7 +276,7 @@ async function handleScanIntervalChange(value: string) {
       </div>
 
       <!-- Action buttons -->
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" :disabled="scanInProgress || !email.isConnected" @click="handleScan">
           <Mail class="mr-2 h-4 w-4" />
           <template v-if="scanProgress.active">
