@@ -57,18 +57,20 @@ Open `http://localhost:3100` and configure Gmail OAuth, Telegram bot, and banks 
 docker compose pull && docker compose up -d
 ```
 
+升級到支援多使用者的版本後，所有使用者會登出一次；若 `TELEGRAM_CHAT_ID` 環境變數曾用於設定 Telegram 通知（而非透過網頁 UI），該環境變數不再被讀取，請升級後透過 設定 → 帳號 → Telegram 通知 重新綁定。
+
 ## 認證
 
-單一使用者帳密登入。首次啟動造訪任一頁面會導向 `/setup` 建立帳號密碼，
+多使用者帳密登入。首次啟動造訪任一頁面會導向 `/setup` 建立帳號密碼，
 session 有效 30 天（活躍使用自動續期）。
 
-### 忘記密碼
+### 重置帳號
 
-進入容器刪除密碼設定後，重新造訪網站會回到 `/setup`：
+刪除所有用戶帳號和登入 session 後，重新造訪網站會回到首次啟動的 `/setup` 頁面。此操作會移除所有家庭帳號，但帳單、銀行、設定保持不變。
 
 主要方式（data 目錄是 bind mount，直接在主機上操作）：
 
-    sqlite3 data/bill-alarm.db "DELETE FROM settings WHERE key IN ('auth_username','auth_password_hash'); DELETE FROM sessions;"
+    sqlite3 data/bill-alarm.db "DELETE FROM users; DELETE FROM sessions;"
 
 主機沒有 sqlite3 時，可在容器內執行（透過 Prisma adapter 的相依解析）：
 
@@ -76,11 +78,11 @@ session 有效 30 天（活躍使用自動續期）。
       const { createRequire } = require('node:module');
       const req = createRequire(require.resolve('@prisma/adapter-better-sqlite3'));
       const db = req('better-sqlite3')('/app/data/bill-alarm.db');
-      db.prepare(\"DELETE FROM settings WHERE key IN ('auth_username','auth_password_hash')\").run();
+      db.prepare('DELETE FROM users').run();
       db.prepare('DELETE FROM sessions').run();
     "
 
-刪除後重新造訪網站即會回到 /setup，無需重啟容器。
+執行後重新造訪網站即會回到 /setup，無需重啟容器。
 
 ## Development
 
