@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Loader2, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { LLM_PROVIDER_LABELS } from '~/types/settings'
 
 type Provider = 'none' | 'gemini' | 'openai' | 'ollama'
 
@@ -99,6 +101,15 @@ async function handleTest() {
     <p class="text-xs text-muted-foreground">
       帳單 PDF 自動解析（LLM 優先），或於帳單詳情頁按「AI 重新解析」。關閉則完全不載入模型。
     </p>
+
+    <Alert
+      v-if="(llm.provider === 'gemini' && !gemini.isConfigured) || (llm.provider === 'openai' && !openai.isConfigured)"
+      variant="destructive"
+    >
+      <XCircle class="h-4 w-4" />
+      <AlertTitle>缺少 API Key</AlertTitle>
+      <AlertDescription>已選擇 {{ LLM_PROVIDER_LABELS[llm.provider] }} 但尚未設定 API Key，帳單解析將無法運作。</AlertDescription>
+    </Alert>
 
     <!-- Provider selector -->
     <div class="space-y-2">

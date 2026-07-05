@@ -101,12 +101,12 @@ async function handleTest() {
           <Label for="tChatIdEdit">Chat ID *</Label>
           <Input id="tChatIdEdit" v-model="form.chatId" placeholder="輸入新的 Chat ID" />
         </div>
-        <div class="flex gap-2">
-          <Button type="submit" size="sm" :disabled="submitting">
-            {{ submitting ? '儲存中...' : '儲存' }}
-          </Button>
+        <div class="flex justify-end gap-2">
           <Button type="button" size="sm" variant="ghost" @click="showEditForm = false; form = { botToken: '', chatId: '' }">
             取消
+          </Button>
+          <Button type="submit" size="sm" :disabled="submitting">
+            {{ submitting ? '儲存中...' : '儲存' }}
           </Button>
         </div>
       </form>
