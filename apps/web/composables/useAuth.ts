@@ -1,7 +1,20 @@
+export interface MeInfo {
+  username: string
+  role: 'admin' | 'member'
+  telegramBound: boolean
+}
+
 export const useAuthed = () => useState<boolean | null>('authed', () => null)
+export const useMe = () => useState<MeInfo | null>('me', () => null)
 
 export function useAuth() {
   const authed = useAuthed()
+  const me = useMe()
+  const isAdmin = computed(() => me.value?.role === 'admin')
+
+  async function fetchMe(): Promise<void> {
+    me.value = await $fetch<MeInfo>('/api/auth/me').catch(() => null)
+  }
 
   async function logout(): Promise<void> {
     try {
@@ -12,9 +25,10 @@ export function useAuth() {
     }
     finally {
       authed.value = false
+      me.value = null
       await navigateTo('/login')
     }
   }
 
-  return { authed, logout }
+  return { authed, me, isAdmin, fetchMe, logout }
 }

@@ -48,10 +48,19 @@ onMounted(() => {
 const route = useRoute()
 const bareShell = computed(() => route.path === '/login' || route.path === '/setup')
 
+const { me, fetchMe } = useAuth()
+onMounted(() => {
+  if (!bareShell.value) fetchMe()
+})
+// After login/setup the route flips bare→shell; fetch the profile then.
+watch(bareShell, (bare) => {
+  if (!bare && !me.value) fetchMe()
+})
+
 const navItems = useNavItems()
 
 const pageTitle = computed(() => {
-  const hit = navItems.find(item =>
+  const hit = navItems.value.find(item =>
     item.to === '/' ? route.path === '/' : route.path.startsWith(item.to),
   )
   return hit?.label ?? 'Bill Alarm'

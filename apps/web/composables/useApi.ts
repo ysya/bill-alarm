@@ -1,3 +1,5 @@
+import { toast } from 'vue-sonner'
+
 export function useApi() {
   const baseURL = '/api'
 
@@ -6,6 +8,9 @@ export function useApi() {
       if (response.status === 401) {
         useAuthed().value = false
         navigateTo('/login')
+      }
+      else if (response.status === 403) {
+        toast.error('權限不足')
       }
     },
   })
