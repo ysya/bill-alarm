@@ -30,6 +30,11 @@ async function confirmBind() {
     await fetchMe()
     toast.success('Telegram 綁定成功', { description: '之後的帳單通知會發送給你。' })
   } catch (e: any) {
+    // 410 = code expired and consumed server-side; drop the stale link so the
+    // card returns to the initial state where a fresh link can be generated.
+    if (e?.status === 410 || e?.statusCode === 410) {
+      deepLink.value = null
+    }
     toast.error('綁定尚未完成', { description: e?.data?.error ?? String(e) })
   } finally {
     working.value = false

@@ -116,7 +116,11 @@ onMounted(fetchUsers)
           <span class="text-xs text-muted-foreground">{{ user.telegramBound ? 'TG 已綁定' : 'TG 未綁定' }}</span>
         </div>
         <div class="flex items-center gap-1">
-          <Button size="icon-sm" variant="ghost" title="重設密碼" @click="resetTarget = user; resetPassword = ''">
+          <Button
+            v-if="user.role !== 'admin'"
+            size="icon-sm" variant="ghost" title="重設密碼"
+            @click="resetTarget = user; resetPassword = ''"
+          >
             <KeyRound class="h-4 w-4" />
           </Button>
           <Button
