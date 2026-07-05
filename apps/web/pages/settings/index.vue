@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarCheck, KeyRound, LogOut, Mail, Send, Sparkles, User } from 'lucide-vue-next'
+import { CalendarCheck, Copy, KeyRound, LogOut, Mail, Send, Sparkles, User } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -20,12 +20,7 @@ const deletingRule = ref<NotificationRule | null>(null)
 const submitting = ref(false)
 const changePwOpen = ref(false)
 
-const { logout } = useAuth()
-
-const me = ref<{ username: string } | null>(null)
-onMounted(async () => {
-  me.value = await $fetch<{ username: string }>('/api/auth/me').catch(() => null)
-})
+const { me, isAdmin, logout } = useAuth()
 
 type CardStatus = 'ok' | 'unset' | 'error'
 
@@ -95,7 +90,26 @@ async function handleDelete() {
   }
 }
 
-onMounted(fetchData)
+const adminDataFetched = ref(false)
+watch(isAdmin, (admin) => {
+  if (admin && !adminDataFetched.value) {
+    adminDataFetched.value = true
+    fetchData()
+  }
+}, { immediate: true })
+
+const memberFeedUrl = ref<string | null>(null)
+watch(me, (m) => {
+  if (m?.role === 'member' && !memberFeedUrl.value) {
+    settingsApi.getCalendarFeed().then((f) => { memberFeedUrl.value = f.feedUrl }).catch(() => {})
+  }
+}, { immediate: true })
+
+async function copyFeedUrl() {
+  if (!memberFeedUrl.value) return
+  await navigator.clipboard.writeText(memberFeedUrl.value)
+  toast.success('已複製訂閱連結')
+}
 </script>
 
 <template>
@@ -107,7 +121,7 @@ onMounted(fetchData)
     </div>
 
     <!-- 服務整合 -->
-    <section class="space-y-3">
+    <section v-if="isAdmin" class="space-y-3">
       <h2 class="text-sm font-medium text-muted-foreground">服務整合</h2>
 
       <div v-if="loading" class="space-y-3">
@@ -137,7 +151,7 @@ onMounted(fetchData)
     </section>
 
     <!-- 通知規則（SettingsNotificationRuleList 自帶標題列，不重複區標題） -->
-    <section>
+    <section v-if="isAdmin">
       <SettingsNotificationRuleList
         :rules="rules" :loading="loading"
         @create="openCreateDialog" @edit="openEditDialog" @delete="openDeleteDialog" @refresh="fetchData"
@@ -150,12 +164,33 @@ onMounted(fetchData)
         <User class="h-4 w-4" />帳號
       </h2>
       <InstallPrompt variant="row" />
+
+      <SettingsTelegramBindCard />
+
+      <!-- Member-only calendar subscription (admins have it in 服務整合) -->
+      <Card v-if="!isAdmin && memberFeedUrl" class="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div class="flex min-w-0 items-center gap-3">
+          <CalendarCheck class="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div class="min-w-0">
+            <p class="text-sm font-medium">行事曆訂閱</p>
+            <p class="truncate text-xs text-muted-foreground">{{ memberFeedUrl }}</p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" @click="copyFeedUrl">
+          <Copy class="mr-2 h-4 w-4" />
+          複製連結
+        </Button>
+      </Card>
+
       <Card class="flex flex-wrap items-center justify-between gap-3 p-4">
         <div class="flex min-w-0 items-center gap-3">
           <User class="h-5 w-5 shrink-0 text-muted-foreground" />
           <div class="min-w-0">
             <p class="text-sm font-medium">登入身分</p>
-            <p class="truncate text-xs text-muted-foreground">{{ me?.username ?? '—' }}</p>
+            <p class="truncate text-xs text-muted-foreground">
+              {{ me?.username ?? '—' }}
+              <span v-if="me"> · {{ me.role === 'admin' ? '管理者' : '成員' }}</span>
+            </p>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -173,10 +208,13 @@ onMounted(fetchData)
           </Button>
         </div>
       </Card>
+
+      <SettingsUsersCard v-if="isAdmin" />
     </section>
 
     <!-- Dialogs（原內容不動） -->
     <SettingsNotificationRuleDialog
+      v-if="isAdmin"
       :open="dialogOpen"
       :editing-rule="editingRule"
       @update:open="dialogOpen = $event"

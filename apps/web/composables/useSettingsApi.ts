@@ -104,7 +104,7 @@ export function useSettingsApi() {
         host: string
         port: number
       }
-      telegram: { isConfigured: boolean; chatId: string | null }
+      telegram: { isConfigured: boolean; boundCount: number }
       calendar: { feedUrl: string; feedPath: string; token: string }
       scan: { interval: number; rangeDays: number; queryExtra: string }
       gemini: { isConfigured: boolean }
@@ -119,8 +119,13 @@ export function useSettingsApi() {
       }
     }>('/config/status'),
 
-    saveTelegramConfig: (botToken: string, chatId: string) =>
-      post<{ success: boolean }>('/config/telegram', { botToken, chatId }),
+    saveTelegramConfig: (botToken: string) =>
+      post<{ success: boolean }>('/config/telegram', { botToken }),
+
+    // Telegram per-user binding
+    telegramBind: () => post<{ deepLink: string; expiresAt: string }>('/auth/telegram/bind'),
+    telegramConfirm: () => post<{ ok: boolean }>('/auth/telegram/confirm'),
+    telegramUnbind: () => del<{ ok: boolean }>('/auth/telegram'),
 
     saveScanInterval: (interval: number) =>
       post<{ success: boolean }>('/config/scan', { interval }),

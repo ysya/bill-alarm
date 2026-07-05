@@ -3,27 +3,27 @@ import { CheckCircle, ChevronDown, ChevronUp, Send } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
 const props = defineProps<{
-  status: { isConfigured: boolean; chatId: string | null }
+  status: { isConfigured: boolean; boundCount: number }
 }>()
 
 const emit = defineEmits<{ refresh: [] }>()
 
 const settingsApi = useSettingsApi()
-const form = ref({ botToken: '', chatId: '' })
+const botToken = ref('')
 const submitting = ref(false)
 const testingTelegram = ref(false)
 const showEditForm = ref(false)
 
 async function handleSave() {
-  if (!form.value.botToken || !form.value.chatId) {
-    toast.error('請填寫 Bot Token 和 Chat ID')
+  if (!botToken.value) {
+    toast.error('請填寫 Bot Token')
     return
   }
   submitting.value = true
   try {
-    await settingsApi.saveTelegramConfig(form.value.botToken, form.value.chatId)
+    await settingsApi.saveTelegramConfig(botToken.value)
     toast.success('Telegram 設定已儲存')
-    form.value = { botToken: '', chatId: '' }
+    botToken.value = ''
     showEditForm.value = false
     emit('refresh')
   } catch (error) {
@@ -39,8 +39,8 @@ async function handleTest() {
     const result = await settingsApi.testTelegram()
     if (result.success) toast.success('測試訊息已發送', { description: '請檢查你的 Telegram。' })
     else toast.error('測試訊息發送失敗')
-  } catch (error) {
-    toast.error('發送失敗', { description: String(error) })
+  } catch (e: any) {
+    toast.error('發送失敗', { description: e?.data?.error ?? String(e) })
   } finally {
     testingTelegram.value = false
   }
@@ -49,19 +49,15 @@ async function handleTest() {
 
 <template>
   <div class="space-y-3">
-    <!-- Not configured: show setup form directly -->
+    <!-- Not configured: token form -->
     <template v-if="!status.isConfigured">
       <p class="text-xs text-muted-foreground">
-        透過 @BotFather 建立 Bot 取得 Token，再用 @userinfobot 取得你的 Chat ID。
+        透過 @BotFather 建立 Bot 取得 Token。每位成員在「帳號」區各自綁定接收通知。
       </p>
       <form class="space-y-3" @submit.prevent="handleSave">
         <div class="space-y-2">
           <Label for="tBotToken">Bot Token *</Label>
-          <Input id="tBotToken" v-model="form.botToken" type="password" placeholder="123456:ABC-DEF..." />
-        </div>
-        <div class="space-y-2">
-          <Label for="tChatId">Chat ID *</Label>
-          <Input id="tChatId" v-model="form.chatId" placeholder="123456789" />
+          <Input id="tBotToken" v-model="botToken" type="password" placeholder="123456:ABC-DEF..." />
         </div>
         <div class="flex justify-end">
           <Button type="submit" size="sm" :disabled="submitting">
@@ -71,38 +67,33 @@ async function handleTest() {
       </form>
     </template>
 
-    <!-- Configured: show status + actions -->
+    <!-- Configured -->
     <template v-else>
       <div class="flex items-center gap-2 text-sm">
         <CheckCircle class="h-4 w-4 text-green-500" />
-        <span>Chat ID: {{ status.chatId }}</span>
+        <span>Bot 已設定 · 已綁定 {{ status.boundCount }} 人</span>
       </div>
+      <p v-if="status.boundCount === 0" class="text-xs text-yellow-500">
+        目前沒有任何成員綁定，通知不會發送。請到「帳號」區綁定 Telegram。
+      </p>
       <div class="flex gap-2">
         <Button size="sm" variant="outline" :disabled="testingTelegram" @click="handleTest">
           <Send class="mr-2 h-4 w-4" />
-          {{ testingTelegram ? '發送中...' : '發送測試' }}
+          {{ testingTelegram ? '發送中...' : '發送測試（給自己）' }}
         </Button>
         <Button size="sm" variant="ghost" @click="showEditForm = !showEditForm">
-          修改設定
+          修改 Token
           <component :is="showEditForm ? ChevronUp : ChevronDown" class="ml-1 h-4 w-4" />
         </Button>
       </div>
 
-      <!-- Expandable edit form -->
       <form v-if="showEditForm" class="space-y-3 rounded-lg border border-border p-3" @submit.prevent="handleSave">
-        <p class="text-xs text-muted-foreground">
-          透過 @BotFather 建立 Bot 取得 Token，再用 @userinfobot 取得你的 Chat ID。
-        </p>
         <div class="space-y-2">
           <Label for="tBotTokenEdit">Bot Token *</Label>
-          <Input id="tBotTokenEdit" v-model="form.botToken" type="password" placeholder="輸入新的 Bot Token" />
-        </div>
-        <div class="space-y-2">
-          <Label for="tChatIdEdit">Chat ID *</Label>
-          <Input id="tChatIdEdit" v-model="form.chatId" placeholder="輸入新的 Chat ID" />
+          <Input id="tBotTokenEdit" v-model="botToken" type="password" placeholder="輸入新的 Bot Token" />
         </div>
         <div class="flex justify-end gap-2">
-          <Button type="button" size="sm" variant="ghost" @click="showEditForm = false; form = { botToken: '', chatId: '' }">
+          <Button type="button" size="sm" variant="ghost" @click="showEditForm = false; botToken = ''">
             取消
           </Button>
           <Button type="submit" size="sm" :disabled="submitting">

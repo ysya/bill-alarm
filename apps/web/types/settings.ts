@@ -17,7 +17,7 @@ export interface ConfigStatus {
     host: string
     port: number
   }
-  telegram: { isConfigured: boolean; chatId: string | null }
+  telegram: { isConfigured: boolean; boundCount: number }
   calendar: { feedUrl: string; feedPath: string; token: string }
   scan: { interval: number; rangeDays: number; queryExtra: string }
   gemini: { isConfigured: boolean }
