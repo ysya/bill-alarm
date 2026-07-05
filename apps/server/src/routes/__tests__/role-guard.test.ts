@@ -64,6 +64,17 @@ describe('member allow-list', () => {
     const after = await prisma.bill.findUnique({ where: { id: bill.id } })
     expect(after!.status).toBe('pending')
     expect(after!.paidAt).toBeNull()
+
+    // pin the per-bill GETs the allow-list must keep open
+    const detail = await app.request(`/api/bills/${bill.id}`, { headers: { Cookie: cookie } })
+    expect(detail.status).toBe(200)
+    const pdf = await app.request(`/api/bills/${bill.id}/pdf`, { headers: { Cookie: cookie } })
+    expect(pdf.status).not.toBe(403) // 404 is fine (no pdf on this bill); 403 would mean the allow-list regressed
+
+    const unpayMissing = await app.request('/api/bills/nonexistent-id/unpay', {
+      method: 'POST', headers: { Cookie: cookie },
+    })
+    expect(unpayMissing.status).toBe(404)
   })
 
   it('member gets 403 on admin-only routes', async () => {

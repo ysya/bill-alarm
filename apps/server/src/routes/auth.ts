@@ -70,7 +70,12 @@ function setSessionCookie(c: Context, token: string, expiresAt: Date): void {
 
 // Members are daily-operations only. Everything not matched here requires admin.
 const MEMBER_ALLOW: Array<{ method: string; pattern: RegExp }> = [
-  { method: 'GET', pattern: /^\/api\/bills(\/|$)/ }, // list / summary / :id / :id/pdf
+  // Exact enumeration on purpose: a future GET under /api/bills must be
+  // consciously added here before members can reach it.
+  { method: 'GET', pattern: /^\/api\/bills\/?$/ },
+  { method: 'GET', pattern: /^\/api\/bills\/summary$/ },
+  { method: 'GET', pattern: /^\/api\/bills\/[^/]+$/ },
+  { method: 'GET', pattern: /^\/api\/bills\/[^/]+\/pdf$/ },
   { method: 'PATCH', pattern: /^\/api\/bills\/[^/]+\/pay$/ },
   { method: 'POST', pattern: /^\/api\/bills\/[^/]+\/unpay$/ },
   { method: 'GET', pattern: /^\/api\/banks$/ },
