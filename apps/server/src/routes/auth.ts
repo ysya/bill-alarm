@@ -43,7 +43,15 @@ function isLocked(username: string): boolean {
 }
 
 function recordFailure(username: string): void {
-  if (failures.size > MAX_TRACKED) failures.clear()
+  if (failures.size >= MAX_TRACKED) {
+    // Evict only entries that are not actively locked — a username spray must
+    // never flush someone's live lockout. If every entry is a live lock the
+    // map can temporarily exceed the cap; those entries expire within LOCK_MS.
+    const now = Date.now()
+    for (const [key, value] of failures) {
+      if (now >= value.lockedUntil) failures.delete(key)
+    }
+  }
   const entry = failures.get(username) ?? { count: 0, lockedUntil: 0 }
   entry.count += 1
   if (entry.count >= MAX_FAILURES) {

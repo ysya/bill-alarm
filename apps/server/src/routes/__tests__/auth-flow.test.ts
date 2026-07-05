@@ -222,4 +222,30 @@ describe('auth flow', () => {
     })
     expect(restore.status).toBe(200)
   })
+
+  it('username spray cannot flush an active lockout', async () => {
+    // Lock frank
+    for (let i = 0; i < 5; i++) {
+      await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'frank', password: 'nope-nope-nope' }),
+      })
+    }
+    // Spray more than MAX_TRACKED distinct usernames to force eviction pressure
+    for (let i = 0; i <= 1000; i++) {
+      await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: `spray-${i}`, password: 'whatever-xx' }),
+      })
+    }
+    // frank must still be locked
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(CREDS),
+    })
+    expect(res.status).toBe(429)
+  })
 })
