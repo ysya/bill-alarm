@@ -4,17 +4,15 @@ import { z } from 'zod'
 import { getSetting, setSetting, KEYS, getOrCreateIcsFeedToken } from '@/services/settings.js'
 import { verifyConnection } from '@/services/email/index.js'
 import { LlmProvider } from '@/services/llm-parser.js'
+import prisma from '@/prisma.js'
 
 const app = new Hono()
 
-// Save Telegram config
+// Save Telegram config (bot token only; chat ids live on users now)
 app.post('/telegram', zValidator('json', z.object({
   botToken: z.string().min(1),
-  chatId: z.string().min(1),
 })), async (c) => {
-  const { botToken, chatId } = c.req.valid('json')
-  await setSetting(KEYS.TELEGRAM_BOT_TOKEN, botToken)
-  await setSetting(KEYS.TELEGRAM_CHAT_ID, chatId)
+  await setSetting(KEYS.TELEGRAM_BOT_TOKEN, c.req.valid('json').botToken)
   return c.json({ success: true })
 })
 
@@ -60,23 +58,18 @@ app.post('/llm', zValidator('json', z.object({
   return c.json({ success: true })
 })
 
-function mask(value: string): string {
-  if (value.length <= 8) return '****'
-  return value.substring(0, 4) + '****' + value.substring(value.length - 4)
-}
-
 // Aggregated config status
 app.get('/status', async (c) => {
   const [
     imapHost, imapPort, imapUser, imapPassword,
-    botToken, chatId,
+    botToken,
     geminiKey, openaiKey,
     scanInterval, scanRangeDays, scanQueryExtra,
     llmProvider, geminiModel, openaiModel, openaiBaseUrl, ollamaBaseUrl, ollamaModel,
     appBaseUrl,
   ] = await Promise.all([
     getSetting(KEYS.IMAP_HOST), getSetting(KEYS.IMAP_PORT), getSetting(KEYS.IMAP_USER), getSetting(KEYS.IMAP_PASSWORD),
-    getSetting(KEYS.TELEGRAM_BOT_TOKEN), getSetting(KEYS.TELEGRAM_CHAT_ID),
+    getSetting(KEYS.TELEGRAM_BOT_TOKEN),
     getSetting(KEYS.GEMINI_API_KEY), getSetting(KEYS.OPENAI_API_KEY),
     getSetting(KEYS.SCAN_INTERVAL), getSetting(KEYS.SCAN_RANGE_DAYS), getSetting(KEYS.SCAN_GMAIL_QUERY_EXTRA),
     getSetting(KEYS.LLM_PROVIDER), getSetting(KEYS.GEMINI_MODEL), getSetting(KEYS.OPENAI_MODEL),
@@ -101,8 +94,8 @@ app.get('/status', async (c) => {
       port: imapPort ? parseInt(imapPort) : 993,
     },
     telegram: {
-      isConfigured: !!(botToken && chatId),
-      chatId: chatId ? mask(chatId) : null,
+      isConfigured: !!botToken,
+      boundCount: await prisma.user.count({ where: { telegramChatId: { not: null } } }),
     },
     calendar: {
       feedUrl: appBaseUrl ? `${appBaseUrl}${feedPath}` : feedPath,

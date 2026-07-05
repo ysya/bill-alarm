@@ -15,6 +15,7 @@ import { decryptPdf } from '@/services/pdf-parser.js'
 import { runScanWithLog, appendScanLogErrors, type ScanError } from '@/services/email-parser.js'
 import { processNewBill } from '@/services/notification.js'
 import { sendTestMessage, isConfigured as telegramConfigured } from '@/services/telegram.js'
+import { getAuthUser } from './auth.js'
 import { listParserCodes } from '@/parsers/registry.js'
 import { parseWithTemplateDetailed } from '@/parsers/template.js'
 import type { TemplateParserConfig } from '@bill-alarm/shared/template-parser'
@@ -133,9 +134,12 @@ app.get('/scan-logs', async (c) => {
   })
 })
 
-// Telegram test
+// Telegram test — sends to the requester's own binding
 app.post('/telegram/test', async (c) => {
-  const success = await sendTestMessage()
+  const authUser = getAuthUser(c)
+  const user = await prisma.user.findUnique({ where: { id: authUser.id } })
+  if (!user?.telegramChatId) return c.json({ error: '請先在帳號區綁定 Telegram' }, 400)
+  const success = await sendTestMessage(user.telegramChatId)
   return c.json({ success })
 })
 
