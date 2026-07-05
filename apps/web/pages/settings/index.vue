@@ -148,6 +148,7 @@ onMounted(fetchData)
       <h2 class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
         <User class="h-4 w-4" />帳號
       </h2>
+      <InstallPrompt variant="row" />
       <Card class="flex flex-wrap items-center justify-between gap-3 p-4">
         <div class="flex min-w-0 items-center gap-3">
           <User class="h-5 w-5 shrink-0 text-muted-foreground" />
