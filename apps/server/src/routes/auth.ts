@@ -68,6 +68,26 @@ function setSessionCookie(c: Context, token: string, expiresAt: Date): void {
   })
 }
 
+// Members are daily-operations only. Everything not matched here requires admin.
+const MEMBER_ALLOW: Array<{ method: string; pattern: RegExp }> = [
+  { method: 'GET', pattern: /^\/api\/bills(\/|$)/ }, // list / summary / :id / :id/pdf
+  { method: 'PATCH', pattern: /^\/api\/bills\/[^/]+\/pay$/ },
+  { method: 'POST', pattern: /^\/api\/bills\/[^/]+\/unpay$/ },
+  { method: 'GET', pattern: /^\/api\/banks$/ },
+  { method: 'POST', pattern: /^\/api\/email\/scan$/ },
+  { method: 'GET', pattern: /^\/api\/scan-events$/ },
+  { method: 'GET', pattern: /^\/api\/scan-logs$/ },
+  { method: 'GET', pattern: /^\/api\/integrations\/status$/ },
+  { method: 'GET', pattern: /^\/api\/email\/status$/ },
+  { method: 'GET', pattern: /^\/api\/calendar\/info$/ },
+  { method: 'GET', pattern: /^\/api\/auth\/me$/ },
+  { method: 'POST', pattern: /^\/api\/auth\/logout$/ },
+  { method: 'POST', pattern: /^\/api\/auth\/password$/ },
+  { method: 'POST', pattern: /^\/api\/auth\/telegram\/bind$/ },
+  { method: 'POST', pattern: /^\/api\/auth\/telegram\/confirm$/ },
+  { method: 'DELETE', pattern: /^\/api\/auth\/telegram$/ },
+]
+
 const app = new Hono()
 
 // Unauthenticated surface: cap request bodies so oversized payloads can't
@@ -160,6 +180,11 @@ export async function authGuard(c: Context, next: () => Promise<void>): Promise<
     const session = await validateSession(token)
     if (session.valid && session.user) {
       c.set('authUser', session.user)
+      if (session.user.role !== 'admin') {
+        const method = c.req.method
+        const allowed = MEMBER_ALLOW.some(r => r.method === method && r.pattern.test(path))
+        if (!allowed) return c.json({ error: 'forbidden' }, 403)
+      }
       if (session.extended && session.expiresAt) {
         setSessionCookie(c, token, session.expiresAt)
       }

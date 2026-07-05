@@ -145,6 +145,17 @@ app.patch('/:id/pay', zValidator('json', z.object({
   return c.json(bill)
 })
 
+// Revert a paid bill back to pending (undo for "標記已繳"; member-allowed)
+app.post('/:id/unpay', async (c) => {
+  const existing = await prisma.bill.findUnique({ where: { id: c.req.param('id') } })
+  if (!existing) return c.json({ error: 'Bill not found' }, 404)
+  const bill = await prisma.bill.update({
+    where: { id: existing.id },
+    data: { status: BillStatus.PENDING, paidAt: null },
+  })
+  return c.json(bill)
+})
+
 // Re-parse a bill with LLM (user clicks "AI 重新解析")
 app.post('/:id/reparse', async (c) => {
   const bill = await prisma.bill.findUnique({
