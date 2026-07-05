@@ -114,4 +114,34 @@ describe('auth flow', () => {
     expect(expiresMatch).not.toBeNull()
     expect(new Date(expiresMatch![1]).getTime()).toBeGreaterThan(Date.now())
   })
+
+  it('rejects oversized auth request bodies with 413', async () => {
+    // Real HTTP clients always send Content-Length; set it explicitly because
+    // app.request() string bodies don't, which would fall into the stream path
+    // where zValidator masks the limit error as a 400 instead.
+    const body = JSON.stringify({ username: 'frank', password: 'x'.repeat(20 * 1024) })
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': String(body.length) },
+      body,
+    })
+    expect(res.status).toBe(413)
+  })
+
+  it('rejects over-length credentials with 400 without counting toward lockout', async () => {
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'frank', password: 'x'.repeat(300) }),
+    })
+    expect(res.status).toBe(400)
+
+    // Validation failures must not consume lockout budget: correct login still works.
+    const login = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(CREDS),
+    })
+    expect(login.status).toBe(200)
+  })
 })

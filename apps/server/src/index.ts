@@ -18,6 +18,12 @@ const isDev = process.env.NODE_ENV !== 'production'
 
 export const logger = pino({
   level: process.env.LOG_LEVEL || (isDev ? 'debug' : 'info'),
+  // Session cookies must never reach log output, even if the pretty-print
+  // ignore list changes — redact at the pino level.
+  redact: {
+    paths: ['req.headers.cookie', 'req.headers.authorization', 'res.headers["set-cookie"]'],
+    censor: '[redacted]',
+  },
   transport: {
     target: 'pino-pretty',
     options: {

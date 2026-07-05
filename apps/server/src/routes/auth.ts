@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
+import { bodyLimit } from 'hono/body-limit'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import type { Context } from 'hono'
 import { getSetting, setSetting, KEYS } from '@/services/settings.js'
@@ -9,8 +10,8 @@ import { hashPassword, verifyPassword, createSession, validateSession, destroySe
 export const SESSION_COOKIE = 'ba_session'
 
 const credsSchema = z.object({
-  username: z.string().min(1),
-  password: z.string().min(8, '密碼至少 8 碼'),
+  username: z.string().min(1).max(64),
+  password: z.string().min(8, '密碼至少 8 碼').max(256),
 })
 
 // Single-user app: one global lockout counter is enough (and can't be
@@ -38,6 +39,13 @@ function setSessionCookie(c: Context, token: string, expiresAt: Date): void {
 
 const app = new Hono()
 
+// Unauthenticated surface: cap request bodies so oversized payloads can't
+// reach JSON parsing or scrypt.
+app.use(bodyLimit({
+  maxSize: 16 * 1024,
+  onError: (c) => c.json({ error: '請求內容過大' }, 413),
+}))
+
 app.get('/status', async (c) => {
   const initialized = !!(await getSetting(KEYS.AUTH_PASSWORD_HASH))
   return c.json({ initialized })
@@ -55,7 +63,7 @@ app.post('/setup', zValidator('json', credsSchema), async (c) => {
   return c.json({ ok: true })
 })
 
-app.post('/login', zValidator('json', credsSchema.extend({ password: z.string().min(1) })), async (c) => {
+app.post('/login', zValidator('json', credsSchema.extend({ password: z.string().min(1).max(256) })), async (c) => {
   if (Date.now() < lockedUntil) {
     return c.json({ error: '嘗試次數過多，請 15 分鐘後再試' }, 429)
   }
