@@ -9,6 +9,8 @@ import {
   hashPassword, verifyPassword, createSession, validateSession,
   destroySession, destroyUserSessions, type AuthUser,
 } from '@/services/auth.js'
+import { getBotUsername } from '@/services/telegram.js'
+import { createBindCode, confirmBind } from '@/services/telegram-binding.js'
 
 export const SESSION_COOKIE = 'ba_session'
 
@@ -174,6 +176,30 @@ app.post('/password', zValidator('json', z.object({
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(newPassword) } })
   const token = getCookie(c, SESSION_COOKIE)
   await destroyUserSessions(user.id, token)
+  return c.json({ ok: true })
+})
+
+app.post('/telegram/bind', async (c) => {
+  const authUser = getAuthUser(c)
+  const botUsername = await getBotUsername()
+  if (!botUsername) return c.json({ error: '尚未設定 Telegram Bot Token' }, 400)
+  const { code, expiresAt } = createBindCode(authUser.id)
+  return c.json({ deepLink: `https://t.me/${botUsername}?start=${code}`, expiresAt })
+})
+
+app.post('/telegram/confirm', async (c) => {
+  const authUser = getAuthUser(c)
+  const result = await confirmBind(authUser.id)
+  if (result.status === 'ok') return c.json({ ok: true })
+  if (result.status === 'not_seen') {
+    return c.json({ error: '還沒收到 Start，請先在 Telegram 按 Start 再試' }, 404)
+  }
+  return c.json({ error: '綁定連結已過期，請重新產生' }, 410)
+})
+
+app.delete('/telegram', async (c) => {
+  const authUser = getAuthUser(c)
+  await prisma.user.update({ where: { id: authUser.id }, data: { telegramChatId: null } })
   return c.json({ ok: true })
 })
 
