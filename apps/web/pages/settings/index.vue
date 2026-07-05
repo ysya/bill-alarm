@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, CalendarCheck, LogOut, Mail, Send, Sparkles, User } from 'lucide-vue-next'
+import { CalendarCheck, LogOut, Mail, Send, Sparkles, User } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -135,11 +135,8 @@ onMounted(fetchData)
       </template>
     </section>
 
-    <!-- 通知規則 -->
-    <section class="space-y-3">
-      <h2 class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-        <Bell class="h-4 w-4" />通知規則
-      </h2>
+    <!-- 通知規則（SettingsNotificationRuleList 自帶標題列，不重複區標題） -->
+    <section>
       <SettingsNotificationRuleList
         :rules="rules" :loading="loading"
         @create="openCreateDialog" @edit="openEditDialog" @delete="openDeleteDialog" @refresh="fetchData"
