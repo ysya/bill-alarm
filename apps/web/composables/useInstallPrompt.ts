@@ -32,7 +32,12 @@ export function useInstallPrompt() {
 
   async function triggerInstall(): Promise<void> {
     if (canNativeInstall.value && pwa?.install) {
-      await pwa.install()
+      try {
+        await pwa.install()
+      }
+      catch (e) {
+        console.error('[pwa] install prompt failed:', e)
+      }
       return
     }
     iosGuideOpen.value = true

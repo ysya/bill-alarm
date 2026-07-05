@@ -45,6 +45,9 @@ export default defineNuxtConfig({
     devOptions: {
       enabled: true,
     },
+    client: {
+      installPrompt: true,
+    },
     manifest: {
       name: 'Bill Alarm',
       short_name: 'Bill Alarm',

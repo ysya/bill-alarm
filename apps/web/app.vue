@@ -27,7 +27,7 @@
       </div>
 
       <!-- Main Content -->
-      <main class="flex-1 p-4 pb-24 md:p-8 md:pb-8 mt-14 md:mt-0 min-h-screen">
+      <main class="flex-1 p-4 pb-24 md:p-8 md:pb-8 mt-header-safe md:mt-0 min-h-screen">
         <NuxtPage />
       </main>
       <BottomNav />
