@@ -14,7 +14,6 @@ export const KEYS = {
 
   // Telegram
   TELEGRAM_BOT_TOKEN: 'telegram_bot_token',
-  TELEGRAM_CHAT_ID: 'telegram_chat_id',
 
   // LLM
   GEMINI_API_KEY: 'gemini_api_key',
@@ -34,10 +33,6 @@ export const KEYS = {
 
   // App
   APP_BASE_URL: 'app_base_url',
-
-  // Auth (single user)
-  AUTH_USERNAME: 'auth_username',
-  AUTH_PASSWORD_HASH: 'auth_password_hash',  // scrypt, "saltHex:hashHex"
 } as const
 
 const ENV_MAP: Record<string, string> = {

@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import prisma from '@/prisma.js'
 import { BANK_PRESETS } from '@bill-alarm/shared/constants'
+import { getAuthUser } from './auth.js'
 
 const app = new Hono()
 
@@ -17,6 +18,11 @@ app.get('/', async (c) => {
     include: { _count: { select: { bills: true } }, bankAccount: true },
     orderBy: { name: 'asc' },
   })
+  // Members can read banks (allow-listed) but pdfPassword/parserConfig are
+  // credential-grade / internal-only — only the admin banks-edit form needs them.
+  if (getAuthUser(c).role !== 'admin') {
+    return c.json(banks.map(({ pdfPassword, parserConfig, ...rest }) => rest))
+  }
   return c.json(banks)
 })
 

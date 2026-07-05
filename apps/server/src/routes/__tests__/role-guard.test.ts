@@ -46,7 +46,7 @@ describe('member allow-list', () => {
   it('member can mark paid and unpay', async () => {
     const cookie = await loginAs('kid', 'member-password')
     const bank = await prisma.bank.create({
-      data: { name: 'T-Bank', emailSenderPattern: 'x@x', emailSubjectPattern: 'bill' },
+      data: { name: 'T-Bank', emailSenderPattern: 'x@x', emailSubjectPattern: 'bill', pdfPassword: 'A123456789' },
     })
     const bill = await prisma.bill.create({
       data: { bankId: bank.id, billingPeriod: '2026-06', amount: 100, dueDate: new Date() },
@@ -68,6 +68,30 @@ describe('member allow-list', () => {
     // pin the per-bill GETs the allow-list must keep open
     const detail = await app.request(`/api/bills/${bill.id}`, { headers: { Cookie: cookie } })
     expect(detail.status).toBe(200)
+    const detailBody = await detail.json()
+    expect(detailBody.bank).not.toHaveProperty('pdfPassword')
+
+    // member bill list must not leak the embedded bank's pdfPassword either
+    const list = await app.request('/api/bills', { headers: { Cookie: cookie } })
+    expect(list.status).toBe(200)
+    const listBody = await list.json()
+    const listedBill = listBody.data.find((b: { id: string }) => b.id === bill.id)
+    expect(listedBill.bank).not.toHaveProperty('pdfPassword')
+
+    // member GET /api/banks must strip pdfPassword; admin keeps it
+    const memberBanks = await app.request('/api/banks', { headers: { Cookie: cookie } })
+    expect(memberBanks.status).toBe(200)
+    const memberBanksBody = await memberBanks.json()
+    const memberBankEntry = memberBanksBody.find((b: { id: string }) => b.id === bank.id)
+    expect(memberBankEntry).not.toHaveProperty('pdfPassword')
+
+    const adminCookie = await loginAs('boss', 'admin-password')
+    const adminBanks = await app.request('/api/banks', { headers: { Cookie: adminCookie } })
+    expect(adminBanks.status).toBe(200)
+    const adminBanksBody = await adminBanks.json()
+    const adminBankEntry = adminBanksBody.find((b: { id: string }) => b.id === bank.id)
+    expect(adminBankEntry.pdfPassword).toBe('A123456789')
+
     const pdf = await app.request(`/api/bills/${bill.id}/pdf`, { headers: { Cookie: cookie } })
     expect(pdf.status).not.toBe(403) // 404 is fine (no pdf on this bill); 403 would mean the allow-list regressed
 

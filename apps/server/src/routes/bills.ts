@@ -95,7 +95,7 @@ app.get('/', async (c) => {
   const [bills, total] = await Promise.all([
     prisma.bill.findMany({
       where,
-      include: { bank: { select: { name: true } } },
+      include: { bank: { select: { id: true, name: true, code: true, autoDebit: true, isActive: true } } },
       orderBy: [{ billingPeriod: 'desc' }, { dueDate: 'desc' }],
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -111,7 +111,7 @@ app.get('/:id', async (c) => {
   const bill = await prisma.bill.findUnique({
     where: { id: c.req.param('id') },
     include: {
-      bank: true,
+      bank: { select: { id: true, name: true, code: true, autoDebit: true, isActive: true } },
       notifications: { orderBy: { sentAt: 'desc' } },
     },
   })
