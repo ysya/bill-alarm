@@ -44,3 +44,10 @@ export const SCAN_INTERVAL_OPTIONS = [
 export const CHANNEL_OPTIONS = [
   { value: 'telegram', label: 'Telegram' },
 ] as const
+
+export const LLM_PROVIDER_LABELS: Record<'none' | 'gemini' | 'openai' | 'ollama', string> = {
+  none: '未啟用',
+  gemini: 'Gemini (雲端)',
+  openai: 'OpenAI (雲端)',
+  ollama: 'Ollama (本地)',
+}

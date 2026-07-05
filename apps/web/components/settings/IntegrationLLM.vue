@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Sparkles, Loader2, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-vue-next'
+import { Loader2, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
 type Provider = 'none' | 'gemini' | 'openai' | 'ollama'
@@ -46,13 +46,6 @@ watch(() => props.llm, (v) => {
   form.value.ollamaBaseUrl = v.ollamaBaseUrl || form.value.ollamaBaseUrl
   form.value.ollamaModel = v.ollamaModel || form.value.ollamaModel
 })
-
-const PROVIDER_LABELS: Record<Provider, string> = {
-  none: '未啟用',
-  gemini: 'Gemini (雲端)',
-  openai: 'OpenAI (雲端)',
-  ollama: 'Ollama (本地)',
-}
 
 async function handleSave() {
   saving.value = true
@@ -103,19 +96,6 @@ async function handleTest() {
 
 <template>
   <div class="space-y-3">
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <Sparkles class="h-5 w-5" />
-        <h3 class="text-sm font-semibold">AI 解析器</h3>
-        <span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <span
-            class="inline-block h-2 w-2 rounded-full shrink-0"
-            :class="llm.provider === 'none' ? 'bg-muted-foreground' : 'bg-green-500'"
-          />
-          {{ PROVIDER_LABELS[llm.provider] }}
-        </span>
-      </div>
-    </div>
     <p class="text-xs text-muted-foreground">
       帳單 PDF 自動解析（LLM 優先），或於帳單詳情頁按「AI 重新解析」。關閉則完全不載入模型。
     </p>
@@ -239,10 +219,7 @@ async function handleTest() {
     </div>
 
     <!-- Actions -->
-    <div class="flex gap-2">
-      <Button size="sm" :disabled="saving" @click="handleSave">
-        {{ saving ? '儲存中...' : '儲存' }}
-      </Button>
+    <div class="flex flex-wrap items-center justify-between gap-2">
       <Button
         v-if="form.provider !== 'none'"
         size="sm"
@@ -252,6 +229,10 @@ async function handleTest() {
       >
         <Loader2 v-if="testing" class="h-3.5 w-3.5 animate-spin" />
         測試連線
+      </Button>
+      <span v-else />
+      <Button size="sm" :disabled="saving" @click="handleSave">
+        {{ saving ? '儲存中...' : '儲存' }}
       </Button>
     </div>
 
