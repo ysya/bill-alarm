@@ -49,18 +49,6 @@ async function handleTest() {
 
 <template>
   <div class="space-y-3">
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <Send class="h-5 w-5" />
-        <h3 class="text-sm font-semibold">Telegram</h3>
-        <span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <span class="inline-block h-2 w-2 rounded-full shrink-0"
-            :class="status.isConfigured ? 'bg-green-500' : 'bg-red-500'" />
-          {{ status.isConfigured ? '已設定' : '未設定' }}
-        </span>
-      </div>
-    </div>
-
     <!-- Not configured: show setup form directly -->
     <template v-if="!status.isConfigured">
       <p class="text-xs text-muted-foreground">
@@ -75,9 +63,11 @@ async function handleTest() {
           <Label for="tChatId">Chat ID *</Label>
           <Input id="tChatId" v-model="form.chatId" placeholder="123456789" />
         </div>
-        <Button type="submit" size="sm" :disabled="submitting">
-          {{ submitting ? '儲存中...' : '儲存' }}
-        </Button>
+        <div class="flex justify-end">
+          <Button type="submit" size="sm" :disabled="submitting">
+            {{ submitting ? '儲存中...' : '儲存' }}
+          </Button>
+        </div>
       </form>
     </template>
 

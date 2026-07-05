@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarCheck, Copy, ExternalLink, HelpCircle, RefreshCw } from 'lucide-vue-next'
+import { Copy, ExternalLink, HelpCircle, RefreshCw } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
 const props = defineProps<{
@@ -46,27 +46,22 @@ async function handleRotate() {
 
 <template>
   <div class="space-y-3">
-    <div class="flex items-center justify-between gap-2">
-      <div class="flex items-center gap-2">
-        <CalendarCheck class="h-5 w-5" />
-        <h3 class="text-sm font-semibold">行事曆訂閱（ICS Feed）</h3>
-      </div>
-      <Button type="button" size="sm" variant="ghost" @click="helpDialogOpen = true">
+    <div class="flex items-start justify-between gap-2">
+      <p class="text-xs text-muted-foreground">
+        把帳單到期日當作日曆事件單向訂閱，不需 OAuth、不需授權。複製下方網址貼到任何支援
+        iCalendar 的應用程式（Google Calendar、Apple 行事曆、Outlook 等）。
+      </p>
+      <Button type="button" size="sm" variant="ghost" class="shrink-0" @click="helpDialogOpen = true">
         <HelpCircle class="mr-1 h-4 w-4" />
         如何訂閱？
       </Button>
     </div>
 
-    <p class="text-xs text-muted-foreground">
-      把帳單到期日當作日曆事件單向訂閱，不需 OAuth、不需授權。複製下方網址貼到任何支援
-      iCalendar 的應用程式（Google Calendar、Apple 行事曆、Outlook 等）。
-    </p>
-
     <div class="space-y-2">
       <Label>訂閱網址</Label>
-      <div class="flex gap-2">
+      <div class="flex flex-col gap-2 sm:flex-row">
         <Input :model-value="fullUrl" readonly class="font-mono text-xs" />
-        <Button size="sm" variant="outline" @click="handleCopy">
+        <Button size="sm" variant="outline" class="sm:shrink-0" @click="handleCopy">
           <Copy class="mr-2 h-4 w-4" />
           複製
         </Button>
