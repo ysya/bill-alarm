@@ -31,7 +31,7 @@ export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
   }
 
   const r = await sendNewBillAlert(bill, bank)
-  await logNotification(bill.id, null, 'telegram', '新帳單通知', r.ok, r.failed > 0 ? r.errors.join('; ') : undefined)
+  await logNotification(bill.id, null, 'telegram', '新帳單通知', r.ok, r.errors.length > 0 ? r.errors.join('; ') : undefined)
   logger.info({ bank: bank.name, sent: r.sent, failed: r.failed }, 'Telegram notification sent')
 }
 
@@ -79,7 +79,7 @@ export async function processReminderRules(): Promise<void> {
         try {
           if (channel === 'telegram') {
             const r = await sendBillReminder(bill, bill.bank)
-            await logNotification(bill.id, rule.id, channel, rule.name, r.ok, r.failed > 0 ? r.errors.join('; ') : undefined)
+            await logNotification(bill.id, rule.id, channel, rule.name, r.ok, r.errors.length > 0 ? r.errors.join('; ') : undefined)
           }
         } catch (e) {
           await logNotification(bill.id, rule.id, channel, rule.name, false, (e as Error).message)
@@ -113,7 +113,7 @@ export async function processOverdueBills(): Promise<void> {
     logger.warn({ bank: bill.bank.name, amount: bill.amount, dueDate: bill.dueDate }, 'Bill marked overdue')
 
     const r = await sendOverdueWarning(bill, bill.bank)
-    await logNotification(bill.id, null, 'telegram', '逾期警告', r.ok, r.failed > 0 ? r.errors.join('; ') : undefined)
+    await logNotification(bill.id, null, 'telegram', '逾期警告', r.ok, r.errors.length > 0 ? r.errors.join('; ') : undefined)
   }
 }
 

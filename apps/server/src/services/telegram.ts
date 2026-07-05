@@ -9,17 +9,23 @@ async function getBotToken(): Promise<string | null> {
 }
 
 async function sendRaw(token: string, chatId: string, text: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(`${API_BASE}${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-  })
-  if (!res.ok) {
-    const err = await res.text()
-    console.error(`[telegram] Send to ${chatId} failed: ${err}`)
+  try {
+    const res = await fetch(`${API_BASE}${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      console.error(`[telegram] Send to ${chatId} failed: ${err}`)
+      return { ok: false, error: err }
+    }
+    return { ok: true }
+  } catch (e) {
+    const err = (e as Error).message ?? String(e)
+    console.error(`[telegram] Send to ${chatId} threw: ${err}`)
     return { ok: false, error: err }
   }
-  return { ok: true }
 }
 
 export async function sendMessage(chatId: string, text: string): Promise<boolean> {
@@ -80,11 +86,15 @@ export async function getBotUsername(): Promise<string | null> {
   if (cachedBotUsername) return cachedBotUsername
   const token = await getBotToken()
   if (!token) return null
-  const res = await fetch(`${API_BASE}${token}/getMe`)
-  if (!res.ok) return null
-  const body = await res.json() as { ok: boolean; result?: { username?: string } }
-  cachedBotUsername = body.ok ? body.result?.username ?? null : null
-  return cachedBotUsername
+  try {
+    const res = await fetch(`${API_BASE}${token}/getMe`)
+    if (!res.ok) return null
+    const body = await res.json() as { ok: boolean; result?: { username?: string } }
+    cachedBotUsername = body.ok ? body.result?.username ?? null : null
+    return cachedBotUsername
+  } catch {
+    return null
+  }
 }
 
 export interface TgUpdate {
@@ -96,14 +106,18 @@ export interface TgUpdate {
 export async function getUpdates(): Promise<TgUpdate[]> {
   const token = await getBotToken()
   if (!token) return []
-  const res = await fetch(`${API_BASE}${token}/getUpdates`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ timeout: 0, allowed_updates: ['message'] }),
-  })
-  if (!res.ok) return []
-  const body = await res.json() as { ok: boolean; result?: TgUpdate[] }
-  return body.ok ? body.result ?? [] : []
+  try {
+    const res = await fetch(`${API_BASE}${token}/getUpdates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timeout: 0, allowed_updates: ['message'] }),
+    })
+    if (!res.ok) return []
+    const body = await res.json() as { ok: boolean; result?: TgUpdate[] }
+    return body.ok ? body.result ?? [] : []
+  } catch {
+    return []
+  }
 }
 
 function formatAmount(amount: number): string {
