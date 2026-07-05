@@ -1,6 +1,10 @@
 <script setup lang="ts">
+import { Bell, CalendarCheck, LogOut, Mail, Send, Sparkles, User } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import type { NotificationRule, ConfigStatus } from '~/types/settings'
+import { LLM_PROVIDER_LABELS } from '~/types/settings'
 
 const settingsApi = useSettingsApi()
 
@@ -15,9 +19,34 @@ const deleteDialogOpen = ref(false)
 const deletingRule = ref<NotificationRule | null>(null)
 const submitting = ref(false)
 
-const activeTab = ref('integrations')
-
 const { logout } = useAuth()
+
+const me = ref<{ username: string } | null>(null)
+onMounted(async () => {
+  me.value = await $fetch<{ username: string }>('/api/auth/me').catch(() => null)
+})
+
+type CardStatus = 'ok' | 'unset' | 'error'
+
+const emailStatus = computed<{ status: CardStatus, text: string }>(() => {
+  const e = configStatus.value?.email
+  if (!e?.hasCredentials) return { status: 'unset', text: '未設定' }
+  return e.isConnected ? { status: 'ok', text: '已連線' } : { status: 'error', text: '連線失敗' }
+})
+
+const telegramStatus = computed<{ status: CardStatus, text: string }>(() =>
+  configStatus.value?.telegram.isConfigured
+    ? { status: 'ok', text: '已設定' }
+    : { status: 'unset', text: '未設定' },
+)
+
+const llmStatus = computed<{ status: CardStatus, text: string }>(() => {
+  const s = configStatus.value
+  if (!s || s.llm.provider === 'none') return { status: 'unset', text: '未啟用' }
+  if (s.llm.provider === 'gemini' && !s.gemini.isConfigured) return { status: 'error', text: '缺 API Key' }
+  if (s.llm.provider === 'openai' && !s.openai.isConfigured) return { status: 'error', text: '缺 API Key' }
+  return { status: 'ok', text: LLM_PROVIDER_LABELS[s.llm.provider] }
+})
 
 async function fetchData() {
   loading.value = true
@@ -69,70 +98,79 @@ onMounted(fetchData)
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-8">
     <!-- Page Header -->
     <div>
       <h1 class="text-2xl font-bold tracking-tight">設定</h1>
-      <p class="text-sm text-muted-foreground mt-1">管理通知規則與第三方服務整合。</p>
+      <p class="text-sm text-muted-foreground mt-1">管理服務整合、通知規則與帳號。</p>
     </div>
 
-    <!-- Tabs -->
-    <Tabs v-model="activeTab" class="space-y-6">
-      <TabsList>
-        <TabsTrigger value="integrations">服務整合</TabsTrigger>
-        <TabsTrigger value="notifications">通知規則</TabsTrigger>
-      </TabsList>
+    <!-- 服務整合 -->
+    <section class="space-y-3">
+      <h2 class="text-sm font-medium text-muted-foreground">服務整合</h2>
 
-      <!-- Tab: Integrations -->
-      <TabsContent value="integrations" class="space-y-6">
-        <!-- Loading -->
-        <div v-if="loading" class="space-y-6">
-          <div v-for="i in 3" :key="i" class="animate-pulse space-y-3">
-            <div class="h-5 w-32 bg-muted rounded" />
-            <div class="h-10 w-full bg-muted rounded" />
+      <div v-if="loading" class="space-y-3">
+        <div v-for="i in 4" :key="i" class="h-12 animate-pulse rounded-xl bg-muted" />
+      </div>
+
+      <template v-else-if="configStatus">
+        <SettingsCard :icon="Mail" title="信箱（Gmail IMAP）" :status="emailStatus.status" :status-text="emailStatus.text">
+          <SettingsIntegrationEmail :email="configStatus.email" :scan="configStatus.scan" @refresh="fetchData" />
+        </SettingsCard>
+
+        <SettingsCard :icon="CalendarCheck" title="行事曆訂閱（ICS Feed）" status="ok" status-text="已啟用">
+          <SettingsIntegrationCalendar :calendar="configStatus.calendar" @refresh="fetchData" />
+        </SettingsCard>
+
+        <SettingsCard :icon="Send" title="Telegram" :status="telegramStatus.status" :status-text="telegramStatus.text">
+          <SettingsIntegrationTelegram :status="configStatus.telegram" @refresh="fetchData" />
+        </SettingsCard>
+
+        <SettingsCard :icon="Sparkles" title="AI 解析器" :status="llmStatus.status" :status-text="llmStatus.text">
+          <SettingsIntegrationLLM
+            :llm="configStatus.llm" :gemini="configStatus.gemini" :openai="configStatus.openai"
+            @refresh="fetchData"
+          />
+        </SettingsCard>
+      </template>
+    </section>
+
+    <!-- 通知規則 -->
+    <section class="space-y-3">
+      <h2 class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+        <Bell class="h-4 w-4" />通知規則
+      </h2>
+      <SettingsNotificationRuleList
+        :rules="rules" :loading="loading"
+        @create="openCreateDialog" @edit="openEditDialog" @delete="openDeleteDialog" @refresh="fetchData"
+      />
+    </section>
+
+    <!-- 帳號 -->
+    <section class="space-y-3">
+      <h2 class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+        <User class="h-4 w-4" />帳號
+      </h2>
+      <Card class="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div class="flex min-w-0 items-center gap-3">
+          <User class="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div class="min-w-0">
+            <p class="text-sm font-medium">登入身分</p>
+            <p class="truncate text-xs text-muted-foreground">{{ me?.username ?? '—' }}</p>
           </div>
         </div>
+        <Button
+          variant="outline" size="sm"
+          class="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          @click="logout"
+        >
+          <LogOut class="mr-2 h-4 w-4" />
+          登出
+        </Button>
+      </Card>
+    </section>
 
-        <template v-else-if="configStatus">
-          <SettingsIntegrationEmail
-            :email="configStatus.email"
-            :scan="configStatus.scan"
-            @refresh="fetchData"
-          />
-          <Separator />
-          <SettingsIntegrationCalendar
-            :calendar="configStatus.calendar"
-            @refresh="fetchData"
-          />
-          <Separator />
-          <SettingsIntegrationTelegram
-            :status="configStatus.telegram"
-            @refresh="fetchData"
-          />
-          <Separator />
-          <SettingsIntegrationLLM
-            :llm="configStatus.llm"
-            :gemini="configStatus.gemini"
-            :openai="configStatus.openai"
-            @refresh="fetchData"
-          />
-        </template>
-      </TabsContent>
-
-      <!-- Tab: Notification Rules -->
-      <TabsContent value="notifications">
-        <SettingsNotificationRuleList
-          :rules="rules"
-          :loading="loading"
-          @create="openCreateDialog"
-          @edit="openEditDialog"
-          @delete="openDeleteDialog"
-          @refresh="fetchData"
-        />
-      </TabsContent>
-    </Tabs>
-
-    <!-- Dialogs -->
+    <!-- Dialogs（原內容不動） -->
     <SettingsNotificationRuleDialog
       :open="dialogOpen"
       :editing-rule="editingRule"
@@ -153,7 +191,5 @@ onMounted(fetchData)
         </DialogFooter>
       </DialogContent>
     </Dialog>
-
-    <Button variant="destructive" class="mt-6" @click="logout">登出</Button>
   </div>
 </template>

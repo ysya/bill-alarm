@@ -216,7 +216,7 @@ async function handleScanIntervalChange(value: string) {
       <Alert v-if="!email.isConnected" variant="destructive">
         <XCircle class="h-4 w-4" />
         <AlertTitle>信箱連線失敗</AlertTitle>
-        <AlertDescription>{{ email.message }}</AlertDescription>
+        <AlertDescription><span v-if="email.user" class="mr-1">（{{ email.user }}）</span>{{ email.message }}</AlertDescription>
       </Alert>
       <div v-else class="flex items-center gap-2 text-sm">
         <CheckCircle class="h-4 w-4 text-green-500" />
