@@ -1,8 +1,9 @@
 import { Hono } from 'hono'
 import { createEvents, type EventAttributes, type DateArray } from 'ics'
 import prisma from '@/prisma.js'
-import { getSetting, KEYS, getOrCreateIcsFeedToken, rotateIcsFeedToken } from '@/services/settings.js'
+import { getSetting, KEYS } from '@/services/settings.js'
 import { BillStatus } from '@bill-alarm/shared/types'
+import { getAuthUser } from './auth.js'
 
 const app = new Hono()
 
@@ -14,18 +15,27 @@ function dateToArray(d: Date): DateArray {
   return [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()]
 }
 
-// GET /:token.ics — public ICS feed; token gates access
-app.get('/feed/:token{[^/]+\\.ics}', async (c) => {
-  const param = c.req.param('token')
-  const token = param.replace(/\.ics$/, '')
+function newFeedToken(): string {
+  return crypto.randomUUID().replace(/-/g, '')
+}
 
-  const expected = await getSetting(KEYS.ICS_FEED_TOKEN)
-  if (!expected || expected !== token) {
-    return c.text('Not Found', 404)
-  }
+async function feedResponse(c: Parameters<typeof getAuthUser>[0], token: string) {
+  const baseUrl = (await getSetting(KEYS.APP_BASE_URL)) || ''
+  const path = `/api/calendar/feed/${token}.ics`
+  return c.json({ token, feedUrl: baseUrl ? `${baseUrl}${path}` : path, feedPath: path })
+}
+
+// GET /feed/:token.ics — public; the personal token gates access
+app.get('/feed/:token{[^/]+\\.ics}', async (c) => {
+  const token = c.req.param('token').replace(/\.ics$/, '')
+  const owner = await prisma.user.findFirst({ where: { icsFeedToken: token, deletedAt: null } })
+  if (!owner) return c.text('Not Found', 404)
 
   const bills = await prisma.bill.findMany({
-    where: { status: { in: [BillStatus.PENDING, BillStatus.OVERDUE] } },
+    where: {
+      status: { in: [BillStatus.PENDING, BillStatus.OVERDUE] },
+      bank: { userId: owner.id },
+    },
     include: { bank: true },
     orderBy: { dueDate: 'asc' },
   })
@@ -60,23 +70,21 @@ app.get('/feed/:token{[^/]+\\.ics}', async (c) => {
   return c.body(value)
 })
 
-// Authenticated endpoints (under /api/calendar)
 app.get('/info', async (c) => {
-  const token = await getOrCreateIcsFeedToken()
-  const baseUrl = (await getSetting(KEYS.APP_BASE_URL)) || ''
-  const path = `/api/calendar/feed/${token}.ics`
-  return c.json({
-    token,
-    feedUrl: baseUrl ? `${baseUrl}${path}` : path,
-    feedPath: path,
-  })
+  const me = await prisma.user.findUnique({ where: { id: getAuthUser(c).id } })
+  if (!me) return c.json({ error: 'unauthorized' }, 401)
+  let token = me.icsFeedToken
+  if (!token) {
+    token = newFeedToken()
+    await prisma.user.update({ where: { id: me.id }, data: { icsFeedToken: token } })
+  }
+  return feedResponse(c, token)
 })
 
 app.post('/rotate', async (c) => {
-  const token = await rotateIcsFeedToken()
-  const baseUrl = (await getSetting(KEYS.APP_BASE_URL)) || ''
-  const path = `/api/calendar/feed/${token}.ics`
-  return c.json({ token, feedUrl: baseUrl ? `${baseUrl}${path}` : path, feedPath: path })
+  const token = newFeedToken()
+  await prisma.user.update({ where: { id: getAuthUser(c).id }, data: { icsFeedToken: token } })
+  return feedResponse(c, token)
 })
 
 export default app

@@ -21,77 +21,16 @@ beforeEach(async () => {
   await prisma.setting.deleteMany()
 })
 
-describe('broadcast', () => {
-  it('sends to all bound users, deduplicating chat ids', async () => {
+describe('sendToUser', () => {
+  it("sends to the user's own chat id", async () => {
     await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
-    await prisma.user.createMany({
-      data: [
-        { username: 'a', passwordHash: 'x:y', role: 'admin', telegramChatId: '111' },
-        { username: 'b', passwordHash: 'x:y', role: 'member', telegramChatId: '222' },
-        { username: 'c', passwordHash: 'x:y', role: 'member', telegramChatId: '111' }, // same group as a
-        { username: 'd', passwordHash: 'x:y', role: 'member' }, // unbound
-      ],
+    const u = await prisma.user.create({
+      data: { username: 'bound', passwordHash: 'x:y', role: 'member', telegramChatId: '777' },
     })
     fetchMock.mockResolvedValue(okResponse({ ok: true }))
-
-    const result = await telegram.broadcast('hello')
-    expect(result).toEqual({ ok: true, sent: 2, failed: 0, errors: [] })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    const sentChatIds = fetchMock.mock.calls.map(call => JSON.parse(call[1].body).chat_id).sort()
-    expect(sentChatIds).toEqual(['111', '222'])
-  })
-
-  it('partial failure: still ok=true, failure recorded', async () => {
-    await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
-    await prisma.user.createMany({
-      data: [
-        { username: 'a', passwordHash: 'x:y', role: 'admin', telegramChatId: '111' },
-        { username: 'b', passwordHash: 'x:y', role: 'member', telegramChatId: '222' },
-      ],
-    })
-    fetchMock
-      .mockResolvedValueOnce(okResponse({ ok: true }))
-      .mockResolvedValueOnce(new Response('chat not found', { status: 400 }))
-
-    const result = await telegram.broadcast('hello')
-    expect(result.ok).toBe(true)
-    expect(result.sent).toBe(1)
-    expect(result.failed).toBe(1)
-    expect(result.errors).toHaveLength(1)
-  })
-
-  it('no bound users → ok=false, no fetch', async () => {
-    await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
-    const result = await telegram.broadcast('hello')
-    expect(result.ok).toBe(false)
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('a thrown fetch on one recipient does not abort the rest', async () => {
-    await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
-    await prisma.user.createMany({
-      data: [
-        { username: 'a', passwordHash: 'x:y', role: 'admin', telegramChatId: '111' },
-        { username: 'b', passwordHash: 'x:y', role: 'member', telegramChatId: '222' },
-      ],
-    })
-    fetchMock
-      .mockRejectedValueOnce(new TypeError('fetch failed'))
-      .mockResolvedValueOnce(okResponse({ ok: true }))
-
-    const result = await telegram.broadcast('hello')
-    expect(result.ok).toBe(true)
-    expect(result.sent).toBe(1)
-    expect(result.failed).toBe(1)
-    expect(result.errors[0]).toContain('fetch failed')
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-  })
-
-  it('no bot token → ok=false with reason, no fetch', async () => {
-    const result = await telegram.broadcast('hello')
-    expect(result.ok).toBe(false)
-    expect(result.errors).toEqual(['bot token not configured'])
-    expect(fetchMock).not.toHaveBeenCalled()
+    const r = await telegram.sendToUser(u.id, 'hello')
+    expect(r.ok).toBe(true)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).chat_id).toBe('777')
   })
 })
 

@@ -37,40 +37,23 @@ export async function sendMessage(chatId: string, text: string): Promise<boolean
   return (await sendRaw(token, chatId, text)).ok
 }
 
-export interface BroadcastResult {
+export interface SendOutcome {
   ok: boolean
-  sent: number
-  failed: number
-  errors: string[]
+  error?: string
 }
 
-/** Send to every bound user, deduplicating chat ids (two users in one group chat → one message). */
-export async function broadcast(text: string): Promise<BroadcastResult> {
+/** Send to one user's bound chat. Unbound users fail gracefully — callers log, never throw. */
+export async function sendToUser(userId: string, text: string): Promise<SendOutcome> {
   const token = await getBotToken()
   if (!token) {
     console.warn('[telegram] Bot token not configured, skipping message')
-    return { ok: false, sent: 0, failed: 0, errors: ['bot token not configured'] }
+    return { ok: false, error: 'bot token not configured' }
   }
-  const users = await prisma.user.findMany({
-    where: { telegramChatId: { not: null } },
-    select: { telegramChatId: true },
-  })
-  const chatIds = [...new Set(users.map(u => u.telegramChatId!))]
-  if (chatIds.length === 0) {
-    console.warn('[telegram] No bound users, skipping message')
-    return { ok: false, sent: 0, failed: 0, errors: ['no bound users'] }
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { telegramChatId: true } })
+  if (!user?.telegramChatId) {
+    return { ok: false, error: '使用者未綁定 Telegram' }
   }
-  const result: BroadcastResult = { ok: false, sent: 0, failed: 0, errors: [] }
-  for (const chatId of chatIds) {
-    const r = await sendRaw(token, chatId, text)
-    if (r.ok) result.sent += 1
-    else {
-      result.failed += 1
-      result.errors.push(`chat ${chatId}: ${r.error}`)
-    }
-  }
-  result.ok = result.sent > 0
-  return result
+  return sendRaw(token, user.telegramChatId, text)
 }
 
 // --- Bot identity & updates (binding flow) ---
@@ -136,7 +119,7 @@ function daysUntil(date: Date): number {
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export async function sendNewBillAlert(bill: Bill, bank: Bank): Promise<BroadcastResult> {
+export async function sendNewBillAlert(bill: Bill, bank: Bank): Promise<SendOutcome> {
   const days = daysUntil(bill.dueDate)
   const usedLlm = bill.parseSource === 'llm'
 
@@ -162,10 +145,10 @@ export async function sendNewBillAlert(bill: Bill, bank: Bank): Promise<Broadcas
     }
   }
 
-  return broadcast(lines.join('\n'))
+  return sendToUser(bank.userId!, lines.join('\n'))
 }
 
-export async function sendBillReminder(bill: Bill, bank: Bank): Promise<BroadcastResult> {
+export async function sendBillReminder(bill: Bill, bank: Bank): Promise<SendOutcome> {
   const days = daysUntil(bill.dueDate)
   const urgency = days <= 1 ? '🔴 緊急' : days <= 3 ? '🟡 注意' : '🔵 提醒'
 
@@ -178,10 +161,10 @@ export async function sendBillReminder(bill: Bill, bank: Bank): Promise<Broadcas
     days === 0 ? '⚠️ 今天是最後繳費日！' : `⏰ 還有 ${days} 天`,
   ].join('\n')
 
-  return broadcast(text)
+  return sendToUser(bank.userId!, text)
 }
 
-export async function sendOverdueWarning(bill: Bill, bank: Bank): Promise<BroadcastResult> {
+export async function sendOverdueWarning(bill: Bill, bank: Bank): Promise<SendOutcome> {
   const text = [
     '<b>🔴 帳單逾期警告</b>',
     '',
@@ -192,7 +175,7 @@ export async function sendOverdueWarning(bill: Bill, bank: Bank): Promise<Broadc
     '⚠️ 請儘速繳款以避免延遲利息！',
   ].join('\n')
 
-  return broadcast(text)
+  return sendToUser(bank.userId!, text)
 }
 
 export async function sendTestMessage(chatId: string): Promise<boolean> {

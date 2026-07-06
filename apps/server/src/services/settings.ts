@@ -2,9 +2,6 @@ import prisma from '@/prisma.js'
 
 // Setting keys
 export const KEYS = {
-  // Calendar (ICS feed)
-  ICS_FEED_TOKEN: 'ics_feed_token',     // random URL token
-
   // Telegram
   TELEGRAM_BOT_TOKEN: 'telegram_bot_token',
 
@@ -70,21 +67,4 @@ export async function getMultiple(keys: string[]): Promise<Record<string, string
     result[key] = await getSetting(key)
   }
   return result
-}
-
-/** Returns the existing ICS feed token, generating one if absent. */
-export async function getOrCreateIcsFeedToken(): Promise<string> {
-  let token = await getSetting(KEYS.ICS_FEED_TOKEN)
-  if (!token) {
-    token = crypto.randomUUID().replace(/-/g, '')
-    await setSetting(KEYS.ICS_FEED_TOKEN, token)
-  }
-  return token
-}
-
-/** Force-rotates the ICS feed token. */
-export async function rotateIcsFeedToken(): Promise<string> {
-  const token = crypto.randomUUID().replace(/-/g, '')
-  await setSetting(KEYS.ICS_FEED_TOKEN, token)
-  return token
 }

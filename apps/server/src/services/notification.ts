@@ -31,12 +31,14 @@ export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
   }
 
   const r = await sendNewBillAlert(bill, bank)
-  await logNotification(bill.id, null, 'telegram', '新帳單通知', r.ok, r.errors.length > 0 ? r.errors.join('; ') : undefined)
-  logger.info({ bank: bank.name, sent: r.sent, failed: r.failed }, 'Telegram notification sent')
+  await logNotification(bill.id, null, 'telegram', '新帳單通知', r.ok, r.error)
+  logger.info({ bank: bank.name, ok: r.ok }, 'Telegram notification sent')
 }
 
 export async function processReminderRules(): Promise<void> {
-  const rules = await prisma.notificationRule.findMany({ where: { isActive: true } })
+  const rules = await prisma.notificationRule.findMany({
+    where: { isActive: true, user: { deletedAt: null } },
+  })
   logger.info({ ruleCount: rules.length }, 'Processing reminder rules')
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -48,6 +50,7 @@ export async function processReminderRules(): Promise<void> {
     const bills = await prisma.bill.findMany({
       where: {
         status: BillStatus.PENDING,
+        bank: { userId: rule.userId },
         dueDate: {
           gte: targetDate,
           lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000),
@@ -79,7 +82,7 @@ export async function processReminderRules(): Promise<void> {
         try {
           if (channel === 'telegram') {
             const r = await sendBillReminder(bill, bill.bank)
-            await logNotification(bill.id, rule.id, channel, rule.name, r.ok, r.errors.length > 0 ? r.errors.join('; ') : undefined)
+            await logNotification(bill.id, rule.id, channel, rule.name, r.ok, r.error)
           }
         } catch (e) {
           await logNotification(bill.id, rule.id, channel, rule.name, false, (e as Error).message)
@@ -98,7 +101,7 @@ export async function processOverdueBills(): Promise<void> {
       status: BillStatus.PENDING,
       dueDate: { lt: today },
     },
-    include: { bank: true },
+    include: { bank: { include: { user: { select: { deletedAt: true } } } } },
   })
 
   if (overdueBills.length > 0) {
@@ -112,8 +115,9 @@ export async function processOverdueBills(): Promise<void> {
     })
     logger.warn({ bank: bill.bank.name, amount: bill.amount, dueDate: bill.dueDate }, 'Bill marked overdue')
 
+    if (bill.bank.user?.deletedAt) continue // deactivated owner: status is fact, noise is not
     const r = await sendOverdueWarning(bill, bill.bank)
-    await logNotification(bill.id, null, 'telegram', '逾期警告', r.ok, r.errors.length > 0 ? r.errors.join('; ') : undefined)
+    await logNotification(bill.id, null, 'telegram', '逾期警告', r.ok, r.error)
   }
 }
 
