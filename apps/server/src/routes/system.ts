@@ -26,16 +26,6 @@ async function currentUser(c: Parameters<typeof getAuthUser>[0]) {
   return prisma.user.findUnique({ where: { id: getAuthUser(c).id } })
 }
 
-// Email connection status
-app.get('/email/status', async (c) => {
-  const me = await currentUser(c)
-  if (!me) return c.json({ error: 'unauthorized' }, 401)
-  const status = (me.imapUser && me.imapPassword)
-    ? await verifyConnectionFor(me)
-    : { connected: false, message: '信箱尚未設定' }
-  return c.json(status)
-})
-
 // Manual email scan trigger
 app.post('/email/scan', async (c) => {
   const me = await currentUser(c)
