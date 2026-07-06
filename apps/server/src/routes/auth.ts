@@ -208,7 +208,7 @@ export async function authGuard(c: Context, next: () => Promise<void>): Promise<
     if (session.valid && session.user) {
       c.set('authUser', session.user)
       if (session.user.role !== 'admin') {
-        const method = c.req.method
+        const method = c.req.method === 'HEAD' ? 'GET' : c.req.method
         const denied = ADMIN_ONLY.some(r => (r.method === '*' || r.method === method) && r.pattern.test(path))
         if (denied) return c.json({ error: 'forbidden' }, 403)
       }

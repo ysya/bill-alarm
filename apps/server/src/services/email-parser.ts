@@ -66,9 +66,9 @@ function sanityCheck(parsed: ParsedBill): string | null {
   return null
 }
 
-/** True if this email already produced a bill (stable-ID dedup, first line of defense). */
-export async function emailAlreadyProcessed(msgId: string): Promise<boolean> {
-  return (await prisma.bill.count({ where: { sourceEmailId: msgId } })) > 0
+/** True if this email already produced a bill for THIS user (per-user stable-ID dedup). */
+export async function emailAlreadyProcessed(msgId: string, userId: string): Promise<boolean> {
+  return (await prisma.bill.count({ where: { sourceEmailId: msgId, bank: { userId } } })) > 0
 }
 
 /** True if a bill with the same bank/amount/dueDate exists — catches the same
@@ -133,7 +133,7 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
         let progressStatus: ScanItemStatus = 'skipped'
         let progressReason: string | undefined
         try {
-          if (await emailAlreadyProcessed(msgId)) {
+          if (await emailAlreadyProcessed(msgId, user.id)) {
             progressReason = '此信件已建立過帳單'
             continue
           }
@@ -278,7 +278,7 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
 
           let pdfPath: string | undefined
           if (matchedPdfBuf) {
-            const filename = `${bank.code ?? bank.id}_${msgId.replace(/[^A-Za-z0-9_-]/g, '')}.pdf`
+            const filename = `${bank.id}_${msgId.replace(/[^A-Za-z0-9_-]/g, '')}.pdf`
             await fs.mkdir(PDF_DIR, { recursive: true })
             const filePath = path.join(PDF_DIR, filename)
             await fs.writeFile(filePath, matchedPdfBuf)
