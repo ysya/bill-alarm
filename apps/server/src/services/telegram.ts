@@ -145,7 +145,7 @@ export async function sendNewBillAlert(bill: Bill, bank: Bank): Promise<SendOutc
     }
   }
 
-  return sendToUser(bank.userId!, lines.join('\n'))
+  return sendToUser(bank.userId, lines.join('\n'))
 }
 
 export async function sendBillReminder(bill: Bill, bank: Bank): Promise<SendOutcome> {
@@ -161,7 +161,7 @@ export async function sendBillReminder(bill: Bill, bank: Bank): Promise<SendOutc
     days === 0 ? '⚠️ 今天是最後繳費日！' : `⏰ 還有 ${days} 天`,
   ].join('\n')
 
-  return sendToUser(bank.userId!, text)
+  return sendToUser(bank.userId, text)
 }
 
 export async function sendOverdueWarning(bill: Bill, bank: Bank): Promise<SendOutcome> {
@@ -175,7 +175,7 @@ export async function sendOverdueWarning(bill: Bill, bank: Bank): Promise<SendOu
     '⚠️ 請儘速繳款以避免延遲利息！',
   ].join('\n')
 
-  return sendToUser(bank.userId!, text)
+  return sendToUser(bank.userId, text)
 }
 
 export async function sendTestMessage(chatId: string): Promise<boolean> {

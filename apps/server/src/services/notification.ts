@@ -31,7 +31,7 @@ export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
   }
 
   // Owner deactivated between scan start and now: skip (matches reminder/overdue processors)
-  const owner = await prisma.user.findUnique({ where: { id: bank.userId! }, select: { deletedAt: true } })
+  const owner = await prisma.user.findUnique({ where: { id: bank.userId }, select: { deletedAt: true } })
   if (owner?.deletedAt) {
     logger.info({ bank: bank.name }, 'Owner deactivated — skipping new bill notification')
     return

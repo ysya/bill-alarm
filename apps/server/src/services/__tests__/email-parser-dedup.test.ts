@@ -10,8 +10,11 @@ describe('scan dedup guards', () => {
   let bankId: string
 
   beforeAll(async () => {
+    const user = await prisma.user.create({
+      data: { username: 'dedup-owner', passwordHash: 'x:y', role: 'member' },
+    })
     const bank = await prisma.bank.create({
-      data: { name: '測試銀行', emailSenderPattern: 'test@bank', emailSubjectPattern: '帳單' },
+      data: { name: '測試銀行', emailSenderPattern: 'test@bank', emailSubjectPattern: '帳單', userId: user.id },
     })
     bankId = bank.id
     await prisma.bill.create({

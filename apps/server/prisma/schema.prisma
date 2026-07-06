@@ -12,8 +12,8 @@ model BankAccount {
   name      String
   bankName  String
   note      String?
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   banks     Bank[]
@@ -34,8 +34,8 @@ model Bank {
   autoDebit           Boolean      @default(false)
   bankAccountId       String?
   bankAccount         BankAccount? @relation(fields: [bankAccountId], references: [id])
-  userId              String?
-  user                User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
   bills               Bill[]
@@ -74,8 +74,8 @@ model NotificationRule {
   timeOfDay  String
   channels   String
   isActive   Boolean           @default(true)
-  userId     String?
-  user       User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
   logs       NotificationLog[]
@@ -109,8 +109,8 @@ model Setting {
 model ScanLog {
   id            String    @id @default(uuid(7))
   trigger       String    // 'manual' | 'cron'
-  userId        String?
-  user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   startedAt     DateTime  @default(now())
   finishedAt    DateTime?
   scanned       Int       @default(0)
