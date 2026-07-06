@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { KeyRound, Plus, UserX, Users } from 'lucide-vue-next'
+import { ArrowLeft, KeyRound, Plus, UserX, Users } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { UserDTO } from '~/composables/useUsersApi'
+
+definePageMeta({ middleware: 'admin' })
 
 const usersApi = useUsersApi()
 
@@ -18,6 +19,11 @@ const resetTarget = ref<UserDTO | null>(null)
 const resetPassword = ref('')
 const deactivateTarget = ref<UserDTO | null>(null)
 const purgeTarget = ref<UserDTO | null>(null)
+
+function formatDate(date: string): string {
+  const d = new Date(date)
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+}
 
 async function fetchUsers() {
   loading.value = true
@@ -58,7 +64,7 @@ async function handleReset() {
   submitting.value = true
   try {
     await usersApi.resetPassword(resetTarget.value.id, resetPassword.value)
-    toast.success(`已重設 ${resetTarget.value.username} 的密碼`, { description: '該成員的所有裝置已被登出。' })
+    toast.success(`已重設 ${resetTarget.value.username} 的密碼`, { description: '該使用者的所有裝置已被登出。' })
     resetTarget.value = null
     resetPassword.value = ''
   } catch (e: any) {
@@ -112,40 +118,51 @@ async function handlePurge() {
 }
 
 onMounted(fetchUsers)
+
+useHead({ title: '使用者管理 - Bill Alarm' })
 </script>
 
 <template>
-  <Card class="space-y-3 p-4">
-    <div class="flex items-center justify-between gap-3">
+  <div class="space-y-6 max-w-4xl">
+    <Button variant="ghost" size="sm" class="-ml-2" @click="navigateTo('/settings')">
+      <ArrowLeft class="h-4 w-4" />
+      返回設定
+    </Button>
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-3">
-        <Users class="h-5 w-5 shrink-0 text-muted-foreground" />
+        <Users class="h-6 w-6 shrink-0 text-muted-foreground" />
         <div>
-          <p class="text-sm font-medium">使用者管理</p>
-          <p class="text-xs text-muted-foreground">為家人建立獨立帳號，各自管理自己的帳單。</p>
+          <h1 class="text-2xl font-bold tracking-tight">使用者管理</h1>
+          <p class="text-sm text-muted-foreground">建立獨立帳號，每人各自管理自己的帳單。</p>
         </div>
       </div>
-      <Button size="sm" @click="createOpen = true">
+      <Button @click="createOpen = true">
         <Plus class="mr-1 h-4 w-4" />
-        新增
+        新增使用者
       </Button>
     </div>
 
     <div v-if="loading" class="space-y-2">
-      <div v-for="i in 2" :key="i" class="h-10 animate-pulse rounded-lg bg-muted" />
+      <div v-for="i in 3" :key="i" class="h-14 animate-pulse rounded-lg bg-muted" />
     </div>
 
     <div v-else class="space-y-2">
       <div
         v-for="user in users" :key="user.id"
-        class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-4 py-3"
       >
-        <div class="flex min-w-0 items-center gap-2">
-          <span class="truncate text-sm font-medium">{{ user.username }}</span>
-          <Badge variant="secondary" class="text-[10px]">{{ user.role === 'admin' ? '管理者' : '成員' }}</Badge>
-          <Badge v-if="user.deletedAt" variant="outline" class="text-[10px] text-muted-foreground">已停用</Badge>
-          <span v-else class="text-xs text-muted-foreground">
-            {{ user.emailConfigured ? '信箱已設定' : '信箱未設定' }} · {{ user.telegramBound ? 'TG 已綁定' : 'TG 未綁定' }}
-          </span>
+        <div class="flex min-w-0 flex-col gap-1">
+          <div class="flex items-center gap-2">
+            <span class="truncate text-sm font-medium">{{ user.username }}</span>
+            <Badge variant="secondary" class="text-[10px]">{{ user.role === 'admin' ? '管理員' : '使用者' }}</Badge>
+            <Badge v-if="user.deletedAt" variant="outline" class="text-[10px] text-muted-foreground">已停用</Badge>
+          </div>
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+            <span>{{ user.emailConfigured ? '信箱已設定' : '信箱未設定' }}</span>
+            <span>{{ user.telegramBound ? 'TG 已綁定' : 'TG 未綁定' }}</span>
+            <span>建立於 {{ formatDate(user.createdAt) }}</span>
+          </div>
         </div>
         <div class="flex items-center gap-1">
           <template v-if="!user.deletedAt">
@@ -179,8 +196,8 @@ onMounted(fetchUsers)
     <Dialog :open="createOpen" @update:open="createOpen = $event">
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>新增成員帳號</DialogTitle>
-          <DialogDescription>把帳號密碼告訴家人，他們登入後可自行修改密碼。</DialogDescription>
+          <DialogTitle>新增使用者</DialogTitle>
+          <DialogDescription>設好帳號密碼交給對方，登入後可自行修改。</DialogDescription>
         </DialogHeader>
         <form class="space-y-3" @submit.prevent="handleCreate">
           <div class="space-y-2">
@@ -204,7 +221,7 @@ onMounted(fetchUsers)
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>重設密碼 — {{ resetTarget?.username }}</DialogTitle>
-          <DialogDescription>重設後該成員所有裝置會被登出。</DialogDescription>
+          <DialogDescription>重設後該使用者所有裝置會被登出。</DialogDescription>
         </DialogHeader>
         <form class="space-y-3" @submit.prevent="handleReset">
           <div class="space-y-2">
@@ -246,5 +263,5 @@ onMounted(fetchUsers)
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </Card>
+  </div>
 </template>

@@ -52,7 +52,7 @@ async function handleTest() {
     <!-- Not configured: token form -->
     <template v-if="!status.isConfigured">
       <p class="text-xs text-muted-foreground">
-        透過 @BotFather 建立 Bot 取得 Token。每位成員在「帳號」區各自綁定接收通知。
+        透過 @BotFather 建立 Bot 取得 Token。每位使用者在「帳號」區各自綁定接收通知。
       </p>
       <form class="space-y-3" @submit.prevent="handleSave">
         <div class="space-y-2">
@@ -74,7 +74,7 @@ async function handleTest() {
         <span>Bot 已設定 · 已綁定 {{ status.boundCount }} 人</span>
       </div>
       <p v-if="status.boundCount === 0" class="text-xs text-yellow-500">
-        目前沒有任何成員綁定，通知不會發送。請到「帳號」區綁定 Telegram。
+        目前沒有任何使用者綁定，通知不會發送。請到「帳號」區綁定 Telegram。
       </p>
       <div class="flex gap-2">
         <Button size="sm" variant="outline" :disabled="testingTelegram" @click="handleTest">

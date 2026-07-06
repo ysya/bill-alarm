@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarCheck, Clock, KeyRound, LogOut, Mail, Send, Sparkles, User } from 'lucide-vue-next'
+import { CalendarCheck, ChevronRight, Clock, KeyRound, LogOut, Mail, Send, Sparkles, User, Users } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -157,7 +157,7 @@ async function handleDelete() {
             <p class="text-sm font-medium">登入身分</p>
             <p class="truncate text-xs text-muted-foreground">
               {{ me?.username ?? '—' }}
-              <span v-if="me"> · {{ me.role === 'admin' ? '管理者' : '成員' }}</span>
+              <span v-if="me"> · {{ me.role === 'admin' ? '管理員' : '使用者' }}</span>
             </p>
           </div>
         </div>
@@ -195,7 +195,19 @@ async function handleDelete() {
           <SettingsScanConfigCard :scan="configStatus.scan" @refresh="fetchAdminData" />
         </SettingsCard>
       </template>
-      <SettingsUsersCard />
+      <Card
+        class="flex cursor-pointer items-center justify-between gap-3 p-4 transition-colors hover:border-primary/50"
+        @click="navigateTo('/settings/users')"
+      >
+        <div class="flex min-w-0 items-center gap-3">
+          <Users class="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div class="min-w-0">
+            <p class="text-sm font-medium">使用者管理</p>
+            <p class="truncate text-xs text-muted-foreground">新增、停用、重設使用者帳號</p>
+          </div>
+        </div>
+        <ChevronRight class="h-5 w-5 shrink-0 text-muted-foreground" />
+      </Card>
     </section>
 
     <!-- Dialogs（原內容不動） -->

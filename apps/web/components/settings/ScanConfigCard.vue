@@ -46,8 +46,8 @@ async function handleScanIntervalChange(value: string) {
 
 <template>
   <div class="space-y-2">
-    <p class="text-xs text-muted-foreground">全域掃描節奏，套用到所有成員的信箱。</p>
-    <SettingsConfigRow label="自動掃描頻率" description="定時檢查所有成員信箱是否有新帳單。">
+    <p class="text-xs text-muted-foreground">全域掃描節奏，套用到所有使用者的信箱。</p>
+    <SettingsConfigRow label="自動掃描頻率" description="定時檢查所有使用者信箱是否有新帳單。">
       <template #icon><Clock class="h-4 w-4 text-muted-foreground" /></template>
       <Select :model-value="String(scan.interval)" @update:model-value="handleScanIntervalChange">
         <SelectTrigger class="w-40">
