@@ -3,7 +3,7 @@ import path from 'node:path'
 import { PDF_DIR } from '@/paths.js'
 import { logger } from '@/index.js'
 import prisma from '@/prisma.js'
-import { getEmailProvider } from './email/index.js'
+import { getEmailProviderFor, type MailboxOwner } from './email/index.js'
 import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
 import { parseWithTemplate } from '@/parsers/template.js'
 import { getHardcodedParser } from '@/parsers/registry.js'
@@ -13,6 +13,8 @@ import { getSetting, KEYS } from './settings.js'
 import { scanEvents } from './scan-events.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus, type ParsedBill } from '@bill-alarm/shared/types'
+
+export type ScanUser = { id: string } & MailboxOwner
 
 export type ScanErrorStage =
   | 'email_search'
@@ -75,10 +77,22 @@ export async function duplicateBillExists(bankId: string, amount: number, dueDat
   return (await prisma.bill.count({ where: { bankId, amount, dueDate } })) > 0
 }
 
-export async function scanAndProcessEmails(callbacks?: ScanCallbacks): Promise<ScanResult> {
+export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallbacks): Promise<ScanResult> {
   const result: ScanResult = { scanned: 0, newBills: [], errors: [] }
 
-  const banks = await prisma.bank.findMany({ where: { isActive: true } })
+  // Mailbox is the more fundamental prerequisite: check it before spending a
+  // query on banks, and report it even when the user has no banks configured.
+  const provider = getEmailProviderFor(user)
+  if (!provider) {
+    result.errors.push({
+      stage: 'email_search',
+      reason: '信箱未設定（請至設定頁填入 IMAP 帳密）',
+    })
+    callbacks?.onStart?.(0)
+    return result
+  }
+
+  const banks = await prisma.bank.findMany({ where: { isActive: true, userId: user.id } })
   if (banks.length === 0) {
     callbacks?.onStart?.(0)
     return result
@@ -91,16 +105,6 @@ export async function scanAndProcessEmails(callbacks?: ScanCallbacks): Promise<S
   const query = `(${senderPatterns}) newer_than:${rangeDays}d has:attachment${extraQuery ? ` ${extraQuery.trim()}` : ''}`
 
   logger.info({ query, rangeDays }, 'Email scan query')
-
-  const provider = await getEmailProvider()
-  if (!provider) {
-    result.errors.push({
-      stage: 'email_search',
-      reason: '信箱未設定（請至設定頁填入 IMAP 帳密）',
-    })
-    callbacks?.onStart?.(0)
-    return result
-  }
 
   try {
     return await provider.withSession(async (session) => {
@@ -333,20 +337,20 @@ export interface RecordedScan {
  * Caller is responsible for any post-scan side effects (notifications),
  * which can be appended via `appendScanLogErrors`.
  */
-export async function runScanWithLog(trigger: 'manual' | 'cron'): Promise<RecordedScan> {
+export async function runScanWithLog(trigger: 'manual' | 'cron', user: ScanUser): Promise<RecordedScan> {
   const log = await prisma.scanLog.create({
-    data: { trigger, startedAt: new Date() },
+    data: { trigger, startedAt: new Date(), userId: user.id },
   })
 
   let result: ScanResult = { scanned: 0, newBills: [], errors: [] }
   let fatal: string | null = null
   try {
-    result = await scanAndProcessEmails({
+    result = await scanAndProcessEmails(user, {
       onStart: (total) => {
-        scanEvents.emitEvent({ type: 'start', scanLogId: log.id, total, trigger })
+        scanEvents.emitEvent({ type: 'start', userId: user.id, scanLogId: log.id, total, trigger })
       },
       onProgress: (idx, total, bank, status, reason) => {
-        scanEvents.emitEvent({ type: 'progress', scanLogId: log.id, idx, total, bank, status, reason })
+        scanEvents.emitEvent({ type: 'progress', userId: user.id, scanLogId: log.id, idx, total, bank, status, reason })
       },
     })
   } catch (e) {
@@ -373,6 +377,7 @@ export async function runScanWithLog(trigger: 'manual' | 'cron'): Promise<Record
 
   scanEvents.emitEvent({
     type: 'complete',
+    userId: user.id,
     scanLogId: log.id,
     scanned: result.scanned,
     newBills: result.newBills.length,

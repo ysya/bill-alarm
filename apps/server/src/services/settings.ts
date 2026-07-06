@@ -2,13 +2,6 @@ import prisma from '@/prisma.js'
 
 // Setting keys
 export const KEYS = {
-  // Email provider abstraction
-  EMAIL_PROVIDER: 'email_provider',     // 'gmail-imap' | future providers
-  IMAP_HOST: 'imap_host',               // default: imap.gmail.com
-  IMAP_PORT: 'imap_port',               // default: 993
-  IMAP_USER: 'imap_user',               // email address
-  IMAP_PASSWORD: 'imap_password',       // app password
-
   // Calendar (ICS feed)
   ICS_FEED_TOKEN: 'ics_feed_token',     // random URL token
 
@@ -36,11 +29,6 @@ export const KEYS = {
 } as const
 
 const ENV_MAP: Record<string, string> = {
-  [KEYS.EMAIL_PROVIDER]: 'EMAIL_PROVIDER',
-  [KEYS.IMAP_HOST]: 'IMAP_HOST',
-  [KEYS.IMAP_PORT]: 'IMAP_PORT',
-  [KEYS.IMAP_USER]: 'IMAP_USER',
-  [KEYS.IMAP_PASSWORD]: 'IMAP_PASSWORD',
   [KEYS.TELEGRAM_BOT_TOKEN]: 'TELEGRAM_BOT_TOKEN',
   [KEYS.GEMINI_API_KEY]: 'GEMINI_API_KEY',
   [KEYS.GEMINI_MODEL]: 'GEMINI_MODEL',

@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { setSetting, KEYS } from '@/services/settings.js'
+import prisma from '@/prisma.js'
 import { GmailImapProvider } from '@/services/email/providers/gmail-imap.js'
-import { verifyConnection } from '@/services/email/index.js'
+import { verifyConnectionFor } from '@/services/email/index.js'
+import { getAuthUser } from './auth.js'
 
 const app = new Hono()
 
@@ -22,23 +23,35 @@ app.post('/test', zValidator('json', imapConfigSchema), async (c) => {
   return c.json(result)
 })
 
-// Save IMAP config (and optionally provider name)
+// Save the CURRENT user's mailbox config
 app.post('/save', zValidator('json', imapConfigSchema.extend({
   provider: z.literal('gmail-imap').default('gmail-imap'),
 })), async (c) => {
-  const { provider, host, port, user, password } = c.req.valid('json')
-  await setSetting(KEYS.EMAIL_PROVIDER, provider)
-  await setSetting(KEYS.IMAP_HOST, host)
-  await setSetting(KEYS.IMAP_PORT, String(port))
-  await setSetting(KEYS.IMAP_USER, user)
-  await setSetting(KEYS.IMAP_PASSWORD, password)
+  const { host, port, user, password } = c.req.valid('json')
+  await prisma.user.update({
+    where: { id: getAuthUser(c).id },
+    data: { imapHost: host, imapPort: port, imapUser: user, imapPassword: password },
+  })
   return c.json({ success: true })
 })
 
-// Live status (after save)
+// Current user's mailbox config + live connection status
 app.get('/status', async (c) => {
-  const status = await verifyConnection()
-  return c.json(status)
+  const me = await prisma.user.findUnique({ where: { id: getAuthUser(c).id } })
+  if (!me) return c.json({ error: 'unauthorized' }, 401)
+  const hasCredentials = !!(me.imapUser && me.imapPassword)
+  const conn = hasCredentials
+    ? await verifyConnectionFor(me)
+    : { connected: false, message: '信箱尚未設定' }
+  return c.json({
+    hasCredentials,
+    connected: conn.connected,
+    message: conn.message,
+    email: conn.email,
+    host: me.imapHost || 'imap.gmail.com',
+    port: me.imapPort || 993,
+    user: me.imapUser,
+  })
 })
 
 export default app

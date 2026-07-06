@@ -2,8 +2,8 @@ import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { scanEvents, type ScanEvent } from '@/services/scan-events.js'
-import { verifyConnection, getEmailProvider } from '@/services/email/index.js'
+import { scanEvents, eventVisibleTo, type ScanEvent } from '@/services/scan-events.js'
+import { verifyConnectionFor, getEmailProviderFor } from '@/services/email/index.js'
 import { extractPdfText, getPdfBuffers } from '@/services/pdf-parser.js'
 import { extractBillFromText } from '@/services/bill-extractor.js'
 import { parseBillWithLLM, suggestRuleWithLLM, testLlmConnection, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
@@ -22,16 +22,26 @@ import type { TemplateParserConfig } from '@bill-alarm/shared/template-parser'
 
 const app = new Hono()
 
+async function currentUser(c: Parameters<typeof getAuthUser>[0]) {
+  return prisma.user.findUnique({ where: { id: getAuthUser(c).id } })
+}
+
 // Email connection status
 app.get('/email/status', async (c) => {
-  const status = await verifyConnection()
+  const me = await currentUser(c)
+  if (!me) return c.json({ error: 'unauthorized' }, 401)
+  const status = (me.imapUser && me.imapPassword)
+    ? await verifyConnectionFor(me)
+    : { connected: false, message: '信箱尚未設定' }
   return c.json(status)
 })
 
 // Manual email scan trigger
 app.post('/email/scan', async (c) => {
+  const me = await currentUser(c)
+  if (!me) return c.json({ error: 'unauthorized' }, 401)
   try {
-    const { result, scanLogId } = await runScanWithLog('manual')
+    const { result, scanLogId } = await runScanWithLog('manual', me)
 
     // Send notifications for new bills
     const notifyErrors: ScanError[] = []
@@ -69,11 +79,13 @@ app.post('/email/scan', async (c) => {
 // Live scan progress via Server-Sent Events.
 // Stays open and forwards events emitted from runScanWithLog().
 app.get('/scan-events', (c) => {
+  const me = getAuthUser(c)
   return streamSSE(c, async (stream) => {
     let resolveDone: () => void = () => {}
     const done = new Promise<void>((r) => { resolveDone = r })
 
     const listener = (event: ScanEvent) => {
+      if (!eventVisibleTo(event, me.id)) return
       stream
         .writeSSE({ event: event.type, data: JSON.stringify(event) })
         .catch(() => { /* client disconnected mid-write */ })
@@ -92,7 +104,7 @@ app.get('/scan-events', (c) => {
     // so a freshly-connected client (e.g. after page refresh) catches up
     // instead of waiting for the next event.
     const snapshot = scanEvents.getSnapshot()
-    if (snapshot) {
+    if (snapshot && eventVisibleTo(snapshot.start, me.id)) {
       await stream.writeSSE({ event: 'start', data: JSON.stringify(snapshot.start) })
       if (snapshot.progress) {
         await stream.writeSSE({ event: 'progress', data: JSON.stringify(snapshot.progress) })
@@ -145,7 +157,10 @@ app.post('/telegram/test', async (c) => {
 
 // Integration status overview
 app.get('/integrations/status', async (c) => {
-  const email = await verifyConnection()
+  const me = await currentUser(c)
+  const email = (me?.imapUser && me?.imapPassword)
+    ? await verifyConnectionFor(me)
+    : { connected: false, message: '信箱尚未設定' }
   return c.json({
     email: { connected: email.connected, message: email.message },
     telegram: { configured: await telegramConfigured() },
@@ -158,7 +173,8 @@ app.get('/integrations/status', async (c) => {
 app.get('/email/search', async (c) => {
   const q = c.req.query('q') || 'newer_than:7d has:attachment'
   const max = Number(c.req.query('max')) || 10
-  const provider = await getEmailProvider()
+  const me = await currentUser(c)
+  const provider = me ? getEmailProviderFor(me) : null
   if (!provider) return c.json({ error: 'Email provider not configured' }, 400)
   const refs = await provider.search({ query: q, sinceDays: 30, maxResults: max })
   return c.json({ query: q, count: refs.length, messageIds: refs.map((r) => r.id) })
@@ -166,7 +182,8 @@ app.get('/email/search', async (c) => {
 
 // Get email details + attachments info
 app.get('/email/message/:id', async (c) => {
-  const provider = await getEmailProvider()
+  const me = await currentUser(c)
+  const provider = me ? getEmailProviderFor(me) : null
   if (!provider) return c.json({ error: 'Email provider not configured' }, 400)
   const email = await provider.fetch({ id: c.req.param('id') })
   if (!email) return c.json({ error: 'Email not found' }, 404)
@@ -188,7 +205,8 @@ app.get('/email/message/:id', async (c) => {
 app.get('/email/message/:id/parse', async (c) => {
   const password = c.req.query('password') || undefined
   const bankCode = c.req.query('bank') || undefined
-  const provider = await getEmailProvider()
+  const me = await currentUser(c)
+  const provider = me ? getEmailProviderFor(me) : null
   if (!provider) return c.json({ error: 'Email provider not configured' }, 400)
   const email = await provider.fetch({ id: c.req.param('id') })
   if (!email) return c.json({ error: 'Email not found' }, 404)

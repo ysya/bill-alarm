@@ -3,12 +3,14 @@ import { EventEmitter } from 'node:events'
 export type ScanEvent =
   | {
       type: 'start'
+      userId: string
       scanLogId: string
       total: number
       trigger: 'manual' | 'cron'
     }
   | {
       type: 'progress'
+      userId: string
       scanLogId: string
       idx: number
       total: number
@@ -18,6 +20,7 @@ export type ScanEvent =
     }
   | {
       type: 'complete'
+      userId: string
       scanLogId: string
       scanned: number
       newBills: number
@@ -56,3 +59,7 @@ class ScanEventBus extends EventEmitter {
 export const scanEvents = new ScanEventBus()
 // SSE clients + scheduler can both listen — bump the cap to be safe.
 scanEvents.setMaxListeners(50)
+
+export function eventVisibleTo(e: ScanEvent, userId: string): boolean {
+  return e.userId === userId
+}
