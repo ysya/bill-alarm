@@ -1,6 +1,13 @@
 <template>
   <div class="space-y-6">
     <InstallPrompt variant="banner" />
+    <Card v-if="!emailReady" class="border-primary/40 bg-primary/5 p-4 text-sm">
+      <p class="font-medium">還差一步就能自動追蹤帳單</p>
+      <p class="mt-1 text-muted-foreground">
+        先到 <NuxtLink to="/settings" class="underline">設定 → 信箱</NuxtLink> 完成 IMAP 設定，再到
+        <NuxtLink to="/banks" class="underline">銀行</NuxtLink> 啟用你的銀行。
+      </p>
+    </Card>
     <!-- Page Header -->
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
@@ -346,6 +353,16 @@ async function handleMarkAsPaid(id: string) {
 watch(selectedMonth, () => fetchData())
 
 onMounted(() => fetchData())
+
+const emailReady = ref(true)
+onMounted(async () => {
+  try {
+    const s = await useSettingsApi().getEmailStatus()
+    emailReady.value = s.hasCredentials
+  } catch {
+    // leave true — never block the overview on this hint
+  }
+})
 
 useHead({ title: '總覽 - Bill Alarm' })
 </script>

@@ -1,20 +1,11 @@
 <script setup lang="ts">
-import { CheckCircle, ChevronDown, ChevronUp, Clock, ExternalLink, HelpCircle, Mail, XCircle } from 'lucide-vue-next'
+import { CheckCircle, ChevronDown, ExternalLink, HelpCircle, Mail, XCircle } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { SCAN_INTERVAL_OPTIONS } from '~/types/settings'
+import type { EmailStatus } from '~/types/settings'
 
 const props = defineProps<{
-  email: {
-    provider: 'gmail-imap'
-    hasCredentials: boolean
-    isConnected: boolean
-    message: string
-    user: string | null
-    host: string
-    port: number
-  }
-  scan: { interval: number; rangeDays: number; queryExtra: string }
+  email: EmailStatus
 }>()
 
 const emit = defineEmits<{ refresh: [] }>()
@@ -27,19 +18,12 @@ const credForm = ref({
   user: props.email.user || '',
   password: '',
 })
-const scanForm = ref({ rangeDays: props.scan.rangeDays, queryExtra: props.scan.queryExtra })
 const submitting = ref(false)
 const testing = ref(false)
 const testResult = ref<{ ok: boolean; message: string } | null>(null)
 const scanning = ref(false)
 const showCredentials = ref(false)
-const showAdvancedScan = ref(false)
 const helpDialogOpen = ref(false)
-
-watch(() => props.scan, (v) => {
-  scanForm.value.rangeDays = v.rangeDays
-  scanForm.value.queryExtra = v.queryExtra
-})
 
 watch(() => props.email, (v) => {
   if (!showCredentials.value) {
@@ -92,19 +76,6 @@ async function handleSaveCredentials() {
   }
 }
 
-async function handleSaveScanConfig() {
-  try {
-    await settingsApi.saveScanConfig({
-      rangeDays: scanForm.value.rangeDays,
-      queryExtra: scanForm.value.queryExtra,
-    })
-    toast.success('掃描條件已更新')
-    emit('refresh')
-  } catch (e) {
-    toast.error('更新失敗', { description: String(e) })
-  }
-}
-
 const { state: scanProgress } = useScanEvents()
 
 const scanInProgress = computed(() => scanning.value || scanProgress.value.active)
@@ -139,18 +110,6 @@ async function handleScan() {
     toast.error('掃描失敗', { description: desc })
   } finally {
     scanning.value = false
-  }
-}
-
-async function handleScanIntervalChange(value: string) {
-  const interval = parseInt(value)
-  try {
-    await settingsApi.saveScanInterval(interval)
-    const label = SCAN_INTERVAL_OPTIONS.find(o => o.value === value)?.label ?? value
-    toast.success(`掃描頻率已更新為「${label}」`)
-    emit('refresh')
-  } catch (e) {
-    toast.error('更新失敗', { description: String(e) })
   }
 }
 </script>
@@ -213,7 +172,7 @@ async function handleScanIntervalChange(value: string) {
 
     <!-- State 2: Configured -->
     <template v-else>
-      <Alert v-if="!email.isConnected" variant="destructive">
+      <Alert v-if="!email.connected" variant="destructive">
         <XCircle class="h-4 w-4" />
         <AlertTitle>信箱連線失敗</AlertTitle>
         <AlertDescription><span v-if="email.user" class="mr-1">（{{ email.user }}）</span>{{ email.message }}</AlertDescription>
@@ -224,60 +183,9 @@ async function handleScanIntervalChange(value: string) {
         <span v-if="email.user" class="text-muted-foreground">({{ email.user }})</span>
       </div>
 
-      <!-- Settings rows -->
-      <div class="space-y-2">
-        <SettingsConfigRow label="自動掃描頻率" description="定時檢查信箱是否有新帳單。">
-          <template #icon><Clock class="h-4 w-4 text-muted-foreground" /></template>
-          <Select :model-value="String(scan.interval)" @update:model-value="handleScanIntervalChange">
-            <SelectTrigger class="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="opt in SCAN_INTERVAL_OPTIONS" :key="opt.value" :value="opt.value">
-                {{ opt.label }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </SettingsConfigRow>
-
-        <SettingsConfigRow label="掃描範圍（天）" description="從幾天前開始搜尋郵件。預設 60 天。">
-          <template #icon><Clock class="h-4 w-4 text-muted-foreground" /></template>
-          <div class="flex gap-2">
-            <Input
-              v-model.number="scanForm.rangeDays"
-              type="number" min="1" max="365"
-              class="w-24"
-            />
-            <Button size="sm" variant="outline" @click="handleSaveScanConfig">儲存</Button>
-          </div>
-        </SettingsConfigRow>
-
-        <SettingsConfigRow label="進階搜尋條件">
-          <template #icon><Mail class="h-4 w-4 text-muted-foreground" /></template>
-          <Button size="sm" variant="ghost" @click="showAdvancedScan = !showAdvancedScan">
-            {{ showAdvancedScan ? '收合' : '展開' }}
-            <component :is="showAdvancedScan ? ChevronUp : ChevronDown" class="ml-1 h-4 w-4" />
-          </Button>
-          <template v-if="showAdvancedScan" #below>
-            <div class="mt-2 ml-6 space-y-2">
-              <Input
-                v-model="scanForm.queryExtra"
-                placeholder="例：label:bills -from:noreply"
-                class="font-mono text-sm"
-              />
-              <p class="text-xs text-muted-foreground">
-                附加到掃描查詢字串。Gmail IMAP 支援完整 Gmail 搜尋語法。完整查詢 =
-                <code class="px-1 bg-muted rounded">(from:銀行A OR from:銀行B) newer_than:{{ scanForm.rangeDays }}d has:attachment {{ scanForm.queryExtra }}</code>
-              </p>
-              <Button size="sm" variant="outline" @click="handleSaveScanConfig">儲存</Button>
-            </div>
-          </template>
-        </SettingsConfigRow>
-      </div>
-
       <!-- Action buttons -->
       <div class="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" :disabled="scanInProgress || !email.isConnected" @click="handleScan">
+        <Button size="sm" variant="outline" :disabled="scanInProgress || !email.connected" @click="handleScan">
           <Mail class="mr-2 h-4 w-4" />
           <template v-if="scanProgress.active">
             掃描中 {{ scanProgress.idx }}/{{ scanProgress.total }}

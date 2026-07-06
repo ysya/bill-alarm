@@ -121,7 +121,7 @@ onMounted(fetchUsers)
         <Users class="h-5 w-5 shrink-0 text-muted-foreground" />
         <div>
           <p class="text-sm font-medium">使用者管理</p>
-          <p class="text-xs text-muted-foreground">為家人建立帳號，成員只能進行日常操作。</p>
+          <p class="text-xs text-muted-foreground">為家人建立獨立帳號，各自管理自己的帳單。</p>
         </div>
       </div>
       <Button size="sm" @click="createOpen = true">
