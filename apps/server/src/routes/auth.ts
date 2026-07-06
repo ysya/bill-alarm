@@ -141,6 +141,10 @@ app.post('/login', zValidator('json', credsSchema.extend({ password: z.string().
     recordFailure(username)
     return c.json({ error: '帳號或密碼錯誤' }, 401)
   }
+  if (user.deletedAt) {
+    // Correct password on a deactivated account: reject without touching lockout state.
+    return c.json({ error: '此帳號已停用' }, 401)
+  }
   failures.delete(username)
   const { token, expiresAt } = await createSession(user.id)
   setSessionCookie(c, token, expiresAt)

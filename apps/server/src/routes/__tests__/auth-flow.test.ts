@@ -248,4 +248,20 @@ describe('auth flow', () => {
     })
     expect(res.status).toBe(429)
   })
+
+  it('deactivated user cannot log in and it does not consume lockout budget', async () => {
+    const { hashPassword } = await import('@/services/auth.js')
+    await prisma.user.create({
+      data: { username: 'ghost', passwordHash: hashPassword('ghost-password-1'), role: 'member', deletedAt: new Date() },
+    })
+    for (let i = 0; i < 6; i++) {
+      const res = await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'ghost', password: 'ghost-password-1' }),
+      })
+      expect(res.status).toBe(401)
+      expect((await res.json()).error).toBe('此帳號已停用')
+    }
+  })
 })

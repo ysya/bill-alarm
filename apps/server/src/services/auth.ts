@@ -54,7 +54,7 @@ export async function validateSession(token: string): Promise<SessionValidation>
     where: { tokenHash: tokenHash(token) },
     include: { user: true },
   })
-  if (!session || session.expiresAt.getTime() < Date.now()) {
+  if (!session || session.expiresAt.getTime() < Date.now() || session.user.deletedAt) {
     return { valid: false, extended: false, expiresAt: null, user: null }
   }
   const user: AuthUser = { id: session.user.id, username: session.user.username, role: session.user.role }

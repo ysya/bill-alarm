@@ -88,4 +88,14 @@ describe('sessions', () => {
     await destroyUserSessions(userId)
     expect((await validateSession(a.token)).valid).toBe(false)
   })
+
+  it('sessions of a deactivated user are invalid', async () => {
+    const u = await prisma.user.create({
+      data: { username: 'deact-user', passwordHash: 'x:y', role: 'member' },
+    })
+    const { token } = await createSession(u.id)
+    expect((await validateSession(token)).valid).toBe(true)
+    await prisma.user.update({ where: { id: u.id }, data: { deletedAt: new Date() } })
+    expect((await validateSession(token)).valid).toBe(false)
+  })
 })

@@ -12,6 +12,8 @@ model BankAccount {
   name      String
   bankName  String
   note      String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   banks     Bank[]
@@ -21,7 +23,7 @@ model BankAccount {
 
 model Bank {
   id                  String       @id @default(uuid(7))
-  code                String?      @unique
+  code                String?
   name                String
   emailSenderPattern  String
   emailSubjectPattern String
@@ -32,10 +34,13 @@ model Bank {
   autoDebit           Boolean      @default(false)
   bankAccountId       String?
   bankAccount         BankAccount? @relation(fields: [bankAccountId], references: [id])
+  userId              String?
+  user                User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
   bills               Bill[]
 
+  @@unique([userId, code])
   @@map("banks")
 }
 
@@ -69,6 +74,8 @@ model NotificationRule {
   timeOfDay  String
   channels   String
   isActive   Boolean           @default(true)
+  userId     String?
+  user       User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
   logs       NotificationLog[]
@@ -102,6 +109,8 @@ model Setting {
 model ScanLog {
   id            String    @id @default(uuid(7))
   trigger       String    // 'manual' | 'cron'
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   startedAt     DateTime  @default(now())
   finishedAt    DateTime?
   scanned       Int       @default(0)
@@ -116,14 +125,24 @@ model ScanLog {
 }
 
 model User {
-  id             String    @id @default(uuid(7))
-  username       String    @unique
-  passwordHash   String
-  role           String    @default("member") // 'admin' | 'member'
-  telegramChatId String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  sessions       Session[]
+  id                String             @id @default(uuid(7))
+  username          String             @unique
+  passwordHash      String
+  role              String             @default("member") // 'admin' | 'member'
+  telegramChatId    String?
+  imapHost          String?
+  imapPort          Int?
+  imapUser          String?
+  imapPassword      String?
+  icsFeedToken      String?            @unique
+  deletedAt         DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  sessions          Session[]
+  banks             Bank[]
+  bankAccounts      BankAccount[]
+  notificationRules NotificationRule[]
+  scanLogs          ScanLog[]
 
   @@map("users")
 }
