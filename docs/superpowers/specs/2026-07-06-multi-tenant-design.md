@@ -40,7 +40,12 @@
 
 - **`Bank.code` 的 unique 改為 `@@unique([userId, code])`**（兩人啟用同一個 preset 會撞現有的全域 unique）。
 - `Bill` 不加欄位：歸屬經由 `bank.userId`（單一事實來源）；查詢用 `where: { bank: { userId } }`。
-- 刪除使用者：cascade 刪除其銀行 → 帳單 → 通知紀錄、規則、掃描紀錄、sessions。UI 刪除警語同步改寫（明示連帳單一起刪）。磁碟上的 PDF 檔不清（homelab 可接受，README 註記）。
+- **使用者刪除改三段式（軟刪除）**：`User.deletedAt DateTime?`。
+  - **停用**（原「刪除」按鈕）：設 `deletedAt`＋撤銷全部 sessions。資料全數保留。
+  - **還原**：清 `deletedAt`，一切如舊。
+  - **永久刪除**（僅停用狀態可按，二次確認）：真正 hard delete，cascade 刪除其銀行 → 帳單 → 通知紀錄、規則、掃描紀錄、sessions（schema 的 cascade FK 為此保留）。磁碟上的 PDF 檔不清（homelab 可接受，README 註記）。
+  - admin 不可停用也不可刪除（同現行規則）。
+  - 停用帳號的 username 仍佔用（可還原）；新建同名帳號回 409。
 
 ### 2. 授權模型反轉
 
@@ -59,12 +64,14 @@
 
 **跨使用者防護原則**：以 id 存取單一資源的路由（bill/:id、bank/:id、rule/:id…）查無「屬於我的該 id」一律回 404（不回 403，避免資源存在性洩漏）。每條路由配「A 拿不到 B 的資源」測試。
 
+**停用帳號的強制點**：登入時密碼驗證通過但 `deletedAt` 非空 → 401 `{ error: '此帳號已停用' }`（不計入鎖定失敗）；`validateSession` 對 `deletedAt` 非空的使用者一律視為無效（停用當下已撤銷 sessions，此為雙保險）。
+
 ### 3. 信箱與掃描
 
 - Email provider 設定從 settings 全域鍵改為 **per-user**（`User.imap*` 欄位）；provider 型別固定 `gmail-imap`（`EMAIL_PROVIDER` 設定鍵與 env 廢除）。`getEmailProvider(user)`、`verifyConnection(user)` 改吃使用者參數。
 - `runScanWithLog` 增加 user 參數：只搜該使用者的信箱、只比對該使用者的銀行、`ScanLog.userId` 記錄歸屬。
 - 手動掃描（`POST /api/email/scan`）：掃自己的信箱。
-- Cron：依序輪掃每個「已設定信箱」的使用者（序列執行，不併發 IMAP）。單一使用者失敗不中斷其他人（per-user try/catch，錯誤記該使用者的 ScanLog）。
+- Cron：依序輪掃每個「已設定信箱**且未停用**」的使用者（序列執行，不併發 IMAP）。單一使用者失敗不中斷其他人（per-user try/catch，錯誤記該使用者的 ScanLog）。
 - 掃描進度 SSE（`/api/scan-events`）：事件 payload 加 `userId`，路由端以 session 使用者過濾 — 每人只看到自己的掃描進度。
 - 掃描全域參數（interval／rangeDays／queryExtra）維持 settings 全域、admin 管理。
 
@@ -76,7 +83,8 @@
   - `processReminderRules()` → 迭代所有規則（含 `userId`），每條規則只撈**該使用者**的到期帳單（`bank: { userId: rule.userId }`），發給該使用者。
   - `processOverdueBills()` → 逐帳單發給 `bank.userId`。
 - 通知規則 per-user：每人建立、管理自己的規則；現有規則遷移歸 admin。
-- 行事曆 feed per-user：`GET /api/calendar/feed/:token.ics` 以 `icsFeedToken` 反查使用者，只輸出該使用者的帳單；`/info`／`/rotate` 操作自己的 token（無則自動產生）。現有全域 `ics_feed_token` 遷移為 admin 的 token — **admin 現有的行事曆訂閱連結不會斷**。
+- **停用者靜默**：提醒／逾期迴圈跳過停用使用者的規則與帳單 — 不發通知、不寫通知 log；逾期「狀態標記」照常執行（資料事實不因停用而失真）。
+- 行事曆 feed per-user：`GET /api/calendar/feed/:token.ics` 以 `icsFeedToken` 反查**未停用**使用者，只輸出該使用者的帳單（停用者的 token 回 404）；`/info`／`/rotate` 操作自己的 token（無則自動產生）。現有全域 `ics_feed_token` 遷移為 admin 的 token — **admin 現有的行事曆訂閱連結不會斷**。
 
 ### 5. 遷移（手寫 SQL，一次）
 
@@ -92,7 +100,7 @@
 - `GET /api/config/status` 瘦身為全域項（llm／gemini／openai／telegram bot ＋ boundCount／scan 參數／appBaseUrl）— email 與 calendar 區塊移除（改由 per-user 端點：`GET /api/email/status`、`GET /api/calendar/info`）。
 - `GET /api/email/status`＋`GET /api/integrations/status`：回報**當前使用者**的信箱連線狀態（telegram 部分維持 bot token 布林）。
 - `POST /api/email/save`／`test`：寫入／測試當前使用者的 imap 欄位。
-- users API：`DELETE /api/users/:id` 警語行為不變（admin 不可刪）；回應 DTO 增加 `emailConfigured: boolean`（使用者管理卡顯示成員設定進度）。
+- users API：`DELETE /api/users/:id` → **停用**（設 deletedAt＋撤 sessions；admin 目標回 400）；新增 `POST /api/users/:id/restore`（還原）與 `DELETE /api/users/:id/permanent`（僅停用狀態可執行，否則 400；hard cascade）。DTO 增加 `emailConfigured: boolean` 與 `deletedAt: string | null`。
 
 ### 7. 前端
 
@@ -103,7 +111,7 @@
   - 服務整合（全員）：信箱卡（自己的 IMAP；掃描全域參數區塊移出）、行事曆卡（自己的 feed＋rotate）
   - 通知規則（全員，自己的）
   - 帳號（全員）：安裝 App、Telegram 綁定、帳號卡（改密碼／登出）
-  - admin 附加區「系統管理」：AI 解析器卡、Telegram Bot 卡（token＋boundCount＋發測試）、掃描全域參數卡（從信箱卡抽出）、使用者管理卡（成員列多「信箱已設定」狀態）
+  - admin 附加區「系統管理」：AI 解析器卡、Telegram Bot 卡（token＋boundCount＋發測試）、掃描全域參數卡（從信箱卡抽出）、使用者管理卡（成員列顯示「信箱已設定」與啟用狀態；啟用中→［重設密碼／停用］，已停用→標示「已停用」＋［還原／永久刪除（二次確認，警語明示連帳單一起刪）］）
 - 資料來源：全員區塊全部走 per-user 端點；admin 附加區走 `config/status`（admin-only）。member 造訪設定頁零 admin-only 呼叫（沿用上一輪的 isAdmin 守門模式）。
 - 首次上手（成員第一次登入）：總覽空狀態引導文案「先到 設定 → 信箱 完成設定，再到 銀行 啟用你的銀行」。
 
@@ -114,6 +122,7 @@
 - 掃描分流：mock provider 下兩使用者各自銀行比對、ScanLog 歸屬、單人失敗不斷全局。
 - 通知：規則只撈自己人的帳單、`sendToUser` 未綁定記失敗。
 - 行事曆：token 只回自己帳單、rotate 只換自己的。
+- 停用生命週期：停用後登入 401（不計鎖定）、既有 session 失效、cron 跳過、通知靜默、feed 404；還原後全部恢復；永久刪除 cascade 清空其資料；非停用狀態按永久刪除回 400。
 - 遷移：seed 舊型 DB 驗證回填與 settings 搬移；sessions 保留。
 - 全套既有測試改寫適配（role-guard 測試矩陣重寫為新模型）。`pnpm --filter @bill-alarm/web generate` 通過。
 
