@@ -1,3 +1,5 @@
+import type { EmailStatus } from '~/types/settings'
+
 export type ScanErrorStage =
   | 'email_search'
   | 'email_fetch'
@@ -83,8 +85,7 @@ export function useSettingsApi() {
         password: data.password,
       }),
 
-    getEmailStatus: () =>
-      get<{ connected: boolean; message: string; email?: string }>('/email/status'),
+    getEmailStatus: () => get<EmailStatus>('/email/status'),
 
     // Calendar (ICS feed)
     getCalendarFeed: () =>
@@ -95,17 +96,7 @@ export function useSettingsApi() {
 
     // Aggregated config status
     getConfigStatus: () => get<{
-      email: {
-        provider: 'gmail-imap'
-        hasCredentials: boolean
-        isConnected: boolean
-        message: string
-        user: string | null
-        host: string
-        port: number
-      }
       telegram: { isConfigured: boolean; boundCount: number }
-      calendar: { feedUrl: string; feedPath: string; token: string }
       scan: { interval: number; rangeDays: number; queryExtra: string }
       gemini: { isConfigured: boolean }
       openai: { isConfigured: boolean }

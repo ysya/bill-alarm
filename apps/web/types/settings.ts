@@ -8,17 +8,7 @@ export interface NotificationRule {
 }
 
 export interface ConfigStatus {
-  email: {
-    provider: 'gmail-imap'
-    hasCredentials: boolean
-    isConnected: boolean
-    message: string
-    user: string | null
-    host: string
-    port: number
-  }
   telegram: { isConfigured: boolean; boundCount: number }
-  calendar: { feedUrl: string; feedPath: string; token: string }
   scan: { interval: number; rangeDays: number; queryExtra: string }
   gemini: { isConfigured: boolean }
   openai: { isConfigured: boolean }
@@ -30,6 +20,16 @@ export interface ConfigStatus {
     ollamaBaseUrl: string
     ollamaModel: string
   }
+}
+
+export interface EmailStatus {
+  hasCredentials: boolean
+  connected: boolean
+  message: string
+  email?: string
+  host: string
+  port: number
+  user: string | null
 }
 
 export const SCAN_INTERVAL_OPTIONS = [

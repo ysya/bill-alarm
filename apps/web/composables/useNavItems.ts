@@ -15,11 +15,6 @@ const ALL_ITEMS: NavItem[] = [
   { to: '/settings', label: '設定', icon: Settings },
 ]
 
-// Members don't manage banks; while `me` is still loading (null) show the full
-// set so the admin doesn't see tabs pop in on first paint.
 export function useNavItems(): ComputedRef<NavItem[]> {
-  const me = useMe()
-  return computed(() =>
-    me.value?.role === 'member' ? ALL_ITEMS.filter(i => i.to !== '/banks') : ALL_ITEMS,
-  )
+  return computed(() => ALL_ITEMS)
 }

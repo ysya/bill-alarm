@@ -54,7 +54,7 @@
               </div>
               <div class="flex gap-1 shrink-0">
                 <Button
-                  v-if="!editing && isAdmin"
+                  v-if="!editing"
                   size="sm"
                   variant="outline"
                   @click="startEdit"
@@ -73,7 +73,7 @@
                   </Button>
                 </template>
                 <Button
-                  v-if="!editing && isAdmin"
+                  v-if="!editing"
                   size="icon-sm"
                   variant="ghost"
                   class="text-destructive hover:text-destructive hover:bg-destructive/10"
@@ -197,7 +197,7 @@
               恢復為待繳
             </Button>
             <Button
-              v-if="bill.pdfPath && isAdmin"
+              v-if="bill.pdfPath"
               variant="outline"
               :disabled="actionLoading || reparsing || editing"
               @click="handleReparse"
@@ -404,7 +404,6 @@ const route = useRoute()
 const billId = computed(() => route.params.id as string)
 
 const { getById, markAsPaid, update, reparse, remove, unpay } = useBillApi()
-const { isAdmin } = useAuth()
 
 const bill = ref<BillDetailDTO | null>(null)
 const loading = ref(true)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { KeyRound, Plus, Trash2, Users } from 'lucide-vue-next'
+import { KeyRound, Plus, UserX, Users } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -16,7 +16,8 @@ const createOpen = ref(false)
 const createForm = ref({ username: '', password: '' })
 const resetTarget = ref<UserDTO | null>(null)
 const resetPassword = ref('')
-const deleteTarget = ref<UserDTO | null>(null)
+const deactivateTarget = ref<UserDTO | null>(null)
+const purgeTarget = ref<UserDTO | null>(null)
 
 async function fetchUsers() {
   loading.value = true
@@ -67,13 +68,41 @@ async function handleReset() {
   }
 }
 
-async function handleDelete() {
-  if (!deleteTarget.value) return
+async function handleDeactivate() {
+  if (!deactivateTarget.value) return
   submitting.value = true
   try {
-    await usersApi.remove(deleteTarget.value.id)
-    toast.success(`已刪除 ${deleteTarget.value.username}`)
-    deleteTarget.value = null
+    await usersApi.deactivate(deactivateTarget.value.id)
+    toast.success(`已停用 ${deactivateTarget.value.username}`, { description: '資料保留，可隨時還原。' })
+    deactivateTarget.value = null
+    await fetchUsers()
+  } catch (e: any) {
+    toast.error('停用失敗', { description: e?.data?.error ?? String(e) })
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function handleRestore(user: UserDTO) {
+  submitting.value = true
+  try {
+    await usersApi.restore(user.id)
+    toast.success(`已還原 ${user.username}`)
+    await fetchUsers()
+  } catch (e: any) {
+    toast.error('還原失敗', { description: e?.data?.error ?? String(e) })
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function handlePurge() {
+  if (!purgeTarget.value) return
+  submitting.value = true
+  try {
+    await usersApi.removePermanently(purgeTarget.value.id)
+    toast.success(`已永久刪除 ${purgeTarget.value.username}`)
+    purgeTarget.value = null
     await fetchUsers()
   } catch (e: any) {
     toast.error('刪除失敗', { description: e?.data?.error ?? String(e) })
@@ -113,24 +142,35 @@ onMounted(fetchUsers)
         <div class="flex min-w-0 items-center gap-2">
           <span class="truncate text-sm font-medium">{{ user.username }}</span>
           <Badge variant="secondary" class="text-[10px]">{{ user.role === 'admin' ? '管理者' : '成員' }}</Badge>
-          <span class="text-xs text-muted-foreground">{{ user.telegramBound ? 'TG 已綁定' : 'TG 未綁定' }}</span>
+          <Badge v-if="user.deletedAt" variant="outline" class="text-[10px] text-muted-foreground">已停用</Badge>
+          <span v-else class="text-xs text-muted-foreground">
+            {{ user.emailConfigured ? '信箱已設定' : '信箱未設定' }} · {{ user.telegramBound ? 'TG 已綁定' : 'TG 未綁定' }}
+          </span>
         </div>
         <div class="flex items-center gap-1">
-          <Button
-            v-if="user.role !== 'admin'"
-            size="icon-sm" variant="ghost" title="重設密碼"
-            @click="resetTarget = user; resetPassword = ''"
-          >
-            <KeyRound class="h-4 w-4" />
-          </Button>
-          <Button
-            v-if="user.role !== 'admin'"
-            size="icon-sm" variant="ghost" title="刪除帳號"
-            class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            @click="deleteTarget = user"
-          >
-            <Trash2 class="h-4 w-4" />
-          </Button>
+          <template v-if="!user.deletedAt">
+            <Button v-if="user.role !== 'admin'" size="icon-sm" variant="ghost" title="重設密碼" @click="resetTarget = user; resetPassword = ''">
+              <KeyRound class="h-4 w-4" />
+            </Button>
+            <Button
+              v-if="user.role !== 'admin'"
+              size="icon-sm" variant="ghost" title="停用帳號"
+              class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              @click="deactivateTarget = user"
+            >
+              <UserX class="h-4 w-4" />
+            </Button>
+          </template>
+          <template v-else>
+            <Button size="sm" variant="outline" :disabled="submitting" @click="handleRestore(user)">還原</Button>
+            <Button
+              size="sm" variant="ghost"
+              class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              @click="purgeTarget = user"
+            >
+              永久刪除
+            </Button>
+          </template>
         </div>
       </div>
     </div>
@@ -179,16 +219,30 @@ onMounted(fetchUsers)
       </DialogContent>
     </Dialog>
 
-    <!-- Delete confirm dialog -->
-    <Dialog :open="!!deleteTarget" @update:open="(v: boolean) => { if (!v) deleteTarget = null }">
+    <!-- Deactivate confirm -->
+    <Dialog :open="!!deactivateTarget" @update:open="(v: boolean) => { if (!v) deactivateTarget = null }">
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>確認刪除</DialogTitle>
-          <DialogDescription>確定要刪除「{{ deleteTarget?.username }}」嗎？其登入與 Telegram 綁定都會移除。</DialogDescription>
+          <DialogTitle>停用帳號</DialogTitle>
+          <DialogDescription>「{{ deactivateTarget?.username }}」將無法登入，其掃描與通知會暫停；帳單與設定全數保留，可隨時還原。</DialogDescription>
         </DialogHeader>
         <DialogFooter class="gap-2 sm:gap-0">
           <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
-          <Button variant="destructive" :disabled="submitting" @click="handleDelete">確認刪除</Button>
+          <Button variant="destructive" :disabled="submitting" @click="handleDeactivate">停用</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Permanent delete confirm -->
+    <Dialog :open="!!purgeTarget" @update:open="(v: boolean) => { if (!v) purgeTarget = null }">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>永久刪除</DialogTitle>
+          <DialogDescription>確定要永久刪除「{{ purgeTarget?.username }}」嗎？其帳單、銀行、通知規則與掃描紀錄會一併刪除，此操作無法復原。</DialogDescription>
+        </DialogHeader>
+        <DialogFooter class="gap-2 sm:gap-0">
+          <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
+          <Button variant="destructive" :disabled="submitting" @click="handlePurge">確認永久刪除</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
