@@ -55,14 +55,33 @@
 | 重設密碼 toast | 已重設 X 的密碼／該成員的所有裝置已被登出。 | 已重設 X 的密碼／該使用者的所有裝置已被登出。 |
 | 停用對話框 | …其掃描與通知會暫停… | （文字已中性，維持；確認無「成員」字樣） |
 
-其餘 `UsersCard` 內既有的中性文案（停用／永久刪除警語）維持不變，僅確認無殘留「成員／家人」。
+**`UsersCard` 以外也要一併掃掉的殘留**（Codex review 補上 —— 若只改 `UsersCard` 會過不了本 spec 自己的「零殘留」驗收）：
+
+| 檔案 | 現有 | 改為 |
+|---|---|---|
+| `pages/settings/index.vue` 帳號區身分列 | 管理者／成員 | 管理員／使用者 |
+| `components/settings/IntegrationTelegram.vue` | 每位**成員**在「帳號」區各自綁定 | 每位使用者在「帳號」區各自綁定 |
+| `components/settings/IntegrationTelegram.vue` | 目前沒有任何**成員**綁定 | 目前沒有任何使用者綁定 |
+| `components/settings/ScanConfigCard.vue` | 套用到所有**成員**的信箱／檢查所有**成員**信箱 | 套用到所有使用者的信箱／檢查所有使用者信箱 |
+
+實作時仍以 `grep -rn 家人\|成員 apps/web`（`.vue`／`.ts`）為準，上表為已知清單；發現新的一併中性化。
 
 ### 4. 存取控制
 
-`/settings/users` 為 admin-only 雙層防護：
+`/settings/users` 為 admin-only 雙層防護。**關鍵（Codex review）**：不能只用 `watch(isAdmin, …)` —— `middleware/auth.global.ts` 只抓 `/api/auth/me` 填 `authed`、**不填 `useMe`**，而 `me` 只在 `app.vue` 的 `onMounted` 才抓；member 直接載入 `/settings/users` 時 `me` 為 null、`isAdmin` 起始 false 且維持 false，watcher 可能永不觸發 → 頁面會渲染、甚至觸發 `fetchUsers`（後端 403，不外洩資料，但前端守門失效、導回不會發生）。
 
-- **頁面守門**：`pages/settings/users.vue` 在 script 內取 `useAuth()` 的 `isAdmin`；`watch(isAdmin, ...)` 或 onMounted 檢查，非 admin → `navigateTo('/settings')`（member 直接打網址被導回）。`me` 尚未載入（null）時不動作，載入後才判定，避免誤導。
-- **後端**：`/api/users*` 本就 `ADMIN_ONLY` 回 403（多租戶已實作），為既有防線。
+正確做法：**具名 route middleware，在元件掛載前把角色確定**。
+
+- 新增 `apps/web/middleware/admin.ts`，頁面以 `definePageMeta({ middleware: 'admin' })` 掛上：
+  ```ts
+  export default defineNuxtRouteMiddleware(async () => {
+    const { me, isAdmin, fetchMe } = useAuth()
+    if (!me.value) await fetchMe()          // auth.global 沒填 me，這裡補
+    if (!isAdmin.value) return navigateTo('/settings')
+  })
+  ```
+  middleware 在渲染前 await 完成，member 不會看到頁面、也不會觸發 `fetchUsers`（onMounted 在通過 middleware 後才跑）。`fetchMe` 失敗（未登入）時 `me` 仍 null → `isAdmin` false → 導回；`auth.global.ts` 也會先攔未登入者。
+- **後端**：`/api/users*` 本就 `ADMIN_ONLY` 回 403（多租戶已實作），為既有第二層。
 
 ### 5. 測試與驗收
 
