@@ -128,6 +128,7 @@ app.get('/scan-events', (c) => {
 app.get('/scan-logs', async (c) => {
   const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '20'), 1), 100)
   const logs = await prisma.scanLog.findMany({
+    where: { userId: getAuthUser(c).id },
     orderBy: { startedAt: 'desc' },
     take: limit,
   })

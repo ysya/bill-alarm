@@ -1,11 +1,9 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { getSetting, setSetting, KEYS, getOrCreateIcsFeedToken } from '@/services/settings.js'
-import { verifyConnectionFor } from '@/services/email/index.js'
+import { getSetting, setSetting, KEYS } from '@/services/settings.js'
 import { LlmProvider } from '@/services/llm-parser.js'
 import prisma from '@/prisma.js'
-import { getAuthUser } from './auth.js'
 
 const app = new Hono()
 
@@ -61,47 +59,23 @@ app.post('/llm', zValidator('json', z.object({
 
 // Aggregated config status
 app.get('/status', async (c) => {
-  const me = await prisma.user.findUnique({ where: { id: getAuthUser(c).id } })
-
   const [
     botToken,
     geminiKey, openaiKey,
     scanInterval, scanRangeDays, scanQueryExtra,
     llmProvider, geminiModel, openaiModel, openaiBaseUrl, ollamaBaseUrl, ollamaModel,
-    appBaseUrl,
   ] = await Promise.all([
     getSetting(KEYS.TELEGRAM_BOT_TOKEN),
     getSetting(KEYS.GEMINI_API_KEY), getSetting(KEYS.OPENAI_API_KEY),
     getSetting(KEYS.SCAN_INTERVAL), getSetting(KEYS.SCAN_RANGE_DAYS), getSetting(KEYS.SCAN_GMAIL_QUERY_EXTRA),
     getSetting(KEYS.LLM_PROVIDER), getSetting(KEYS.GEMINI_MODEL), getSetting(KEYS.OPENAI_MODEL),
     getSetting(KEYS.OPENAI_BASE_URL), getSetting(KEYS.OLLAMA_BASE_URL), getSetting(KEYS.OLLAMA_MODEL),
-    getSetting(KEYS.APP_BASE_URL),
   ])
 
-  const hasEmail = !!(me?.imapUser && me?.imapPassword)
-  const conn = hasEmail && me ? await verifyConnectionFor(me) : { connected: false, message: '尚未設定', email: undefined }
-
-  const icsToken = await getOrCreateIcsFeedToken()
-  const feedPath = `/api/calendar/feed/${icsToken}.ics`
-
   return c.json({
-    email: {
-      provider: 'gmail-imap',
-      hasCredentials: hasEmail,
-      isConnected: conn.connected,
-      message: conn.message,
-      user: me?.imapUser ?? null,
-      host: me?.imapHost || 'imap.gmail.com',
-      port: me?.imapPort || 993,
-    },
     telegram: {
       isConfigured: !!botToken,
       boundCount: await prisma.user.count({ where: { telegramChatId: { not: null } } }),
-    },
-    calendar: {
-      feedUrl: appBaseUrl ? `${appBaseUrl}${feedPath}` : feedPath,
-      feedPath,
-      token: icsToken,
     },
     scan: {
       interval: scanInterval != null ? parseInt(scanInterval) : 24,
