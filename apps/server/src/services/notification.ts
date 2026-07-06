@@ -30,6 +30,13 @@ export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
     return
   }
 
+  // Owner deactivated between scan start and now: skip (matches reminder/overdue processors)
+  const owner = await prisma.user.findUnique({ where: { id: bank.userId! }, select: { deletedAt: true } })
+  if (owner?.deletedAt) {
+    logger.info({ bank: bank.name }, 'Owner deactivated — skipping new bill notification')
+    return
+  }
+
   const r = await sendNewBillAlert(bill, bank)
   await logNotification(bill.id, null, 'telegram', '新帳單通知', r.ok, r.error)
   logger.info({ bank: bank.name, ok: r.ok }, 'Telegram notification sent')

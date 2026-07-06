@@ -72,24 +72,54 @@ describe('users management', () => {
     expect(relogin.status).toBe(200)
   })
 
-  it('cannot delete the admin; deleting a member cascades sessions', async () => {
-    const boss = await prisma.user.findUnique({ where: { username: 'boss' } })
-    const delAdmin = await app.request(`/api/users/${boss!.id}`, {
-      method: 'DELETE', headers: { Cookie: adminCookie },
-    })
-    expect(delAdmin.status).toBe(400)
-
+  it('lifecycle: deactivate → restore → permanent delete', async () => {
     const kid = await prisma.user.findUnique({ where: { username: 'kid' } })
-    const delKid = await app.request(`/api/users/${kid!.id}`, {
-      method: 'DELETE', headers: { Cookie: adminCookie },
-    })
-    expect(delKid.status).toBe(200)
-    expect(await prisma.session.count({ where: { userId: kid!.id } })).toBe(0)
-    expect(await prisma.user.count()).toBe(1)
 
-    expect((await app.request('/api/users/nonexistent-id', {
-      method: 'DELETE', headers: { Cookie: adminCookie },
-    })).status).toBe(404)
+    // deactivate revokes sessions and keeps data
+    const kidLogin = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'kid', password: 'brand-new-pw-1' }),
+    })
+    const kidCookie = cookieOf(kidLogin)
+    const bank = await prisma.bank.create({
+      data: { name: 'KidBank', emailSenderPattern: 'x@x', emailSubjectPattern: 'b', userId: kid!.id },
+    })
+    const bill = await prisma.bill.create({
+      data: { bankId: bank.id, billingPeriod: '2026-07', amount: 42, dueDate: new Date() },
+    })
+    await prisma.notificationLog.create({
+      data: { billId: bill.id, channel: 'telegram', message: 'x', success: true },
+    })
+
+    const deact = await app.request(`/api/users/${kid!.id}`, { method: 'DELETE', headers: { Cookie: adminCookie } })
+    expect(deact.status).toBe(200)
+    expect((await app.request('/api/auth/me', { headers: { Cookie: kidCookie } })).status).toBe(401)
+    expect(await prisma.bank.count({ where: { userId: kid!.id } })).toBe(1)
+
+    const list = await (await app.request('/api/users', { headers: { Cookie: adminCookie } })).json()
+    const kidDto = list.find((u: any) => u.username === 'kid')
+    expect(kidDto.deletedAt).not.toBeNull()
+
+    // permanent delete requires deactivated state — restore first, then expect 400
+    const restore = await app.request(`/api/users/${kid!.id}/restore`, { method: 'POST', headers: { Cookie: adminCookie } })
+    expect(restore.status).toBe(200)
+    const permActive = await app.request(`/api/users/${kid!.id}/permanent`, { method: 'DELETE', headers: { Cookie: adminCookie } })
+    expect(permActive.status).toBe(400)
+
+    // deactivate again, then permanent delete wipes everything
+    await app.request(`/api/users/${kid!.id}`, { method: 'DELETE', headers: { Cookie: adminCookie } })
+    const perm = await app.request(`/api/users/${kid!.id}/permanent`, { method: 'DELETE', headers: { Cookie: adminCookie } })
+    expect(perm.status).toBe(200)
+    expect(await prisma.user.count({ where: { id: kid!.id } })).toBe(0)
+    expect(await prisma.bank.count({ where: { userId: kid!.id } })).toBe(0)
+    expect(await prisma.bill.count({ where: { id: bill.id } })).toBe(0)
+    expect(await prisma.notificationLog.count({ where: { billId: bill.id } })).toBe(0)
+
+    // admin can be neither deactivated nor permanently deleted
+    const bossRow = await prisma.user.findUnique({ where: { username: 'boss' } })
+    expect((await app.request(`/api/users/${bossRow!.id}`, { method: 'DELETE', headers: { Cookie: adminCookie } })).status).toBe(400)
+    expect((await app.request(`/api/users/${bossRow!.id}/permanent`, { method: 'DELETE', headers: { Cookie: adminCookie } })).status).toBe(400)
   })
 
   it('concurrent duplicate creates: one 201, one 409 (never 500)', async () => {

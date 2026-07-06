@@ -9,8 +9,16 @@ import { credsSchema, passwordSchema } from './auth.js'
 // so authGuard rejects members before these handlers run.
 const app = new Hono()
 
-function toDTO(u: { id: string; username: string; role: string; telegramChatId: string | null; createdAt: Date }) {
-  return { id: u.id, username: u.username, role: u.role, telegramBound: !!u.telegramChatId, createdAt: u.createdAt }
+function toDTO(u: { id: string; username: string; role: string; telegramChatId: string | null; imapUser: string | null; imapPassword: string | null; deletedAt: Date | null; createdAt: Date }) {
+  return {
+    id: u.id,
+    username: u.username,
+    role: u.role,
+    telegramBound: !!u.telegramChatId,
+    emailConfigured: !!(u.imapUser && u.imapPassword),
+    deletedAt: u.deletedAt,
+    createdAt: u.createdAt,
+  }
 }
 
 app.get('/', async (c) => {
@@ -48,11 +56,38 @@ app.post('/:id/reset-password', zValidator('json', z.object({ password: password
   return c.json({ ok: true })
 })
 
+// Deactivate (soft delete): data preserved, login/session/cron/notifications disabled
 app.delete('/:id', async (c) => {
   const user = await prisma.user.findUnique({ where: { id: c.req.param('id') } })
   if (!user) return c.json({ error: '找不到使用者' }, 404)
+  if (user.role === 'admin') return c.json({ error: '無法停用管理員帳號' }, 400)
+  await prisma.user.update({ where: { id: user.id }, data: { deletedAt: new Date() } })
+  await destroyUserSessions(user.id)
+  return c.json({ ok: true })
+})
+
+app.post('/:id/restore', async (c) => {
+  const user = await prisma.user.findUnique({ where: { id: c.req.param('id') } })
+  if (!user) return c.json({ error: '找不到使用者' }, 404)
+  await prisma.user.update({ where: { id: user.id }, data: { deletedAt: null } })
+  return c.json({ ok: true })
+})
+
+// Permanent delete: only from the deactivated state, wipes all tenant data
+app.delete('/:id/permanent', async (c) => {
+  const user = await prisma.user.findUnique({ where: { id: c.req.param('id') } })
+  if (!user) return c.json({ error: '找不到使用者' }, 404)
   if (user.role === 'admin') return c.json({ error: '無法刪除管理員帳號' }, 400)
-  await prisma.user.delete({ where: { id: user.id } }) // sessions cascade
+  if (!user.deletedAt) return c.json({ error: '請先停用帳號' }, 400)
+  await prisma.$transaction([
+    prisma.notificationLog.deleteMany({ where: { bill: { bank: { userId: user.id } } } }),
+    prisma.bill.deleteMany({ where: { bank: { userId: user.id } } }),
+    prisma.bank.deleteMany({ where: { userId: user.id } }),
+    prisma.bankAccount.deleteMany({ where: { userId: user.id } }),
+    prisma.notificationRule.deleteMany({ where: { userId: user.id } }),
+    prisma.scanLog.deleteMany({ where: { userId: user.id } }),
+    prisma.user.delete({ where: { id: user.id } }), // sessions cascade
+  ])
   return c.json({ ok: true })
 })
 

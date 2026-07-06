@@ -7,7 +7,7 @@ process.env.LOG_LEVEL = 'silent'
 const { default: prisma } = await import('@/prisma.js')
 const { setSetting, KEYS } = await import('../settings.js')
 const telegram = await import('../telegram.js')
-const { processReminderRules } = await import('../notification.js')
+const { processReminderRules, processNewBill } = await import('../notification.js')
 
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
@@ -78,5 +78,15 @@ describe('owner-targeted notifications', () => {
     expect(logs).toHaveLength(1)
     expect(logs[0].success).toBe(false)
     expect(logs[0].errorMessage).toContain('使用者未綁定 Telegram')
+  })
+
+  it('processNewBill: deactivated owner is silent — no send, no log', async () => {
+    await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
+    const { bank, bill } = await seedUserWithDueBill('gone-new', '444', new Date())
+
+    await processNewBill(bill, bank)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await prisma.notificationLog.count({ where: { billId: bill.id } })).toBe(0)
   })
 })
