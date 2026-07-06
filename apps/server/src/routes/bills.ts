@@ -8,8 +8,14 @@ import { DATA_DIR } from '@/paths.js'
 import { decryptPdf } from '@/services/pdf-parser.js'
 import { parseBillWithLLM, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
 import { BillStatus } from '@bill-alarm/shared/types'
+import { getAuthUser } from './auth.js'
 
 const app = new Hono()
+
+/** Load a bill only if it belongs to the caller (via bank ownership). */
+async function ownBill(c: Parameters<typeof getAuthUser>[0], id: string) {
+  return prisma.bill.findFirst({ where: { id, bank: { userId: getAuthUser(c).id } } })
+}
 
 const updateBillSchema = z.object({
   amount: z.number().int().optional(),
@@ -24,11 +30,12 @@ app.get('/summary', async (c) => {
   const month = c.req.query('month')
   const now = new Date()
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const userId = getAuthUser(c).id
 
   const [pending, paid, overdue] = await Promise.all([
-    prisma.bill.findMany({ where: { status: BillStatus.PENDING } }),
-    prisma.bill.count({ where: { status: BillStatus.PAID, billingPeriod: currentMonth } }),
-    prisma.bill.count({ where: { status: BillStatus.OVERDUE } }),
+    prisma.bill.findMany({ where: { status: BillStatus.PENDING, bank: { userId } } }),
+    prisma.bill.count({ where: { status: BillStatus.PAID, billingPeriod: currentMonth, bank: { userId } } }),
+    prisma.bill.count({ where: { status: BillStatus.OVERDUE, bank: { userId } } }),
   ])
 
   const totalPending = pending.reduce((sum, b) => sum + b.amount, 0)
@@ -46,7 +53,7 @@ app.get('/summary', async (c) => {
 
   if (month) {
     const monthBills = await prisma.bill.findMany({
-      where: { billingPeriod: month },
+      where: { billingPeriod: month, bank: { userId } },
       include: { bank: { select: { id: true, name: true, autoDebit: true } } },
       orderBy: { dueDate: 'asc' },
     })
@@ -88,7 +95,7 @@ app.get('/', async (c) => {
   const page = Math.max(1, Number(c.req.query('page')) || 1)
   const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize')) || 20))
 
-  const where: Record<string, unknown> = {}
+  const where: Record<string, unknown> = { bank: { userId: getAuthUser(c).id } }
   if (status) where.status = status
   if (bankId) where.bankId = bankId
 
@@ -108,25 +115,28 @@ app.get('/', async (c) => {
 
 // Get single bill
 app.get('/:id', async (c) => {
+  const own = await ownBill(c, c.req.param('id'))
+  if (!own) return c.json({ error: 'Bill not found' }, 404)
   const bill = await prisma.bill.findUnique({
-    where: { id: c.req.param('id') },
+    where: { id: own.id },
     include: {
       bank: { select: { id: true, name: true, code: true, autoDebit: true, isActive: true } },
       notifications: { orderBy: { sentAt: 'desc' } },
     },
   })
-  if (!bill) return c.json({ error: 'Bill not found' }, 404)
   return c.json(bill)
 })
 
 // Update bill
 app.patch('/:id', zValidator('json', updateBillSchema), async (c) => {
+  const own = await ownBill(c, c.req.param('id'))
+  if (!own) return c.json({ error: 'Bill not found' }, 404)
   const data = c.req.valid('json')
   const updateData: Record<string, unknown> = { ...data }
   if (data.dueDate) updateData.dueDate = new Date(data.dueDate)
 
   const bill = await prisma.bill.update({
-    where: { id: c.req.param('id') },
+    where: { id: own.id },
     data: updateData,
   })
   return c.json(bill)
@@ -136,10 +146,12 @@ app.patch('/:id', zValidator('json', updateBillSchema), async (c) => {
 app.patch('/:id/pay', zValidator('json', z.object({
   paidAt: z.string().optional(),
 }).optional()), async (c) => {
+  const own = await ownBill(c, c.req.param('id'))
+  if (!own) return c.json({ error: 'Bill not found' }, 404)
   const body = c.req.valid('json')
   const paidAt = body?.paidAt ? new Date(body.paidAt) : new Date()
   const bill = await prisma.bill.update({
-    where: { id: c.req.param('id') },
+    where: { id: own.id },
     data: { status: BillStatus.PAID, paidAt },
   })
   return c.json(bill)
@@ -147,10 +159,10 @@ app.patch('/:id/pay', zValidator('json', z.object({
 
 // Revert a paid bill back to pending (undo for "標記已繳"; member-allowed)
 app.post('/:id/unpay', async (c) => {
-  const existing = await prisma.bill.findUnique({ where: { id: c.req.param('id') } })
-  if (!existing) return c.json({ error: 'Bill not found' }, 404)
+  const own = await ownBill(c, c.req.param('id'))
+  if (!own) return c.json({ error: 'Bill not found' }, 404)
   const bill = await prisma.bill.update({
-    where: { id: existing.id },
+    where: { id: own.id },
     data: { status: BillStatus.PENDING, paidAt: null },
   })
   return c.json(bill)
@@ -158,8 +170,10 @@ app.post('/:id/unpay', async (c) => {
 
 // Re-parse a bill with LLM (user clicks "AI 重新解析")
 app.post('/:id/reparse', async (c) => {
+  const guard = await ownBill(c, c.req.param('id'))
+  if (!guard) return c.json({ error: 'Bill not found' }, 404)
   const bill = await prisma.bill.findUnique({
-    where: { id: c.req.param('id') },
+    where: { id: guard.id },
     include: { bank: true },
   })
   if (!bill) return c.json({ error: 'Bill not found' }, 404)
@@ -209,8 +223,10 @@ app.post('/:id/reparse', async (c) => {
 
 // View PDF (decrypted with stored password)
 app.get('/:id/pdf', async (c) => {
+  const own = await ownBill(c, c.req.param('id'))
+  if (!own) return c.json({ error: 'PDF not found' }, 404)
   const bill = await prisma.bill.findUnique({
-    where: { id: c.req.param('id') },
+    where: { id: own.id },
     include: { bank: { select: { pdfPassword: true } } },
   })
   if (!bill?.pdfPath) return c.json({ error: 'PDF not found' }, 404)
@@ -233,7 +249,7 @@ app.get('/:id/pdf', async (c) => {
 
 // Delete bill
 app.delete('/:id', async (c) => {
-  const bill = await prisma.bill.findUnique({ where: { id: c.req.param('id') } })
+  const bill = await ownBill(c, c.req.param('id'))
   if (!bill) return c.json({ error: 'Not found' }, 404)
   await prisma.notificationLog.deleteMany({ where: { billId: bill.id } })
   await prisma.bill.delete({ where: { id: bill.id } })

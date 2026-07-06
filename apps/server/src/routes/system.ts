@@ -397,8 +397,8 @@ app.post('/llm/suggest-rule', zValidator('json', z.object({
 // - Re-extracts PDF text from the saved PDF
 // - Returns text + bank info so frontend can auto-fill the editor
 app.get('/parser/bootstrap/:billId', async (c) => {
-  const bill = await prisma.bill.findUnique({
-    where: { id: c.req.param('billId') },
+  const bill = await prisma.bill.findFirst({
+    where: { id: c.req.param('billId'), bank: { userId: getAuthUser(c).id } },
     include: { bank: true },
   })
   if (!bill) return c.json({ error: 'Bill not found' }, 404)

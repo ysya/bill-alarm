@@ -85,3 +85,47 @@ describe('tenant isolation — banks / accounts / rules / scan logs', () => {
     expect(bossLogs.logs).toHaveLength(1)
   })
 })
+
+describe('tenant isolation — bills', () => {
+  let bossBillId = ''
+
+  it('setup: a bill under boss\'s bank', async () => {
+    const bossUser = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: { name: 'B-Bank', emailSenderPattern: 'b@b', emailSubjectPattern: 'bill', userId: bossUser!.id },
+    })
+    const bill = await prisma.bill.create({
+      data: { bankId: bank.id, billingPeriod: '2026-07', amount: 1234, dueDate: new Date() },
+    })
+    bossBillId = bill.id
+    expect(bossBillId).toBeTruthy()
+  })
+
+  it('lists and summary are per-user', async () => {
+    const bossList = await (await json('GET', '/api/bills', boss)).json()
+    expect(bossList.data.some((b: any) => b.id === bossBillId)).toBe(true)
+    const kidList = await (await json('GET', '/api/bills', kid)).json()
+    expect(kidList.data).toHaveLength(0)
+    const kidSummary = await (await json('GET', '/api/bills/summary', kid)).json()
+    expect(kidSummary.pendingCount).toBe(0)
+  })
+
+  it('every single-bill endpoint 404s for a foreign bill', async () => {
+    const cases: Array<[string, string, unknown?]> = [
+      ['GET', `/api/bills/${bossBillId}`],
+      ['GET', `/api/bills/${bossBillId}/pdf`],
+      ['PATCH', `/api/bills/${bossBillId}`, { amount: 1 }],
+      ['PATCH', `/api/bills/${bossBillId}/pay`, {}],
+      ['POST', `/api/bills/${bossBillId}/unpay`],
+      ['POST', `/api/bills/${bossBillId}/reparse`],
+      ['DELETE', `/api/bills/${bossBillId}`],
+      ['GET', `/api/parser/bootstrap/${bossBillId}`],
+    ]
+    for (const [method, path, body] of cases) {
+      const res = await json(method, path, kid, body)
+      expect(res.status, `${method} ${path}`).toBe(404)
+    }
+    // owner still passes
+    expect((await json('GET', `/api/bills/${bossBillId}`, boss)).status).toBe(200)
+  })
+})
