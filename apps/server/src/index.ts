@@ -10,8 +10,11 @@ import { pinoLogger } from 'hono-pino'
 import bankRoutes from './routes/banks.js'
 import bankAccountRoutes from './routes/bank-accounts.js'
 import billRoutes from './routes/bills.js'
-import settingsRoutes from './routes/settings.js'
-import systemRoutes from './routes/system.js'
+import notificationRulesRoutes from './routes/notification-rules.js'
+import scanRoutes from './routes/scan.js'
+import parserLabRoutes from './routes/parser-lab.js'
+import llmRoutes from './routes/llm.js'
+import integrationsRoutes from './routes/integrations.js'
 import configRoutes from './routes/config.js'
 import emailRoutes from './routes/email.js'
 import calendarFeedRoutes from './routes/calendar-feed.js'
@@ -93,8 +96,11 @@ app.route('/api/users', userRoutes)
 app.route('/api/banks', bankRoutes)
 app.route('/api/bank-accounts', bankAccountRoutes)
 app.route('/api/bills', billRoutes)
-app.route('/api/notification-rules', settingsRoutes)
-app.route('/api', systemRoutes)
+app.route('/api/notification-rules', notificationRulesRoutes)
+app.route('/api', scanRoutes)
+app.route('/api', parserLabRoutes)
+app.route('/api', llmRoutes)
+app.route('/api', integrationsRoutes)
 app.route('/api/config', configRoutes)
 app.route('/api/email', emailRoutes)
 app.route('/api/calendar', calendarFeedRoutes)
