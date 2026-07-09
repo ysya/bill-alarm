@@ -50,7 +50,7 @@ async function fetchSelfData() {
   try {
     const [ruleList, email, calendar] = await Promise.all([
       settingsApi.listRules(),
-      settingsApi.getEmailStatus(),
+      settingsApi.getEmailStatus(true),
       settingsApi.getCalendarFeed(),
     ])
     rules.value = ruleList

@@ -18,6 +18,62 @@ const setup = await app.request('/api/auth/setup', {
 })
 const adminCookie = cookieOf(setup)
 
+describe('banks: enable with password', () => {
+  it('POST /api/banks/enable/:code on an existing disabled bank with a new pdfPassword persists the password', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: {
+        code: 'esun',
+        name: '玉山銀行',
+        emailSenderPattern: 'estatement@esunbank.com',
+        emailSubjectPattern: '信用卡電子帳單',
+        isBuiltin: true,
+        isActive: false,
+        userId: user!.id,
+      },
+    })
+
+    const res = await app.request(`/api/banks/enable/${bank.code}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ pdfPassword: 'A123456789' }),
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.isActive).toBe(true)
+    expect(body.pdfPassword).toBe('A123456789')
+
+    const stored = await prisma.bank.findUnique({ where: { id: bank.id } })
+    expect(stored?.isActive).toBe(true)
+    expect(stored?.pdfPassword).toBe('A123456789')
+  })
+
+  it('POST /api/banks/enable/:code on an existing disabled bank without a body keeps the existing password', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: {
+        code: 'yuanta',
+        name: '元大銀行',
+        emailSenderPattern: 'YuantaBank@estmt.com.tw',
+        emailSubjectPattern: '信用卡電子帳單',
+        pdfPassword: 'OLDPASS123',
+        isBuiltin: true,
+        isActive: false,
+        userId: user!.id,
+      },
+    })
+
+    const res = await app.request(`/api/banks/enable/${bank.code}`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.isActive).toBe(true)
+    expect(body.pdfPassword).toBe('OLDPASS123')
+  })
+})
+
 describe('banks: delete guard + cascades', () => {
   it('DELETE /api/banks/:id on a custom bank with bills returns 400 with a friendly count message', async () => {
     const user = await prisma.user.findUnique({ where: { username: 'boss' } })

@@ -30,16 +30,17 @@ app.post('/enable/:code', zValidator('json', z.object({
   const preset = BANK_PRESETS.find((p) => p.code === code)
   if (!preset) return c.json({ error: 'Unknown bank code' }, 404)
 
+  const body = c.req.valid('json')
   const existing = await prisma.bank.findFirst({ where: { userId, code } })
   if (existing) {
     const updated = await prisma.bank.update({
       where: { id: existing.id },
-      data: { isActive: true },
+      // pdfPassword undefined (not sent) leaves the stored value untouched.
+      data: { isActive: true, pdfPassword: body?.pdfPassword },
     })
     return c.json(updated)
   }
 
-  const body = c.req.valid('json')
   const bank = await prisma.bank.create({
     data: {
       code,

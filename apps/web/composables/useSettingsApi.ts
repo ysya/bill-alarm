@@ -59,7 +59,9 @@ export function useSettingsApi() {
         password: data.password,
       }),
 
-    getEmailStatus: () => get<EmailStatus>('/email/status'),
+    // Default is a cheap DB-only read; pass verify=true to also probe the live
+    // IMAP connection (adds connected/message/email, costs a real round-trip).
+    getEmailStatus: (verify = false) => get<EmailStatus>(`/email/status${verify ? '?verify=1' : ''}`),
 
     // Calendar (ICS feed)
     getCalendarFeed: () =>

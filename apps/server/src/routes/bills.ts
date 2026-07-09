@@ -128,6 +128,21 @@ app.get('/:id', async (c) => {
   return c.json(bill)
 })
 
+/**
+ * Keep paidAt consistent with a status change: entering PAID stamps paidAt
+ * (unless one is already set), leaving PAID clears it. A patch that doesn't
+ * touch status leaves paidAt alone. Returns the paidAt override, or undefined
+ * when no change is warranted.
+ */
+function paidAtForStatusChange(
+  newStatus: BillStatus | undefined,
+  currentPaidAt: Date | null,
+): { paidAt: Date | null } | undefined {
+  if (newStatus === undefined) return undefined
+  if (newStatus === BillStatus.PAID) return currentPaidAt ? undefined : { paidAt: new Date() }
+  return currentPaidAt ? { paidAt: null } : undefined
+}
+
 // Update bill
 app.patch('/:id', zValidator('json', updateBillSchema), async (c) => {
   const own = await ownBill(c, c.req.param('id'))
@@ -136,7 +151,7 @@ app.patch('/:id', zValidator('json', updateBillSchema), async (c) => {
 
   const bill = await prisma.bill.update({
     where: { id: own.id },
-    data,
+    data: { ...data, ...paidAtForStatusChange(data.status, own.paidAt) },
   })
   return c.json(bill)
 })
