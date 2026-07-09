@@ -68,6 +68,13 @@ describe('secrets: with ENCRYPTION_KEY set (encrypted mode)', () => {
     expect(decryptSecret(encryptSecret(plain))).toBe(plain)
   })
 
+  it('is idempotent on already-encrypted input: encryptSecret(encryptSecret(x)) === encryptSecret(x) (no double-wrapping), and still decrypts back to x', () => {
+    const singleWrapped = encryptSecret('x')
+    const doubleCalled = encryptSecret(singleWrapped)
+    expect(doubleCalled).toBe(singleWrapped)
+    expect(decryptSecret(doubleCalled)).toBe('x')
+  })
+
   it('roundtrips values containing unicode / multibyte characters', () => {
     const plain = '密碼🔑with-emoji-and-中文字元'
     expect(decryptSecret(encryptSecret(plain))).toBe(plain)

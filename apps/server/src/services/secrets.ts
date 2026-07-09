@@ -23,12 +23,16 @@ export function encryptionEnabled(): boolean {
  * returns the value UNCHANGED (no prefix) so the app works identically in
  * plaintext mode — this is what makes encryption "optional".
  *
- * Assumes `plain` is genuine plaintext. All call sites pass user-provided
- * input straight through, never a value already read back from storage, so
- * double-encrypting an `enc:v1:` value is not a case this needs to guard
- * against in practice.
+ * Idempotent: if `plain` already starts with the `enc:v1:` prefix, it is
+ * returned UNCHANGED instead of being wrapped again. All call sites today
+ * pass genuine user-provided plaintext, never a value already read back from
+ * storage, so double-encryption is not a path exercised in practice — but
+ * the invariant is now enforced in code (not just assumed) as defense in
+ * depth against a future call site that round-trips ciphertext through here.
  */
 export function encryptSecret(plain: string): string {
+  if (plain.startsWith(PREFIX)) return plain
+
   const key = getKey()
   if (!key) return plain
 

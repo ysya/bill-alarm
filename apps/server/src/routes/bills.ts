@@ -269,7 +269,13 @@ app.get('/:id/pdf', async (c) => {
         'Content-Disposition': `inline; filename="${path.basename(bill.pdfPath)}"`,
       },
     })
-  } catch {
+  } catch (e) {
+    // getBankPdfPassword/decryptSecret throws a distinct "ENCRYPTION_KEY is
+    // not set but the stored value is encrypted" message when ciphertext
+    // exists but the key to read it is gone — surface that operator
+    // misconfiguration instead of the generic (and here misleading) 404.
+    const message = (e as Error).message
+    if (message.includes('ENCRYPTION_KEY')) return c.json({ error: message }, 500)
     return c.json({ error: 'PDF file missing' }, 404)
   }
 })

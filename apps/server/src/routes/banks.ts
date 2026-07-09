@@ -9,6 +9,15 @@ import { getAuthUser } from './auth.js'
 
 const app = new Hono()
 
+// Never send the stored PDF password (plaintext or ciphertext) to the
+// client — only whether one is set. Generic over T so it works both for the
+// GET / list's narrow `select` shape and the full Prisma Bank row returned
+// by create/update calls below.
+function toBankDTO<T extends { pdfPassword: string | null }>(bank: T) {
+  const { pdfPassword, ...rest } = bank
+  return { ...rest, hasPdfPassword: !!pdfPassword }
+}
+
 // List presets
 app.get('/presets', (c) => {
   return c.json(BANK_PRESETS)
@@ -34,8 +43,7 @@ app.get('/', async (c) => {
     },
     orderBy: { name: 'asc' },
   })
-  // Never send the plaintext PDF password to the client — only whether one is set.
-  return c.json(banks.map(({ pdfPassword, ...bank }) => ({ ...bank, hasPdfPassword: !!pdfPassword })))
+  return c.json(banks.map(toBankDTO))
 })
 
 app.post('/enable/:code', zValidator('json', z.object({
@@ -56,7 +64,7 @@ app.post('/enable/:code', zValidator('json', z.object({
       where: { id: existing.id },
       data: { isActive: true, pdfPassword },
     })
-    return c.json(updated)
+    return c.json(toBankDTO(updated))
   }
 
   const bank = await prisma.bank.create({
@@ -71,7 +79,7 @@ app.post('/enable/:code', zValidator('json', z.object({
       userId,
     },
   })
-  return c.json(bank, 201)
+  return c.json(toBankDTO(bank), 201)
 })
 
 app.post('/disable/:code', async (c) => {
@@ -81,7 +89,7 @@ app.post('/disable/:code', async (c) => {
     where: { id: bank.id },
     data: { isActive: false },
   })
-  return c.json(updated)
+  return c.json(toBankDTO(updated))
 })
 
 app.patch('/:id', zValidator('json', z.object({
@@ -116,7 +124,7 @@ app.patch('/:id', zValidator('json', z.object({
   // only a genuine non-empty string (already enforced by .min(1) above) gets encrypted.
   if (data.pdfPassword) data.pdfPassword = encryptSecret(data.pdfPassword)
   const bank = await prisma.bank.update({ where: { id: existing.id }, data })
-  return c.json(bank)
+  return c.json(toBankDTO(bank))
 })
 
 app.post('/', zValidator('json', z.object({
@@ -130,7 +138,7 @@ app.post('/', zValidator('json', z.object({
   const bank = await prisma.bank.create({
     data: { ...data, isBuiltin: false, isActive: true, userId: getAuthUser(c).id },
   })
-  return c.json(bank, 201)
+  return c.json(toBankDTO(bank), 201)
 })
 
 app.delete('/:id', async (c) => {

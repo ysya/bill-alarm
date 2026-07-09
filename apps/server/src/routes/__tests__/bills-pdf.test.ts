@@ -160,3 +160,59 @@ describe('bills: GET /:id/pdf decrypts an at-rest-encrypted bank.pdfPassword (se
     expect(res.headers.get('content-type')).toBe('application/pdf')
   })
 })
+
+describe('bills: GET /:id/pdf surfaces an ENCRYPTION_KEY misconfiguration instead of a misleading 404', () => {
+  let originalKey: string | undefined
+
+  beforeEach(() => {
+    originalKey = process.env.ENCRYPTION_KEY
+  })
+
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.ENCRYPTION_KEY
+    else process.env.ENCRYPTION_KEY = originalKey
+  })
+
+  it('bank.pdfPassword stored as enc:v1: ciphertext but ENCRYPTION_KEY unset at read time returns 500 with the misconfiguration message, not a 404', async () => {
+    const bossUser = await prisma.user.findUnique({ where: { username: 'boss' } })
+
+    // Produce genuine enc:v1: ciphertext the way routes/banks.ts's write path
+    // would, using a key that is then removed — simulates ENCRYPTION_KEY
+    // going missing/rotated while encrypted data still sits in the DB.
+    process.env.ENCRYPTION_KEY = 'misconfig-test-key-then-removed'
+    const ciphertext = encryptSecret('WouldHaveBeenDecryptedPass')
+    delete process.env.ENCRYPTION_KEY
+
+    const bank = await prisma.bank.create({
+      data: {
+        name: 'PDF Fixture Bank (misconfigured encryption)',
+        emailSenderPattern: 'pdf-misconf@pdf',
+        emailSubjectPattern: 'pdf-misconf',
+        pdfPassword: ciphertext,
+        userId: bossUser!.id,
+      },
+    })
+
+    fs.mkdirSync(PDF_DIR, { recursive: true })
+    const filename = `${bank.id}_fixture.pdf`
+    // Content is irrelevant: getBankPdfPassword throws (evaluated as decryptPdf's
+    // argument) before decryptPdf's body ever runs, as long as the file exists so
+    // fs.readFile succeeds first and the throw is attributable to the misconfig.
+    fs.writeFileSync(path.join(PDF_DIR, filename), Buffer.from('placeholder, never read'))
+
+    const bill = await prisma.bill.create({
+      data: {
+        bankId: bank.id,
+        billingPeriod: '2026-07',
+        amount: 777,
+        dueDate: '2026-07-23',
+        pdfPath: `pdfs/${filename}`,
+      },
+    })
+
+    const res = await app.request(`/api/bills/${bill.id}/pdf`, { headers: { Cookie: boss } })
+    expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body.error).toContain('ENCRYPTION_KEY')
+  })
+})

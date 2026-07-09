@@ -42,11 +42,38 @@ describe('banks: enable with password', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.isActive).toBe(true)
-    expect(body.pdfPassword).toBe('A123456789')
+    expect('pdfPassword' in body).toBe(false)
+    expect(body.hasPdfPassword).toBe(true)
 
     const stored = await prisma.bank.findUnique({ where: { id: bank.id } })
     expect(stored?.isActive).toBe(true)
     expect(stored?.pdfPassword).toBe('A123456789')
+  })
+
+  it('POST /api/banks/disable/:code masks pdfPassword in the response', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: {
+        code: 'cathay',
+        name: '國泰世華',
+        emailSenderPattern: 'x@cathay',
+        emailSubjectPattern: '帳單',
+        pdfPassword: 'B223456789',
+        isBuiltin: true,
+        isActive: true,
+        userId: user!.id,
+      },
+    })
+
+    const res = await app.request(`/api/banks/disable/${bank.code}`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.isActive).toBe(false)
+    expect('pdfPassword' in body).toBe(false)
+    expect(body.hasPdfPassword).toBe(true)
   })
 
   it('POST /api/banks/enable/:code on an existing disabled bank without a body keeps the existing password', async () => {
@@ -71,7 +98,11 @@ describe('banks: enable with password', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.isActive).toBe(true)
-    expect(body.pdfPassword).toBe('OLDPASS123')
+    expect('pdfPassword' in body).toBe(false)
+    expect(body.hasPdfPassword).toBe(true)
+
+    const stored = await prisma.bank.findUnique({ where: { id: bank.id } })
+    expect(stored?.pdfPassword).toBe('OLDPASS123')
   })
 })
 
@@ -117,7 +148,8 @@ describe('banks: pdfPassword validation', () => {
     })
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.pdfPassword).toBeNull()
+    expect('pdfPassword' in body).toBe(false)
+    expect(body.hasPdfPassword).toBe(false)
     const stored = await prisma.bank.findUnique({ where: { id: bank.id } })
     expect(stored?.pdfPassword).toBeNull()
   })
@@ -144,7 +176,8 @@ describe('banks: pdfPassword at-rest encryption (all 3 write sites)', () => {
     })
     expect(res.status).toBe(201)
     const body = await res.json()
-    expect(body.pdfPassword.startsWith('enc:v1:')).toBe(true)
+    expect('pdfPassword' in body).toBe(false)
+    expect(body.hasPdfPassword).toBe(true)
 
     const stored = await prisma.bank.findUnique({ where: { id: body.id } })
     expect(stored?.pdfPassword?.startsWith('enc:v1:')).toBe(true)
@@ -172,6 +205,9 @@ describe('banks: pdfPassword at-rest encryption (all 3 write sites)', () => {
       body: JSON.stringify({ pdfPassword: 'TaishinPlainPass2' }),
     })
     expect(res.status).toBe(200)
+    const body = await res.json()
+    expect('pdfPassword' in body).toBe(false)
+    expect(body.hasPdfPassword).toBe(true)
 
     const stored = await prisma.bank.findUnique({ where: { id: bank.id } })
     expect(stored?.pdfPassword?.startsWith('enc:v1:')).toBe(true)
@@ -190,6 +226,9 @@ describe('banks: pdfPassword at-rest encryption (all 3 write sites)', () => {
       body: JSON.stringify({ pdfPassword: 'PatchPlainPass3' }),
     })
     expect(res.status).toBe(200)
+    const body = await res.json()
+    expect('pdfPassword' in body).toBe(false)
+    expect(body.hasPdfPassword).toBe(true)
 
     const stored = await prisma.bank.findUnique({ where: { id: bank.id } })
     expect(stored?.pdfPassword?.startsWith('enc:v1:')).toBe(true)
@@ -209,7 +248,8 @@ describe('banks: pdfPassword at-rest encryption (all 3 write sites)', () => {
     })
     expect(res.status).toBe(201)
     const body = await res.json()
-    expect(body.pdfPassword.startsWith('enc:v1:')).toBe(true)
+    expect('pdfPassword' in body).toBe(false)
+    expect(body.hasPdfPassword).toBe(true)
 
     const stored = await prisma.bank.findUnique({ where: { id: body.id } })
     expect(getBankPdfPassword(stored!)).toBe('CustomPlainPass4')
