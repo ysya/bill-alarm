@@ -10,7 +10,8 @@
     "./constants": "./constants.ts",
     "./template-parser": "./template-parser.ts",
     "./date": "./date.ts",
-    "./format": "./format.ts"
+    "./format": "./format.ts",
+    "./scan": "./scan.ts"
   },
   "devDependencies": {
     "vitest": "^4.1.9"

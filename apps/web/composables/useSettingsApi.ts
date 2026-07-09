@@ -1,33 +1,7 @@
 import type { EmailStatus } from '~/types/settings'
+import type { ScanError, ScanErrorStage, ScanLogDTO } from '@bill-alarm/shared/scan'
 
-export type ScanErrorStage
-  = | 'email_search'
-    | 'email_fetch'
-    | 'pdf_password'
-    | 'pdf_extract'
-    | 'parse_failed'
-    | 'sanity_check'
-    | 'unexpected'
-    | 'notification'
-
-export interface ScanError {
-  stage: ScanErrorStage
-  reason: string
-  bank?: string
-  msgId?: string
-}
-
-export interface ScanLogDTO {
-  id: string
-  trigger: 'manual' | 'cron'
-  startedAt: string
-  finishedAt: string | null
-  scanned: number
-  newBillsCount: number
-  errorCount: number
-  errors: ScanError[]
-  fatalError: string | null
-}
+export type { ScanError, ScanErrorStage, ScanLogDTO }
 
 export interface EmailConfigPayload {
   host?: string

@@ -1,32 +1,8 @@
-export type ScanEvent
-  = | {
-    type: 'start'
-    scanLogId: string
-    total: number
-    trigger: 'manual' | 'cron'
-  }
-  | {
-    type: 'progress'
-    scanLogId: string
-    idx: number
-    total: number
-    bank?: string
-    status: 'matched' | 'success' | 'error' | 'skipped'
-    reason?: string
-  }
-  | {
-    type: 'complete'
-    scanLogId: string
-    scanned: number
-    newBills: number
-    errorCount: number
-  }
-
-export type ScanItemStatus = 'matched' | 'success' | 'error' | 'skipped'
+import type { ScanEvent, ScanItemStatus, ScanTrigger } from '@bill-alarm/shared/scan'
 
 export interface ScanProgressState {
   active: boolean
-  trigger: 'manual' | 'cron' | null
+  trigger: ScanTrigger | null
   scanLogId: string | null
   total: number
   idx: number
@@ -36,7 +12,7 @@ export interface ScanProgressState {
 }
 
 /**
- * Subscribes to /api/system/scan-events via EventSource and exposes a reactive
+ * Subscribes to /api/scan-events via EventSource and exposes a reactive
  * progress state. The EventSource is opened on mount and closed on unmount.
  */
 export function useScanEvents() {

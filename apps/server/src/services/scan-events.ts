@@ -1,31 +1,7 @@
 import { EventEmitter } from 'node:events'
+import type { ScanEvent } from '@bill-alarm/shared/scan'
 
-export type ScanEvent =
-  | {
-      type: 'start'
-      userId: string
-      scanLogId: string
-      total: number
-      trigger: 'manual' | 'cron'
-    }
-  | {
-      type: 'progress'
-      userId: string
-      scanLogId: string
-      idx: number
-      total: number
-      bank?: string
-      status: 'matched' | 'success' | 'error' | 'skipped'
-      reason?: string
-    }
-  | {
-      type: 'complete'
-      userId: string
-      scanLogId: string
-      scanned: number
-      newBills: number
-      errorCount: number
-    }
+export type { ScanEvent }
 
 export interface ScanSnapshot {
   start: Extract<ScanEvent, { type: 'start' }>

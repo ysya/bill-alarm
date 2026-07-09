@@ -13,33 +13,17 @@ import { getSetting, KEYS } from './settings.js'
 import { scanEvents } from './scan-events.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus, type ParsedBill } from '@bill-alarm/shared/types'
+import type { ScanError, ScanItemStatus } from '@bill-alarm/shared/scan'
+
+export type { ScanError }
 
 export type ScanUser = { id: string } & MailboxOwner
-
-export type ScanErrorStage =
-  | 'email_search'
-  | 'email_fetch'
-  | 'pdf_password'
-  | 'pdf_extract'
-  | 'parse_failed'
-  | 'sanity_check'
-  | 'unexpected'
-  | 'notification'
-
-export interface ScanError {
-  stage: ScanErrorStage
-  reason: string
-  bank?: string
-  msgId?: string
-}
 
 export interface ScanResult {
   scanned: number
   newBills: Array<{ bill: Bill; bank: Bank }>
   errors: ScanError[]
 }
-
-export type ScanItemStatus = 'matched' | 'success' | 'error' | 'skipped'
 
 export interface ScanCallbacks {
   /** Called once after Gmail search completes, with total messages to process. */
