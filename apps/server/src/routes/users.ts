@@ -79,15 +79,9 @@ app.delete('/:id/permanent', async (c) => {
   if (!user) return c.json({ error: '找不到使用者' }, 404)
   if (user.role === 'admin') return c.json({ error: '無法刪除管理員帳號' }, 400)
   if (!user.deletedAt) return c.json({ error: '請先停用帳號' }, 400)
-  await prisma.$transaction([
-    prisma.notificationLog.deleteMany({ where: { bill: { bank: { userId: user.id } } } }),
-    prisma.bill.deleteMany({ where: { bank: { userId: user.id } } }),
-    prisma.bank.deleteMany({ where: { userId: user.id } }),
-    prisma.bankAccount.deleteMany({ where: { userId: user.id } }),
-    prisma.notificationRule.deleteMany({ where: { userId: user.id } }),
-    prisma.scanLog.deleteMany({ where: { userId: user.id } }),
-    prisma.user.delete({ where: { id: user.id } }), // sessions cascade
-  ])
+  // user delete cascades: banks -> bills -> notification logs,
+  // plus bankAccounts / notificationRules / scanLogs / sessions.
+  await prisma.user.delete({ where: { id: user.id } })
   return c.json({ ok: true })
 })
 

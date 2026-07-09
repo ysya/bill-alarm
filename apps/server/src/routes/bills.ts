@@ -250,7 +250,7 @@ app.get('/:id/pdf', async (c) => {
 app.delete('/:id', async (c) => {
   const bill = await ownBill(c, c.req.param('id'))
   if (!bill) return c.json({ error: 'Not found' }, 404)
-  await prisma.notificationLog.deleteMany({ where: { billId: bill.id } })
+  // notification logs cascade via the schema FK
   await prisma.bill.delete({ where: { id: bill.id } })
   return c.json({ success: true })
 })

@@ -103,6 +103,8 @@ app.delete('/:id', async (c) => {
   const bank = await prisma.bank.findFirst({ where: { id: c.req.param('id'), userId: getAuthUser(c).id } })
   if (!bank) return c.json({ error: 'Not found' }, 404)
   if (bank.isBuiltin) return c.json({ error: '無法刪除內建銀行，請改為停用' }, 400)
+  const billCount = await prisma.bill.count({ where: { bankId: bank.id } })
+  if (billCount > 0) return c.json({ error: `此銀行尚有 ${billCount} 筆帳單，請先刪除帳單` }, 400)
   await prisma.bank.delete({ where: { id: bank.id } })
   return c.json({ success: true })
 })
