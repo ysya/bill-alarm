@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai'
 import { getSetting, KEYS } from './settings.js'
+import { withTimeout } from './util/timeout.js'
 import { deriveBillingPeriod, isValidYMD } from '@bill-alarm/shared/date'
 import type { ParsedBill } from '@bill-alarm/shared/types'
 import type { FieldRule, FieldType } from '@bill-alarm/shared/template-parser'
@@ -131,23 +132,34 @@ async function invokeLlmPlain(provider: LlmProvider, prompt: string): Promise<st
   throw new Error('Invalid LLM provider')
 }
 
+// Uniform 60s ceiling for every provider so a hung LLM (esp. local Ollama) can never
+// stall a scan indefinitely. Routed through the shared withTimeout for all three —
+// not AbortSignal.timeout on fetch — since AbortSignal.timeout ignores
+// vi.useFakeTimers (verified empirically) and would make OpenAI/Ollama behave
+// differently under test from Gemini's SDK call. See task-b6-report.md.
+const LLM_TIMEOUT_MS = 60_000
+
 async function invokeGemini(prompt: string, schema?: object): Promise<string> {
   const apiKey = await getSetting(KEYS.GEMINI_API_KEY)
   if (!apiKey) throw new Error('Gemini API key 未設定')
   const model = (await getSetting(KEYS.GEMINI_MODEL)) ?? 'gemini-2.5-flash'
 
   const ai = new GoogleGenAI({ apiKey })
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      temperature: 0,
-      ...(schema && {
-        responseMimeType: 'application/json',
-        responseJsonSchema: schema,
-      }),
-    },
-  })
+  const response = await withTimeout(
+    ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        temperature: 0,
+        ...(schema && {
+          responseMimeType: 'application/json',
+          responseJsonSchema: schema,
+        }),
+      },
+    }),
+    LLM_TIMEOUT_MS,
+    'Gemini 請求',
+  )
   return response.text?.trim() ?? ''
 }
 
@@ -173,48 +185,52 @@ async function invokeOpenAI(prompt: string, schema?: object): Promise<string> {
     }
   }
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  })
+  return withTimeout((async () => {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    })
 
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '')
-    throw new Error(`OpenAI 請求失敗 (${res.status}): ${txt || res.statusText}`)
-  }
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>
-  }
-  return (data.choices?.[0]?.message?.content ?? '').trim()
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      throw new Error(`OpenAI 請求失敗 (${res.status}): ${txt || res.statusText}`)
+    }
+    const data = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string } }>
+    }
+    return (data.choices?.[0]?.message?.content ?? '').trim()
+  })(), LLM_TIMEOUT_MS, 'OpenAI 請求')
 }
 
 async function invokeOllama(prompt: string, schema?: object): Promise<string> {
   const baseUrl = (await getSetting(KEYS.OLLAMA_BASE_URL)) ?? 'http://localhost:11434'
   const model = (await getSetting(KEYS.OLLAMA_MODEL)) ?? 'qwen2.5:1.5b'
-
   const url = `${baseUrl.replace(/\/$/, '')}/api/generate`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: false,
-      ...(schema && { format: schema }),
-      options: { temperature: 0 },
-    }),
-  })
 
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '')
-    throw new Error(`Ollama 請求失敗 (${res.status}): ${txt || res.statusText}`)
-  }
-  const data = (await res.json()) as { response?: string }
-  return (data.response ?? '').trim()
+  return withTimeout((async () => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        prompt,
+        stream: false,
+        ...(schema && { format: schema }),
+        options: { temperature: 0 },
+      }),
+    })
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      throw new Error(`Ollama 請求失敗 (${res.status}): ${txt || res.statusText}`)
+    }
+    const data = (await res.json()) as { response?: string }
+    return (data.response ?? '').trim()
+  })(), LLM_TIMEOUT_MS, 'Ollama 請求')
 }
 
 // --- Response parsing ---
