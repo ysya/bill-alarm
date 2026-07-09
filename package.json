@@ -8,6 +8,7 @@
     "dev:web": "turbo dev --filter=@bill-alarm/web",
     "build": "turbo build",
     "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
     "release": "release-it"
   },
   "packageManager": "pnpm@10.33.0",
