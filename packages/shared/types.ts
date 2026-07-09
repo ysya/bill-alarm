@@ -61,6 +61,23 @@ export interface BankAccountDTO {
   note?: string | null
 }
 
+/** API 回傳的銀行設定（列表用）。pdfPassword 遮罩：只回 hasPdfPassword，不回明碼。 */
+export interface BankDTO {
+  id: string
+  code: string | null
+  name: string
+  emailSenderPattern: string
+  emailSubjectPattern: string
+  parserConfig: string | null
+  isBuiltin: boolean
+  isActive: boolean
+  autoDebit: boolean
+  bankAccountId: string | null
+  bankAccount?: BankAccountDTO | null
+  hasPdfPassword: boolean
+  _count?: { bills: number }
+}
+
 export interface BillBreakdownItem {
   bankId: string
   bankName: string

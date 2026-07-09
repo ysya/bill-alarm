@@ -16,10 +16,25 @@ app.get('/presets', (c) => {
 app.get('/', async (c) => {
   const banks = await prisma.bank.findMany({
     where: { userId: getAuthUser(c).id },
-    include: { _count: { select: { bills: true } }, bankAccount: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      emailSenderPattern: true,
+      emailSubjectPattern: true,
+      parserConfig: true,
+      pdfPassword: true,
+      isBuiltin: true,
+      isActive: true,
+      autoDebit: true,
+      bankAccountId: true,
+      bankAccount: true,
+      _count: { select: { bills: true } },
+    },
     orderBy: { name: 'asc' },
   })
-  return c.json(banks)
+  // Never send the plaintext PDF password to the client — only whether one is set.
+  return c.json(banks.map(({ pdfPassword, ...bank }) => ({ ...bank, hasPdfPassword: !!pdfPassword })))
 })
 
 app.post('/enable/:code', zValidator('json', z.object({

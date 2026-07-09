@@ -122,6 +122,52 @@ describe('banks: pdfPassword validation', () => {
   })
 })
 
+describe('banks: GET / masking', () => {
+  it('GET /api/banks omits pdfPassword and reports hasPdfPassword: true when a password is set', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: {
+        name: 'Masked Bank With Password',
+        emailSenderPattern: 'mask1@pw',
+        emailSubjectPattern: 'mask1',
+        pdfPassword: 'SECRET-DO-NOT-LEAK',
+        userId: user!.id,
+      },
+    })
+
+    const res = await app.request('/api/banks', { headers: { Cookie: adminCookie } })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    const entry = body.find((b: any) => b.id === bank.id)
+    expect(entry).toBeTruthy()
+    expect('pdfPassword' in entry).toBe(false)
+    expect(entry.hasPdfPassword).toBe(true)
+    // fields the edit dialog and preset cards still need
+    expect(entry.emailSenderPattern).toBe('mask1@pw')
+    expect(entry.emailSubjectPattern).toBe('mask1')
+  })
+
+  it('GET /api/banks reports hasPdfPassword: false when no password is set', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: {
+        name: 'Masked Bank No Password',
+        emailSenderPattern: 'mask2@pw',
+        emailSubjectPattern: 'mask2',
+        userId: user!.id,
+      },
+    })
+
+    const res = await app.request('/api/banks', { headers: { Cookie: adminCookie } })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    const entry = body.find((b: any) => b.id === bank.id)
+    expect(entry).toBeTruthy()
+    expect('pdfPassword' in entry).toBe(false)
+    expect(entry.hasPdfPassword).toBe(false)
+  })
+})
+
 describe('banks: delete guard + cascades', () => {
   it('DELETE /api/banks/:id on a custom bank with bills returns 400 with a friendly count message', async () => {
     const user = await prisma.user.findUnique({ where: { username: 'boss' } })

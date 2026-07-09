@@ -47,8 +47,10 @@ describe('tenant isolation — banks / accounts / rules / scan logs', () => {
     expect(bossList).toHaveLength(1)
     expect(kidList).toHaveLength(1)
     expect(bossList[0].id).not.toBe(kidList[0].id)
-    // own rows carry own secrets (no stripping of your own data)
-    expect('pdfPassword' in bossList[0]).toBe(true)
+    // pdfPassword is masked out of the list response even for your own rows (B8);
+    // hasPdfPassword reflects whether one is set instead.
+    expect('pdfPassword' in bossList[0]).toBe(false)
+    expect(bossList[0].hasPdfPassword).toBe(false) // enabled without a password above
 
     const foreign = await json('PATCH', `/api/banks/${bossList[0].id}`, kid, { name: 'hax' })
     expect(foreign.status).toBe(404)

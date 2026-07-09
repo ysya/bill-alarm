@@ -16,7 +16,7 @@ interface EnabledBank {
   name: string
   emailSenderPattern: string
   emailSubjectPattern: string
-  pdfPassword: string | null
+  hasPdfPassword: boolean
   isBuiltin: boolean
   isActive: boolean
   autoDebit: boolean
@@ -56,6 +56,18 @@ const editForm = ref({ emailSenderPattern: '', emailSubjectPattern: '', pdfPassw
 const editingPreset = computed<BankPreset | null>(() => {
   if (!editingBank.value?.code) return null
   return presets.value.find(p => p.code === editingBank.value!.code) ?? null
+})
+
+// PDF password field: never pre-filled with the real value (server no longer sends it).
+// Leave empty on save -> keep unchanged. "清除密碼" stages an explicit clear (sent as
+// pdfPassword: null) that a freshly-typed password automatically supersedes.
+const clearPdfPasswordOnSave = ref(false)
+const pdfPasswordPlaceholder = computed(() => {
+  if (clearPdfPasswordOnSave.value) return '將於儲存後清除'
+  return editingBank.value?.hasPdfPassword ? '已設定（留空維持不變）' : '未設定'
+})
+watch(() => editForm.value.pdfPassword, (val) => {
+  if (val) clearPdfPasswordOnSave.value = false
 })
 
 // Delete confirm
@@ -164,10 +176,12 @@ async function handleEnableWithPassword() {
 function openEdit(bank: EnabledBank) {
   editingBank.value = bank
   showPassword.value = false
+  clearPdfPasswordOnSave.value = false
   editForm.value = {
     emailSenderPattern: bank.emailSenderPattern,
     emailSubjectPattern: bank.emailSubjectPattern,
-    pdfPassword: bank.pdfPassword ?? '',
+    // Never pre-filled: the server no longer sends the plaintext password.
+    pdfPassword: '',
     autoDebit: bank.autoDebit,
     bankAccountId: bank.bankAccountId,
   }
@@ -178,13 +192,23 @@ async function handleEdit() {
   if (!editingBank.value) return
   submitting.value = true
   try {
-    await bankApi.update(editingBank.value.id, {
+    const data: Record<string, unknown> = {
       emailSenderPattern: editForm.value.emailSenderPattern,
       emailSubjectPattern: editForm.value.emailSubjectPattern,
-      pdfPassword: editForm.value.pdfPassword || null,
       autoDebit: editForm.value.autoDebit,
       bankAccountId: editForm.value.bankAccountId || null,
-    })
+    }
+    // Leave empty -> omit entirely (server keeps the existing password).
+    // Typed a new value -> overwrite it (takes priority over a staged clear).
+    // "清除密碼" with nothing typed -> explicit null (server clears it).
+    // Never send '' — the server rejects it with 400.
+    if (editForm.value.pdfPassword) {
+      data.pdfPassword = editForm.value.pdfPassword
+    }
+    else if (clearPdfPasswordOnSave.value) {
+      data.pdfPassword = null
+    }
+    await bankApi.update(editingBank.value.id, data)
     toast.success('設定已更新')
     editDialogOpen.value = false
     await fetchData()
@@ -670,13 +694,26 @@ onMounted(fetchData)
             </p>
           </div>
           <div class="space-y-2">
-            <Label for="ePwd">PDF 密碼</Label>
+            <div class="flex items-center justify-between">
+              <Label for="ePwd">PDF 密碼</Label>
+              <Button
+                v-if="editingBank?.hasPdfPassword"
+                type="button"
+                size="sm"
+                variant="ghost"
+                class="h-6 px-2 text-xs"
+                :class="clearPdfPasswordOnSave ? 'text-destructive' : ''"
+                @click="clearPdfPasswordOnSave = !clearPdfPasswordOnSave; editForm.pdfPassword = ''"
+              >
+                {{ clearPdfPasswordOnSave ? '復原' : '清除密碼' }}
+              </Button>
+            </div>
             <div class="relative">
               <Input
                 id="ePwd"
                 v-model="editForm.pdfPassword"
                 :type="showPassword ? 'text' : 'password'"
-                placeholder="留空表示無密碼"
+                :placeholder="pdfPasswordPlaceholder"
                 class="pr-10"
               />
               <button
@@ -694,6 +731,12 @@ onMounted(fetchData)
                 />
               </button>
             </div>
+            <p
+              v-if="clearPdfPasswordOnSave"
+              class="text-xs text-destructive"
+            >
+              儲存後將清除目前的 PDF 密碼
+            </p>
           </div>
           <Separator />
           <div class="flex items-center justify-between">
