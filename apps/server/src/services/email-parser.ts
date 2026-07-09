@@ -270,59 +270,85 @@ export interface RecordedScan {
   scanLogId: string
 }
 
+/** Thrown by `runScanWithLog` when the same user already has a scan in flight. */
+export class ScanInProgressError extends Error {
+  constructor(userId: string) {
+    super(`Scan already in progress for user ${userId}`)
+    this.name = 'ScanInProgressError'
+  }
+}
+
+/**
+ * Per-user mutex: userIds with a scan currently in flight. Prevents a manual
+ * trigger from racing the hourly cron (or a double-click) into processing the
+ * same mailbox twice concurrently. Different users never block each other.
+ */
+const scanning = new Set<string>()
+
 /**
  * Run a scan and persist a ScanLog row capturing counts + structured errors.
  * Caller is responsible for any post-scan side effects (notifications),
  * which can be appended via `appendScanLogErrors`.
+ *
+ * Throws `ScanInProgressError` (before any ScanLog row is created) if this
+ * user already has a scan running.
  */
 export async function runScanWithLog(trigger: 'manual' | 'cron', user: ScanUser): Promise<RecordedScan> {
-  const log = await prisma.scanLog.create({
-    data: { trigger, startedAt: new Date(), userId: user.id },
-  })
-
-  let result: ScanResult = { scanned: 0, newBills: [], errors: [] }
-  let fatal: string | null = null
+  if (scanning.has(user.id)) {
+    throw new ScanInProgressError(user.id)
+  }
+  scanning.add(user.id)
   try {
-    result = await scanAndProcessEmails(user, {
-      onStart: (total) => {
-        scanEvents.emitEvent({ type: 'start', userId: user.id, scanLogId: log.id, total, trigger })
-      },
-      onProgress: (idx, total, bank, status, reason) => {
-        scanEvents.emitEvent({ type: 'progress', userId: user.id, scanLogId: log.id, idx, total, bank, status, reason })
+    const log = await prisma.scanLog.create({
+      data: { trigger, startedAt: new Date(), userId: user.id },
+    })
+
+    let result: ScanResult = { scanned: 0, newBills: [], errors: [] }
+    let fatal: string | null = null
+    try {
+      result = await scanAndProcessEmails(user, {
+        onStart: (total) => {
+          scanEvents.emitEvent({ type: 'start', userId: user.id, scanLogId: log.id, total, trigger })
+        },
+        onProgress: (idx, total, bank, status, reason) => {
+          scanEvents.emitEvent({ type: 'progress', userId: user.id, scanLogId: log.id, idx, total, bank, status, reason })
+        },
+      })
+    } catch (e) {
+      fatal = (e as Error).message ?? String(e)
+      logger.error({ error: fatal }, 'Scan crashed unexpectedly')
+    }
+
+    await prisma.scanLog.update({
+      where: { id: log.id },
+      data: {
+        finishedAt: new Date(),
+        scanned: result.scanned,
+        newBillsCount: result.newBills.length,
+        errorCount: result.errors.length + (fatal ? 1 : 0),
+        errors: result.errors.length > 0 ? JSON.stringify(result.errors) : null,
+        fatalError: fatal,
       },
     })
-  } catch (e) {
-    fatal = (e as Error).message ?? String(e)
-    logger.error({ error: fatal }, 'Scan crashed unexpectedly')
-  }
 
-  await prisma.scanLog.update({
-    where: { id: log.id },
-    data: {
-      finishedAt: new Date(),
+    if (fatal) {
+      // Surface as a structured error so callers see the same shape.
+      result.errors.push({ stage: 'unexpected', reason: fatal })
+    }
+
+    scanEvents.emitEvent({
+      type: 'complete',
+      userId: user.id,
+      scanLogId: log.id,
       scanned: result.scanned,
-      newBillsCount: result.newBills.length,
-      errorCount: result.errors.length + (fatal ? 1 : 0),
-      errors: result.errors.length > 0 ? JSON.stringify(result.errors) : null,
-      fatalError: fatal,
-    },
-  })
+      newBills: result.newBills.length,
+      errorCount: result.errors.length,
+    })
 
-  if (fatal) {
-    // Surface as a structured error so callers see the same shape.
-    result.errors.push({ stage: 'unexpected', reason: fatal })
+    return { result, scanLogId: log.id }
+  } finally {
+    scanning.delete(user.id)
   }
-
-  scanEvents.emitEvent({
-    type: 'complete',
-    userId: user.id,
-    scanLogId: log.id,
-    scanned: result.scanned,
-    newBills: result.newBills.length,
-    errorCount: result.errors.length,
-  })
-
-  return { result, scanLogId: log.id }
 }
 
 /**

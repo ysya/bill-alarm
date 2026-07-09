@@ -1,7 +1,7 @@
 import cron from 'node-cron'
 import { logger } from '@/index.js'
 import prisma from '@/prisma.js'
-import { runScanWithLog, appendScanLogErrors } from './email-parser.js'
+import { runScanWithLog, appendScanLogErrors, ScanInProgressError } from './email-parser.js'
 import { processNewBill, processReminderRules, processOverdueBills } from './notification.js'
 import { getSetting, setSetting, KEYS } from './settings.js'
 
@@ -72,6 +72,12 @@ export function startScheduler() {
           logger.warn({ user: user.username, errors: [...result.errors, ...notifyErrors] }, 'Email scan had errors')
         }
       } catch (err) {
+        if (err instanceof ScanInProgressError) {
+          // Benign: e.g. a manual scan is already running for this user.
+          // Not an error — just skip this user for this cron tick.
+          logger.info({ user: user.username }, 'Skipping cron scan: a scan is already in progress for this user')
+          continue
+        }
         // One user's mailbox failing must not stop the others.
         logger.error({ user: user.username, err }, 'Email scan failed for user')
       }
