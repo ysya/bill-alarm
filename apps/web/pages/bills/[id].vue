@@ -627,21 +627,21 @@ function parseSourceLabel(src: string | null | undefined): string {
   if (src === 'llm') return 'AI 解析'
   if (src === 'template') return '自訂規則'
   if (src === 'hardcoded') return '內建規則'
-  if (src === 'generic') return '通用規則'
+  if (src === 'generic') return '通用規則' // legacy value from pre-0.4 scans
   return '未知'
 }
 
 function parseSourceIcon(src: string | null | undefined): string {
   if (src === 'llm') return '🤖'
   if (src === 'template' || src === 'hardcoded') return '✓'
-  if (src === 'generic') return '⚠'
+  if (src === 'generic') return '⚠' // legacy value from pre-0.4 scans
   return ''
 }
 
 function parseSourceClass(src: string | null | undefined): string {
   if (src === 'llm') return 'text-orange-600 dark:text-orange-400'
   if (src === 'template' || src === 'hardcoded') return 'text-green-600 dark:text-green-400'
-  if (src === 'generic') return 'text-yellow-600 dark:text-yellow-400'
+  if (src === 'generic') return 'text-yellow-600 dark:text-yellow-400' // legacy value from pre-0.4 scans
   return 'text-muted-foreground'
 }
 

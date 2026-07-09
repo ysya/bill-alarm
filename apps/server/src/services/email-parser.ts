@@ -5,10 +5,7 @@ import { logger } from '@/index.js'
 import prisma from '@/prisma.js'
 import { getEmailProviderFor, type MailboxOwner } from './email/index.js'
 import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
-import { parseWithTemplate } from '@/parsers/template.js'
-import { getHardcodedParser } from '@/parsers/registry.js'
-import type { TemplateParserConfig } from '@bill-alarm/shared/template-parser'
-import { parseBillWithLLM, getLlmProvider, LlmProvider } from './llm-parser.js'
+import { parseBill } from './bill-parser.js'
 import { getSetting, KEYS } from './settings.js'
 import { scanEvents } from './scan-events.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
@@ -176,61 +173,19 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
             continue
           }
 
-          let parsed: ParsedBill | null = null
-          let source: 'template' | 'hardcoded' | 'llm' | null = null
-
-          if (bank.parserConfig) {
-            try {
-              const config = JSON.parse(bank.parserConfig) as TemplateParserConfig
-              const r = parseWithTemplate(pdfText, config)
-              if (r) {
-                parsed = r
-                source = 'template'
-              }
-            } catch (e) {
-              logger.warn({ bank: bank.name, error: (e as Error).message }, 'Template parse failed, falling back to LLM')
-            }
+          const outcome = await parseBill(pdfText, bank, { allowLlm: true })
+          for (const attempt of outcome.attempts) {
+            logger.debug({ bank: bank.name, attempt }, 'Parse attempt failed')
           }
-
-          if (!parsed) {
-            const hardcoded = getHardcodedParser(bank.code)
-            if (hardcoded) {
-              const bill = hardcoded.parse(pdfText)
-              if (bill) {
-                parsed = bill
-                source = 'hardcoded'
-              }
-            }
-          }
-
-          if (!parsed) {
-            const llmProvider = await getLlmProvider()
-            if (llmProvider === LlmProvider.None) {
-              const reason = 'LLM 未設定，無法解析帳單。請至設定 → LLM 啟用 Gemini 或 Ollama'
-              result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
-              progressStatus = 'error'
-              progressReason = reason
-              continue
-            }
-            try {
-              parsed = await parseBillWithLLM(pdfText, bank.name)
-              if (parsed) source = 'llm'
-            } catch (e) {
-              const reason = `LLM 解析失敗：${(e as Error).message}`
-              result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
-              progressStatus = 'error'
-              progressReason = reason
-              continue
-            }
-          }
-
-          if (!parsed) {
-            const reason = 'LLM 回傳結果無法解析為有效帳單'
+          if (!outcome.bill) {
+            const reason = outcome.attempts.at(-1)?.error ?? '無法解析帳單'
             result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
             progressStatus = 'error'
             progressReason = reason
             continue
           }
+          const parsed = outcome.bill
+          const source = outcome.source
 
           const sanityErr = sanityCheck(parsed)
           if (sanityErr) {

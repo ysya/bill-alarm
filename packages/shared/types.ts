@@ -24,6 +24,8 @@ export interface BillDTO {
   status: BillStatus
   billingPeriod: string
   pdfPath?: string | null
+  // 'generic': legacy rows only — the generic fallback parser was removed in 0.4;
+  // new bills only ever write 'template' | 'hardcoded' | 'llm'.
   parseSource?: 'template' | 'hardcoded' | 'generic' | 'llm' | null
 }
 

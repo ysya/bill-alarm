@@ -5,8 +5,8 @@ import { z } from 'zod'
 import { scanEvents, eventVisibleTo, type ScanEvent } from '@/services/scan-events.js'
 import { verifyConnectionFor, getEmailProviderFor } from '@/services/email/index.js'
 import { extractPdfText, getPdfBuffers } from '@/services/pdf-parser.js'
-import { extractBillFromText } from '@/services/bill-extractor.js'
-import { parseBillWithLLM, suggestRuleWithLLM, testLlmConnection, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
+import { parseBill } from '@/services/bill-parser.js'
+import { suggestRuleWithLLM, testLlmConnection, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
 import prisma from '@/prisma.js'
 import { DATA_DIR } from '@/paths.js'
 import fs from 'node:fs/promises'
@@ -218,19 +218,22 @@ app.get('/email/message/:id/parse', async (c) => {
 
   if (!pdfText) return c.json({ error: extractError || 'Failed to extract PDF text' })
 
-  const extracted = extractBillFromText(pdfText, bankCode)
+  const bank = { code: bankCode ?? null, name: bankCode ?? 'unknown', parserConfig: null as string | null }
+  const outcome = await parseBill(pdfText, bank, { allowLlm: false })
+  const regexBill = outcome.bill && (outcome.source === 'template' || outcome.source === 'hardcoded') ? outcome.bill : null
 
   return c.json({
     pdfTextPreview: pdfText.substring(0, 3000),
     pdfTextFull: pdfText,
     pdfTextLength: pdfText.length,
-    regexResult: extracted ? {
-      amount: extracted.bill.amount,
-      minimumPayment: extracted.bill.minimumPayment,
-      dueDate: extracted.bill.dueDate,
-      billingPeriod: extracted.bill.billingPeriod,
-      source: extracted.source,
+    regexResult: regexBill ? {
+      amount: regexBill.amount,
+      minimumPayment: regexBill.minimumPayment,
+      dueDate: regexBill.dueDate,
+      billingPeriod: regexBill.billingPeriod,
+      source: outcome.source,
     } : null,
+    attempts: outcome.attempts,
   })
 })
 
@@ -255,29 +258,23 @@ app.post('/parser/test-pdf', async (c) => {
 
   if (!pdfText) return c.json({ error: 'PDF text extraction returned empty', step: 'extract_text' }, 400)
 
-  const extracted = extractBillFromText(pdfText, bankCode ?? null)
-
-  let llmResult = null
-  if (useLlm && !extracted) {
-    try {
-      llmResult = await parseBillWithLLM(pdfText, bankCode ?? 'unknown')
-    } catch (e) {
-      llmResult = { error: (e as Error).message }
-    }
-  }
+  const bank = { code: bankCode ?? null, name: bankCode ?? 'unknown', parserConfig: null as string | null }
+  const outcome = await parseBill(pdfText, bank, { allowLlm: useLlm })
+  const regexBill = outcome.bill && (outcome.source === 'template' || outcome.source === 'hardcoded') ? outcome.bill : null
 
   return c.json({
     pdfText: pdfText.substring(0, 3000),
     pdfTextLength: pdfText.length,
     bankCode: bankCode ?? null,
-    regexResult: extracted ? {
-      amount: extracted.bill.amount,
-      minimumPayment: extracted.bill.minimumPayment,
-      dueDate: extracted.bill.dueDate,
-      billingPeriod: extracted.bill.billingPeriod,
-      source: extracted.source,
+    regexResult: regexBill ? {
+      amount: regexBill.amount,
+      minimumPayment: regexBill.minimumPayment,
+      dueDate: regexBill.dueDate,
+      billingPeriod: regexBill.billingPeriod,
+      source: outcome.source,
     } : null,
-    llmResult,
+    llmResult: outcome.source === 'llm' ? outcome.bill : null,
+    attempts: outcome.attempts,
   })
 })
 
@@ -286,27 +283,21 @@ app.post('/parser/test-text', async (c) => {
   const body = await c.req.json() as { text: string; bank?: string; llm?: boolean }
   if (!body.text) return c.json({ error: 'Missing text field' }, 400)
 
-  const extracted = extractBillFromText(body.text, body.bank ?? null)
-
-  let llmResult = null
-  if (body.llm && !extracted) {
-    try {
-      llmResult = await parseBillWithLLM(body.text, body.bank ?? 'unknown')
-    } catch (e) {
-      llmResult = { error: (e as Error).message }
-    }
-  }
+  const bank = { code: body.bank ?? null, name: body.bank ?? 'unknown', parserConfig: null as string | null }
+  const outcome = await parseBill(body.text, bank, { allowLlm: !!body.llm })
+  const regexBill = outcome.bill && (outcome.source === 'template' || outcome.source === 'hardcoded') ? outcome.bill : null
 
   return c.json({
     bankCode: body.bank ?? null,
-    regexResult: extracted ? {
-      amount: extracted.bill.amount,
-      minimumPayment: extracted.bill.minimumPayment,
-      dueDate: extracted.bill.dueDate,
-      billingPeriod: extracted.bill.billingPeriod,
-      source: extracted.source,
+    regexResult: regexBill ? {
+      amount: regexBill.amount,
+      minimumPayment: regexBill.minimumPayment,
+      dueDate: regexBill.dueDate,
+      billingPeriod: regexBill.billingPeriod,
+      source: outcome.source,
     } : null,
-    llmResult,
+    llmResult: outcome.source === 'llm' ? outcome.bill : null,
+    attempts: outcome.attempts,
   })
 })
 
@@ -345,7 +336,7 @@ app.post('/parser/test-template', zValidator('json', z.object({
 app.get('/parser/list', (c) => {
   return c.json({
     parsers: listParserCodes().map((code) => ({ code, bankCode: code })),
-    fallback: 'generic',
+    fallback: 'llm',
   })
 })
 
