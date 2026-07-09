@@ -4,7 +4,7 @@ import 'dotenv/config'
 process.env.TZ ??= 'Asia/Taipei'
 
 import { Hono } from 'hono'
-import { cors } from 'hono/cors'
+import { bodyLimit } from 'hono/body-limit'
 import pino from 'pino'
 import { pinoLogger } from 'hono-pino'
 import bankRoutes from './routes/banks.js'
@@ -70,7 +70,20 @@ app.use(pinoLogger({
     reqId: false,
   },
 }))
-app.use('/api/*', cors())
+
+// Any error thrown by a route or middleware below is caught here — log full
+// detail server-side via pino, never leak internals (message/stack) to the
+// client.
+app.onError((err, c) => {
+  logger.error({ err: err.message, stack: err.stack, path: c.req.path }, 'Unhandled route error')
+  return c.json({ error: '伺服器內部錯誤' }, 500)
+})
+
+// Same-origin deploy + cookie auth: no cross-origin caller is ever legitimate,
+// so cors() was a no-op that only risked loosening credential-less reads.
+// Cap request bodies for all API routes; auth's own stricter 16KB limit
+// (mounted inside its sub-app) still applies on top of this for /api/auth/*.
+app.use('/api/*', bodyLimit({ maxSize: 25 * 1024 * 1024, onError: (c) => c.json({ error: '請求內容過大' }, 413) }))
 app.use('/api/*', authGuard)
 
 // API routes

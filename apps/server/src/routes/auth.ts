@@ -106,12 +106,21 @@ app.post('/setup', zValidator('json', credsSchema), async (c) => {
     return c.json({ error: '已完成初始化' }, 403)
   }
   const { username, password } = c.req.valid('json')
-  const user = await prisma.user.create({
-    data: { username, passwordHash: hashPassword(password), role: 'admin' },
-  })
-  const { token, expiresAt } = await createSession(user.id)
-  setSessionCookie(c, token, expiresAt)
-  return c.json({ ok: true })
+  try {
+    const user = await prisma.user.create({
+      data: { username, passwordHash: hashPassword(password), role: 'admin' },
+    })
+    const { token, expiresAt } = await createSession(user.id)
+    setSessionCookie(c, token, expiresAt)
+    return c.json({ ok: true })
+  } catch (e) {
+    // Unique-constraint race with a concurrent setup call: map to the same 403
+    // as the pre-check so the HTTP contract holds under concurrency (mirrors users.ts:41).
+    if ((e as { code?: string }).code === 'P2002') {
+      return c.json({ error: '已完成初始化' }, 403)
+    }
+    throw e
+  }
 })
 
 app.post('/login', zValidator('json', credsSchema.extend({ password: z.string().min(1).max(256) })), async (c) => {
