@@ -173,7 +173,7 @@
             <div class="flex items-center gap-3">
               <div class="flex flex-col">
                 <span class="font-medium text-sm">{{ item.bankName }}</span>
-                <span class="text-xs text-muted-foreground">截止 {{ formatDate(item.dueDate) }}</span>
+                <span class="text-xs text-muted-foreground">截止 {{ formatYMD(item.dueDate) }}</span>
               </div>
               <Badge
                 v-if="item.autoDebit"
@@ -278,9 +278,12 @@
             <div class="flex items-center justify-between text-sm">
               <div class="flex items-center gap-1.5 text-muted-foreground">
                 <Calendar class="h-3.5 w-3.5" />
-                <span>截止日 {{ formatDate(bill.dueDate) }}</span>
+                <span>截止日 {{ formatYMD(bill.dueDate) }}</span>
               </div>
-              <DaysRemainingBadge :due-date="bill.dueDate" />
+              <DaysRemaining
+                :due-date="bill.dueDate"
+                :status="bill.status"
+              />
             </div>
           </CardContent>
           <CardFooter class="pt-0">
@@ -320,25 +323,8 @@ import {
 } from 'lucide-vue-next'
 import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
 import type { BillDTO, MonthlySummaryDTO } from '@bill-alarm/shared/types'
-
-// --- Helpers ---
-
-function formatAmount(amount: number): string {
-  return `NT$ ${amount.toLocaleString('zh-TW')}`
-}
-
-function formatDate(date: string | Date): string {
-  const d = new Date(date)
-  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
-}
-
-function daysUntil(date: string | Date): number {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  const target = new Date(date)
-  target.setHours(0, 0, 0, 0)
-  return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-}
+import { formatAmount } from '@bill-alarm/shared/format'
+import { formatYMD } from '@bill-alarm/shared/date'
 
 // --- Month Filter ---
 
@@ -361,42 +347,6 @@ function generateMonthOptions(): Array<{ value: string, label: string }> {
 
 const selectedMonth = ref<string>(getCurrentMonth())
 const monthOptions = generateMonthOptions()
-
-// --- DaysRemainingBadge (inline render function) ---
-
-const DaysRemainingBadge = defineComponent({
-  props: {
-    dueDate: { type: String, required: true },
-  },
-  setup(props) {
-    return () => {
-      const days = daysUntil(props.dueDate)
-      let text: string
-      let className: string
-
-      if (days < 0) {
-        text = `已逾期 ${Math.abs(days)} 天`
-        className = 'text-red-500 bg-red-500/10'
-      }
-      else if (days === 0) {
-        text = '今天到期'
-        className = 'text-red-500 bg-red-500/10'
-      }
-      else if (days <= 3) {
-        text = `剩 ${days} 天`
-        className = 'text-yellow-500 bg-yellow-500/10'
-      }
-      else {
-        text = `剩 ${days} 天`
-        className = 'text-muted-foreground bg-muted'
-      }
-
-      return h('span', {
-        class: `inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${className}`,
-      }, text)
-    }
-  },
-})
 
 // --- Data Fetching ---
 

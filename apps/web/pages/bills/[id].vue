@@ -188,13 +188,13 @@
                   class="flex items-center gap-2 mt-1 flex-wrap"
                 >
                   <CalendarIcon class="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span class="font-medium whitespace-nowrap">{{ formatDate(bill.dueDate) }}</span>
+                  <span class="font-medium whitespace-nowrap">{{ formatYMD(bill.dueDate) }}</span>
                   <span
-                    v-if="daysRemainingInfo.text"
-                    :class="daysRemainingInfo.className"
+                    v-if="dueDateRemaining.text"
+                    :class="dueDateRemaining.className"
                     class="text-xs font-medium whitespace-nowrap"
                   >
-                    {{ daysRemainingInfo.text }}
+                    {{ dueDateRemaining.text }}
                   </span>
                 </div>
                 <Input
@@ -498,25 +498,28 @@ import { getLocalTimeZone, today } from '@internationalized/date'
 import type { DateValue } from 'reka-ui'
 import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
 import type { BillDetailDTO, NotificationDTO } from '@bill-alarm/shared/types'
+import { daysRemainingInfo, formatAmount, type DaysRemainingTone } from '@bill-alarm/shared/format'
+import { formatYMD } from '@bill-alarm/shared/date'
 import { apiErrorMessage } from '@/lib/utils'
 
 // --- Helpers ---
 
-function formatAmount(amount: number): string {
-  return `NT$ ${amount.toLocaleString('zh-TW')}`
-}
-
+// createdAt/paidAt/notification.sentAt are ISO timestamps (Prisma DateTime),
+// NOT 'YYYY-MM-DD' — shared formatYMD only handles YMD strings, so this local
+// timestamp formatter stays for those fields (dueDate uses formatYMD instead).
 function formatDate(date: string | Date): string {
   const d = new Date(date)
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
 }
 
-function daysUntil(date: string | Date): number {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  const target = new Date(date)
-  target.setHours(0, 0, 0, 0)
-  return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+// bills/[id] renders days-remaining as plain colored text (no badge pill),
+// unlike <DaysRemaining>'s bg-tinted badge — so the tone->class map here
+// intentionally omits the bg-* classes to keep the existing look.
+const DAYS_REMAINING_TEXT_CLASS: Record<DaysRemainingTone, string> = {
+  overdue: 'text-red-500',
+  today: 'text-red-500',
+  soon: 'text-yellow-500',
+  normal: 'text-muted-foreground',
 }
 
 // --- Route & API ---
@@ -648,14 +651,11 @@ function parseSourceClass(src: string | null | undefined): string {
 
 const notifications = computed<NotificationDTO[]>(() => bill.value?.notifications ?? [])
 
-const daysRemainingInfo = computed(() => {
+const dueDateRemaining = computed(() => {
   if (!bill.value) return { text: '', className: '' }
   if (bill.value.status === BillStatus.PAID || bill.value.status === BillStatus.NO_PAYMENT) return { text: '', className: '' }
-  const days = daysUntil(bill.value.dueDate)
-  if (days < 0) return { text: `已逾期 ${Math.abs(days)} 天`, className: 'text-red-500' }
-  if (days === 0) return { text: '今天到期', className: 'text-red-500' }
-  if (days <= 3) return { text: `剩 ${days} 天`, className: 'text-yellow-500' }
-  return { text: `剩 ${days} 天`, className: 'text-muted-foreground' }
+  const { text, tone } = daysRemainingInfo(bill.value.dueDate)
+  return { text, className: DAYS_REMAINING_TEXT_CLASS[tone] }
 })
 
 async function fetchBill() {

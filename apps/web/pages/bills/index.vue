@@ -175,7 +175,7 @@
                   <div class="flex items-center gap-3 text-sm text-muted-foreground">
                     <span class="flex items-center gap-1">
                       <CalendarIcon class="h-3.5 w-3.5" />
-                      {{ formatDate(bill.dueDate) }}
+                      {{ formatYMD(bill.dueDate) }}
                     </span>
                     <span
                       v-if="bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE"
@@ -288,32 +288,24 @@ import { getLocalTimeZone, today } from '@internationalized/date'
 import type { DateValue } from 'reka-ui'
 import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
 import type { BillDTO } from '@bill-alarm/shared/types'
+import { daysRemainingInfo, formatAmount, type DaysRemainingTone } from '@bill-alarm/shared/format'
+import { formatYMD } from '@bill-alarm/shared/date'
 
 // --- Helpers ---
 
-function formatAmount(amount: number): string {
-  return `NT$ ${amount.toLocaleString('zh-TW')}`
-}
-
-function formatDate(date: string | Date): string {
-  const d = new Date(date)
-  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
-}
-
-function daysUntil(date: string | Date): number {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  const target = new Date(date)
-  target.setHours(0, 0, 0, 0)
-  return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+// bills/index and bills/[id] render days-remaining as plain colored text (no
+// badge pill), unlike <DaysRemaining>'s bg-tinted badge — so the tone->class
+// map here intentionally omits the bg-* classes to keep the existing look.
+const DAYS_REMAINING_TEXT_CLASS: Record<DaysRemainingTone, string> = {
+  overdue: 'text-red-500',
+  today: 'text-red-500',
+  soon: 'text-yellow-500',
+  normal: 'text-muted-foreground',
 }
 
 function daysRemainingText(dueDate: string): { text: string, className: string } {
-  const days = daysUntil(dueDate)
-  if (days < 0) return { text: `已逾期 ${Math.abs(days)} 天`, className: 'text-red-500' }
-  if (days === 0) return { text: '今天到期', className: 'text-red-500' }
-  if (days <= 3) return { text: `剩 ${days} 天`, className: 'text-yellow-500' }
-  return { text: `剩 ${days} 天`, className: 'text-muted-foreground' }
+  const { text, tone } = daysRemainingInfo(dueDate)
+  return { text, className: DAYS_REMAINING_TEXT_CLASS[tone] }
 }
 
 function formatPeriodLabel(period: string): string {
