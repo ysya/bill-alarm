@@ -19,15 +19,30 @@ async function currentUser(c: Parameters<typeof getAuthUser>[0]) {
   return prisma.user.findUnique({ where: { id: getAuthUser(c).id } })
 }
 
-// Search inbox and preview emails
+// Search inbox and preview emails — Gmail-only debug tool. Uses the raw Gmail
+// search syntax (searchRaw), since it needs free-form query strings that the
+// structured SearchCriteria used by the real scan pipeline can't express.
+// Non-Gmail providers/hosts don't implement searchRaw; see gmail-imap.ts.
 app.get('/email/search', async (c) => {
   const q = c.req.query('q') || 'newer_than:7d has:attachment'
   const max = Number(c.req.query('max')) || 10
   const me = await currentUser(c)
   const provider = me ? getEmailProviderFor(me) : null
   if (!provider) return c.json({ error: 'Email provider not configured' }, 400)
-  const refs = await provider.withSession((session) => session.search({ query: q, sinceDays: 30, maxResults: max }))
-  return c.json({ query: q, count: refs.length, messageIds: refs.map((r) => r.id) })
+
+  const refs = await provider.withSession((session) => (
+    session.searchRaw ? session.searchRaw(q) : Promise.resolve(null)
+  ))
+  if (refs === null) {
+    return c.json({ error: 'This mailbox provider does not support raw debug search (Gmail-only tool)' }, 400)
+  }
+  const trimmed = refs.length > max ? refs.slice(-max) : refs
+  return c.json({
+    query: q,
+    count: trimmed.length,
+    messageIds: trimmed.map((r) => r.id),
+    note: 'Gmail-only debug query',
+  })
 })
 
 // Get email details + attachments info

@@ -1,7 +1,7 @@
 import { GmailImapProvider } from './providers/gmail-imap.js'
 import type { EmailProvider } from './types.js'
 
-export type { EmailProvider, EmailMessage, Attachment, MessageRef, SearchOptions, VerifyResult } from './types.js'
+export type { EmailProvider, EmailMessage, Attachment, MessageRef, SearchCriteria, VerifyResult } from './types.js'
 
 export interface MailboxOwner {
   imapHost: string | null

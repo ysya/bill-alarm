@@ -23,6 +23,8 @@ const fakeMessage: EmailMessage = {
 
 const fakeSession: EmailSession = {
   search: vi.fn(async (): Promise<MessageRef[]> => [{ id: 'msg-1' }]),
+  // Gmail-only debug escape hatch used by GET /api/email/search — see gmail-imap.ts.
+  searchRaw: vi.fn(async (): Promise<MessageRef[]> => [{ id: 'msg-1' }]),
   fetch: vi.fn(async () => fakeMessage),
 }
 
@@ -52,11 +54,24 @@ const setup = await app.request('/api/auth/setup', {
 const cookie = cookieOf(setup)
 
 describe('email debug routes use the real EmailProvider interface (withSession/fetchOne)', () => {
-  it('GET /api/email/search returns query/count/messageIds instead of 500ing on provider.search', async () => {
+  it('GET /api/email/search returns query/count/messageIds and a Gmail-only-debug note instead of 500ing on provider.search', async () => {
     const res = await app.request('/api/email/search?q=test&max=5', { headers: { Cookie: cookie } })
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body).toMatchObject({ query: 'test', count: 1, messageIds: ['msg-1'] })
+    expect(body).toMatchObject({ query: 'test', count: 1, messageIds: ['msg-1'], note: 'Gmail-only debug query' })
+  })
+
+  it('GET /api/email/search returns a clear error when the session has no searchRaw (non-Gmail provider)', async () => {
+    const sessionWithoutSearchRaw: EmailSession = {
+      search: vi.fn(async (): Promise<MessageRef[]> => [{ id: 'msg-1' }]),
+      fetch: vi.fn(async () => fakeMessage),
+    }
+    vi.mocked(fakeProvider.withSession).mockImplementationOnce(async (fn) => fn(sessionWithoutSearchRaw))
+
+    const res = await app.request('/api/email/search?q=test', { headers: { Cookie: cookie } })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/gmail-only/i)
   })
 
   it('GET /api/email/message/:id returns id/subject/bodyTextPreview instead of 500ing on provider.fetch', async () => {

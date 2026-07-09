@@ -3,7 +3,7 @@ import path from 'node:path'
 import { PDF_DIR } from '@/paths.js'
 import { logger } from '@/index.js'
 import prisma from '@/prisma.js'
-import { getEmailProviderFor, type MailboxOwner } from './email/index.js'
+import { getEmailProviderFor, type MailboxOwner, type SearchCriteria } from './email/index.js'
 import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
 import { parseBill } from './bill-parser.js'
 import { getSetting, KEYS } from './settings.js'
@@ -78,19 +78,24 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
     return result
   }
 
-  const senderPatterns = banks.map((b) => `from:(${b.emailSenderPattern})`).join(' OR ')
   const rangeDaysRaw = await getSetting(KEYS.SCAN_RANGE_DAYS)
   const rangeDays = rangeDaysRaw ? Math.max(1, parseInt(rangeDaysRaw)) : 60
-  const extraQuery = (await getSetting(KEYS.SCAN_GMAIL_QUERY_EXTRA)) || ''
-  const query = `(${senderPatterns}) newer_than:${rangeDays}d has:attachment${extraQuery ? ` ${extraQuery.trim()}` : ''}`
+  // Structured, provider-agnostic criteria — each EmailProvider is responsible for
+  // translating this into its own search syntax (Gmail's gmailraw extension,
+  // standard IMAP SearchObject, etc.). See services/email/providers/gmail-imap.ts.
+  const criteria: SearchCriteria = {
+    senders: banks.map((b) => b.emailSenderPattern),
+    sinceDays: rangeDays,
+    hasAttachment: true,
+  }
 
-  logger.info({ query, rangeDays }, 'Email scan query')
+  logger.info({ senders: criteria.senders, sinceDays: rangeDays }, 'Email scan criteria')
 
   try {
     return await provider.withSession(async (session) => {
       let messageRefs: { id: string }[]
       try {
-        messageRefs = await session.search({ query, sinceDays: rangeDays })
+        messageRefs = await session.search(criteria)
       } catch (e) {
         result.errors.push({
           stage: 'email_search',

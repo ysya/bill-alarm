@@ -114,9 +114,16 @@ async function handleGmailSearch(query: string, password?: string, outDir?: stri
   }
   console.log(`Gmail 已連線: ${status.email}`)
 
-  // 2. 搜尋
+  // 2. 搜尋（自由格式 Gmail 查詢字串走 searchRaw 除錯逃生口；本腳本本來就只
+  //   鎖定 Gmail IMAP_HOST，其他 IMAP 主機不支援 searchRaw，見 gmail-imap.ts）
   console.log(`\n搜尋: ${query}`)
-  const refs = await provider.withSession((session) => session.search({ query, sinceDays: 30, maxResults: limit }))
+  const allRefs = await provider.withSession((session) => {
+    if (!session.searchRaw) {
+      throw new Error('此信箱 provider 不支援原始查詢字串搜尋（僅 Gmail 支援 searchRaw）')
+    }
+    return session.searchRaw(query)
+  })
+  const refs = allRefs.length > limit ? allRefs.slice(-limit) : allRefs
   console.log(`找到 ${refs.length} 封信件\n`)
 
   if (refs.length === 0) return
