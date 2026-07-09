@@ -99,7 +99,7 @@ app.post('/setup', zValidator('json', credsSchema), async (c) => {
   const { username, password } = c.req.valid('json')
   try {
     const user = await prisma.user.create({
-      data: { username, passwordHash: hashPassword(password), role: 'admin' },
+      data: { username, passwordHash: await hashPassword(password), role: 'admin' },
     })
     const { token, expiresAt } = await createSession(user.id)
     setSessionCookie(c, token, expiresAt)
@@ -120,7 +120,7 @@ app.post('/login', zValidator('json', credsSchema.extend({ password: z.string().
     return c.json({ error: '嘗試次數過多，請 15 分鐘後再試' }, 429)
   }
   const user = await prisma.user.findUnique({ where: { username } })
-  const ok = !!user && verifyPassword(password, user.passwordHash)
+  const ok = !!user && await verifyPassword(password, user.passwordHash)
   if (!ok) {
     recordFailure(username)
     return c.json({ error: '帳號或密碼錯誤' }, 401)
@@ -157,11 +157,11 @@ app.post('/password', zValidator('json', z.object({
   const { currentPassword, newPassword } = c.req.valid('json')
   const user = await prisma.user.findUnique({ where: { id: authUser.id } })
   if (!user) return c.json({ error: 'unauthorized' }, 401)
-  if (!verifyPassword(currentPassword, user.passwordHash)) {
+  if (!await verifyPassword(currentPassword, user.passwordHash)) {
     // 400 (not 401): the SPA's 401 interceptor would bounce the user to /login.
     return c.json({ error: '目前密碼錯誤' }, 400)
   }
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(newPassword) } })
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(newPassword) } })
   const token = getCookie(c, SESSION_COOKIE)
   await destroyUserSessions(user.id, token)
   return c.json({ ok: true })

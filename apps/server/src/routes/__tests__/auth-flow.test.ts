@@ -252,7 +252,7 @@ describe('auth flow', () => {
   it('deactivated user cannot log in and it does not consume lockout budget', async () => {
     const { hashPassword } = await import('@/services/auth.js')
     await prisma.user.create({
-      data: { username: 'ghost', passwordHash: hashPassword('ghost-password-1'), role: 'member', deletedAt: new Date() },
+      data: { username: 'ghost', passwordHash: await hashPassword('ghost-password-1'), role: 'member', deletedAt: new Date() },
     })
     for (let i = 0; i < 6; i++) {
       const res = await app.request('/api/auth/login', {

@@ -53,7 +53,7 @@ describe('setup race guard', () => {
     // Simulate a concurrent request that already committed a user row with this
     // exact username (User.username is @unique) before our request's create() runs.
     await prisma.user.create({
-      data: { username: 'race-admin', passwordHash: hashPassword('whatever-pw-1'), role: 'admin' },
+      data: { username: 'race-admin', passwordHash: await hashPassword('whatever-pw-1'), role: 'admin' },
     })
 
     // Force this request's own pre-check to observe 0 users, as if it read

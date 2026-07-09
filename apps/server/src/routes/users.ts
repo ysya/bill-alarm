@@ -34,7 +34,7 @@ app.post('/', zValidator('json', credsSchema), async (c) => {
   if (existing) return c.json({ error: '帳號名稱已存在' }, 409)
   try {
     const user = await prisma.user.create({
-      data: { username, passwordHash: hashPassword(password), role: 'member' },
+      data: { username, passwordHash: await hashPassword(password), role: 'member' },
     })
     return c.json(toDTO(user), 201)
   } catch (e) {
@@ -52,7 +52,7 @@ app.post('/:id/reset-password', zValidator('json', z.object({ password: password
   if (!user) return c.json({ error: '找不到使用者' }, 404)
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash: hashPassword(c.req.valid('json').password) },
+    data: { passwordHash: await hashPassword(c.req.valid('json').password) },
   })
   await destroyUserSessions(user.id)
   return c.json({ ok: true })

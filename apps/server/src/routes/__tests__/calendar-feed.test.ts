@@ -20,7 +20,7 @@ const setup = await app.request('/api/auth/setup', {
 })
 const boss = cookieOf(setup)
 const kidRow = await prisma.user.create({
-  data: { username: 'kid', passwordHash: hashPassword('member-password'), role: 'member' },
+  data: { username: 'kid', passwordHash: await hashPassword('member-password'), role: 'member' },
 })
 const kidLogin = await app.request('/api/auth/login', {
   method: 'POST',

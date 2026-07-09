@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes, scryptSync } from 'node:crypto'
 import { setupTestDb } from './helpers/test-db.js'
 
 setupTestDb()
@@ -9,22 +9,35 @@ const hashToken = (t: string) => createHash('sha256').update(t).digest('hex')
 const { hashPassword, verifyPassword } = await import('../auth.js')
 
 describe('password hashing', () => {
-  it('verifies a correct password', () => {
-    const stored = hashPassword('correct horse battery staple')
-    expect(verifyPassword('correct horse battery staple', stored)).toBe(true)
+  it('verifies a correct password', async () => {
+    const stored = await hashPassword('correct horse battery staple')
+    expect(await verifyPassword('correct horse battery staple', stored)).toBe(true)
   })
 
-  it('rejects a wrong password', () => {
-    const stored = hashPassword('correct horse battery staple')
-    expect(verifyPassword('wrong', stored)).toBe(false)
+  it('rejects a wrong password', async () => {
+    const stored = await hashPassword('correct horse battery staple')
+    expect(await verifyPassword('wrong', stored)).toBe(false)
   })
 
-  it('produces unique salts', () => {
-    expect(hashPassword('a')).not.toBe(hashPassword('a'))
+  it('produces unique salts', async () => {
+    expect(await hashPassword('a')).not.toBe(await hashPassword('a'))
   })
 
-  it('rejects malformed stored values', () => {
-    expect(verifyPassword('a', 'garbage')).toBe(false)
+  it('rejects malformed stored values', async () => {
+    expect(await verifyPassword('a', 'garbage')).toBe(false)
+  })
+
+  // Compatibility guard: hashPassword/verifyPassword moved from scryptSync to
+  // promisify(scrypt), but the stored `salt:hash` format and scrypt params
+  // (N=16384, r=8, p=1, keylen=32) are unchanged. A hash produced by the OLD
+  // synchronous path (pre-migration, still on disk for every existing user)
+  // must keep verifying correctly under the new async verifyPassword.
+  it('a hash produced by the old scryptSync path still verifies under the new async verifyPassword', async () => {
+    const salt = randomBytes(16)
+    const hash = scryptSync('testpass123', salt, 32, { N: 16384, r: 8, p: 1 })
+    const oldStyleStored = `${salt.toString('hex')}:${hash.toString('hex')}`
+    expect(await verifyPassword('testpass123', oldStyleStored)).toBe(true)
+    expect(await verifyPassword('wrong-password', oldStyleStored)).toBe(false)
   })
 })
 
