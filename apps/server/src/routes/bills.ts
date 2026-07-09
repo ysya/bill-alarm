@@ -129,10 +129,23 @@ app.get('/:id', async (c) => {
 })
 
 /**
- * Keep paidAt consistent with a status change: entering PAID stamps paidAt
- * (unless one is already set), leaving PAID clears it. A patch that doesn't
- * touch status leaves paidAt alone. Returns the paidAt override, or undefined
- * when no change is warranted.
+ * Derive a paidAt override for the generic PATCH /:id path ONLY. When a patch
+ * flips status: entering PAID stamps paidAt (unless one is already set),
+ * leaving PAID clears it. A patch that doesn't touch status leaves paidAt
+ * alone. Returns the paidAt override, or undefined when no change is
+ * warranted.
+ *
+ * /pay and /unpay intentionally do NOT call this helper — they have their own,
+ * different, explicit-date semantics and routing them through here would
+ * change their behavior:
+ * - /pay always writes the caller-supplied (or defaulted) paidAt, even when
+ *   the bill is already paid. This helper ignores explicit dates and
+ *   no-ops when already paid, which would silently break the
+ *   choose-your-payment-date feature (a user picking a specific paid date
+ *   from a date picker).
+ * - /unpay always clears paidAt unconditionally, regardless of the current
+ *   value.
+ * This is a deliberate three-way split, not an oversight.
  */
 function paidAtForStatusChange(
   newStatus: BillStatus | undefined,

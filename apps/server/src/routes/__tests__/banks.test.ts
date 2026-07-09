@@ -74,6 +74,54 @@ describe('banks: enable with password', () => {
   })
 })
 
+describe('banks: pdfPassword validation', () => {
+  it('PATCH /api/banks/:id with pdfPassword: "" returns 400 and does not overwrite the stored password', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: {
+        name: 'Password Bank',
+        emailSenderPattern: 'pw@pw',
+        emailSubjectPattern: 'pw',
+        pdfPassword: 'REALPASS1',
+        userId: user!.id,
+      },
+    })
+
+    const res = await app.request(`/api/banks/${bank.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ pdfPassword: '' }),
+    })
+    expect(res.status).toBe(400)
+    const stored = await prisma.bank.findUnique({ where: { id: bank.id } })
+    expect(stored?.pdfPassword).toBe('REALPASS1')
+  })
+
+  it('PATCH /api/banks/:id with pdfPassword: null still clears the stored password', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: {
+        name: 'Password Bank Clear',
+        emailSenderPattern: 'pwc@pw',
+        emailSubjectPattern: 'pwc',
+        pdfPassword: 'REALPASS2',
+        userId: user!.id,
+      },
+    })
+
+    const res = await app.request(`/api/banks/${bank.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ pdfPassword: null }),
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.pdfPassword).toBeNull()
+    const stored = await prisma.bank.findUnique({ where: { id: bank.id } })
+    expect(stored?.pdfPassword).toBeNull()
+  })
+})
+
 describe('banks: delete guard + cascades', () => {
   it('DELETE /api/banks/:id on a custom bank with bills returns 400 with a friendly count message', async () => {
     const user = await prisma.user.findUnique({ where: { username: 'boss' } })

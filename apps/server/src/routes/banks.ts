@@ -23,7 +23,7 @@ app.get('/', async (c) => {
 })
 
 app.post('/enable/:code', zValidator('json', z.object({
-  pdfPassword: z.string().optional(),
+  pdfPassword: z.string().min(1).optional(),
 }).optional()), async (c) => {
   const userId = getAuthUser(c).id
   const code = c.req.param('code')
@@ -70,7 +70,7 @@ app.patch('/:id', zValidator('json', z.object({
   name: z.string().min(1).optional(),
   emailSenderPattern: z.string().min(1).optional(),
   emailSubjectPattern: z.string().min(1).optional(),
-  pdfPassword: z.string().nullable().optional(),
+  pdfPassword: z.string().min(1).nullable().optional(),
   parserConfig: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
   autoDebit: z.boolean().optional(),

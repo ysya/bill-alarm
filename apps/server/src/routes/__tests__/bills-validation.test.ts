@@ -139,6 +139,30 @@ describe('bills: paidAt state transitions on PATCH', () => {
     expect(new Date(body.paidAt).toISOString()).toBe(originalPaidAt.toISOString())
   })
 
+  it('PATCH status OVERDUE -> paid stamps paidAt (helper is old-status-agnostic, not just pending -> paid)', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: { name: 'PaidAt Bank 5', emailSenderPattern: 'pa5@pa', emailSubjectPattern: 'pa5', userId: user!.id },
+    })
+    const bill = await prisma.bill.create({
+      data: { bankId: bank.id, billingPeriod: '2026-04', amount: 1000, dueDate: '2026-04-15', status: BillStatus.OVERDUE },
+    })
+    expect(bill.paidAt).toBeNull()
+
+    const res = await app.request(`/api/bills/${bill.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ status: 'paid' }),
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.status).toBe('paid')
+    expect(body.paidAt).not.toBeNull()
+    const stored = await prisma.bill.findUnique({ where: { id: bill.id } })
+    expect(stored?.status).toBe(BillStatus.PAID)
+    expect(stored?.paidAt).not.toBeNull()
+  })
+
   it('PATCH without a status field does not touch paidAt', async () => {
     const user = await prisma.user.findUnique({ where: { username: 'boss' } })
     const bank = await prisma.bank.create({
