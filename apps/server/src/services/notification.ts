@@ -92,29 +92,38 @@ export async function processReminderRules(now: Date = new Date()): Promise<void
   }
 }
 
-export async function processOverdueBills(): Promise<void> {
-  const overdueBills = await prisma.bill.findMany({
+export const OVERDUE_WARNING_MESSAGE = '逾期警告'
+const OVERDUE_NOTIFY_HOUR = 9 // don't page people at midnight
+
+/** Runs on the same 15-minute tick as processReminderRules. Marking and
+ *  warning are split: status is kept accurate within 15 minutes of midnight,
+ *  while the (louder) Telegram warning fires exactly once per bill, at the
+ *  first tick at/after 09:00 — self-healing the same way reminders do. */
+export async function processOverdueBills(now: Date = new Date()): Promise<void> {
+  const today = todayYMD(now)
+
+  // Mark on every tick so the dashboard is accurate within 15 minutes of midnight.
+  const marked = await prisma.bill.updateMany({
+    where: { status: BillStatus.PENDING, dueDate: { lt: today } },
+    data: { status: BillStatus.OVERDUE },
+  })
+  if (marked.count > 0) logger.warn({ count: marked.count }, 'Bills marked overdue')
+
+  if (now.getHours() < OVERDUE_NOTIFY_HOUR) return
+
+  // Warn exactly once per bill, at the first tick at/after 09:00.
+  const unnotified = await prisma.bill.findMany({
     where: {
-      status: BillStatus.PENDING,
-      dueDate: { lt: todayYMD() },
+      status: BillStatus.OVERDUE,
+      notifications: { none: { message: OVERDUE_WARNING_MESSAGE, success: true } },
     },
     include: { bank: { include: { user: { select: { deletedAt: true } } } } },
   })
 
-  if (overdueBills.length > 0) {
-    logger.warn({ count: overdueBills.length }, 'Found overdue bills')
-  }
-
-  for (const bill of overdueBills) {
-    await prisma.bill.update({
-      where: { id: bill.id },
-      data: { status: BillStatus.OVERDUE },
-    })
-    logger.warn({ bank: bill.bank.name, amount: bill.amount, dueDate: bill.dueDate }, 'Bill marked overdue')
-
+  for (const bill of unnotified) {
     if (bill.bank.user?.deletedAt) continue // deactivated owner: status is fact, noise is not
     const r = await sendOverdueWarning(bill, bill.bank)
-    await logNotification(bill.id, null, 'telegram', '逾期警告', r.ok, r.error)
+    await logNotification(bill.id, null, 'telegram', OVERDUE_WARNING_MESSAGE, r.ok, r.error)
   }
 }
 
