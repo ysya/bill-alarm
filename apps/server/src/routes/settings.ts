@@ -10,7 +10,7 @@ const ruleSchema = z.object({
   name: z.string().min(1),
   daysBefore: z.number().int().min(0),
   timeOfDay: z.string().regex(/^\d{2}:\d{2}$/),
-  channels: z.array(z.enum(['telegram', 'calendar'])).min(1),
+  channels: z.array(z.enum(['telegram'])).min(1),
   isActive: z.boolean().optional(),
 })
 
