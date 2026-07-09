@@ -3,11 +3,13 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import prisma from '@/prisma.js'
 import { hashPassword, destroyUserSessions } from '@/services/auth.js'
+import { adminOnly } from '@/middleware/admin-only.js'
 import { credsSchema, passwordSchema } from './auth.js'
 
-// Admin-only by construction: /api/users/* is not in the member allow-list,
-// so authGuard rejects members before these handlers run.
+// Admin-only: every route in this router requires adminOnly (mounted below),
+// so authGuard alone is not enough — non-admins are 403'd before handlers run.
 const app = new Hono()
+app.use('*', adminOnly)
 
 function toDTO(u: { id: string; username: string; role: string; telegramChatId: string | null; imapUser: string | null; imapPassword: string | null; deletedAt: Date | null; createdAt: Date }) {
   return {

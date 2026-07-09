@@ -78,15 +78,6 @@ function setSessionCookie(c: Context, token: string, expiresAt: Date): void {
   })
 }
 
-// Global-infrastructure surface: only the admin may touch these. Every other
-// authenticated route is available to all users and self-scopes its data.
-const ADMIN_ONLY: Array<{ method: string; pattern: RegExp }> = [
-  { method: '*', pattern: /^\/api\/users(\/|$)/ },
-  { method: 'POST', pattern: /^\/api\/config\/(llm|gemini|openai|telegram|scan)$/ },
-  { method: 'GET', pattern: /^\/api\/config\/status$/ },
-  { method: 'POST', pattern: /^\/api\/llm\/test$/ },
-]
-
 const app = new Hono()
 
 // Unauthenticated surface: cap request bodies so oversized payloads can't
@@ -216,11 +207,6 @@ export async function authGuard(c: Context, next: () => Promise<void>): Promise<
     const session = await validateSession(token)
     if (session.valid && session.user) {
       c.set('authUser', session.user)
-      if (session.user.role !== 'admin') {
-        const method = c.req.method === 'HEAD' ? 'GET' : c.req.method
-        const denied = ADMIN_ONLY.some(r => (r.method === '*' || r.method === method) && r.pattern.test(path))
-        if (denied) return c.json({ error: 'forbidden' }, 403)
-      }
       if (session.extended && session.expiresAt) {
         setSessionCookie(c, token, session.expiresAt)
       }

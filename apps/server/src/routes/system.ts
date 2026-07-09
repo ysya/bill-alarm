@@ -15,6 +15,7 @@ import { decryptPdf } from '@/services/pdf-parser.js'
 import { runScanWithLog, appendScanLogErrors, type ScanError } from '@/services/email-parser.js'
 import { processNewBill } from '@/services/notification.js'
 import { sendTestMessage, isConfigured as telegramConfigured } from '@/services/telegram.js'
+import { adminOnly } from '@/middleware/admin-only.js'
 import { getAuthUser } from './auth.js'
 import { listParserCodes } from '@/parsers/registry.js'
 import { parseWithTemplateDetailed } from '@/parsers/template.js'
@@ -339,7 +340,7 @@ app.get('/llm/status', async (c) => {
 })
 
 // Test LLM connection (provider + config must already be saved)
-app.post('/llm/test', async (c) => {
+app.post('/llm/test', adminOnly, async (c) => {
   const provider = await getLlmProvider()
   if (provider === LlmProvider.None) return c.json({ ok: false, message: 'LLM 提供者未設定' })
   const result = await testLlmConnection(provider)
