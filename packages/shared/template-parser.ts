@@ -39,6 +39,9 @@ export const fieldRuleSchema = z.object({
   nth: z.number().int().positive().optional(),
 })
 
+// Intentionally NOT .strict(): this schema gates write-time format errors (bad
+// keyword/type/nth), not key typos. Staying non-strict tolerates legacy rows
+// with extra keys from older config shapes instead of hard-failing on them.
 export const templateParserConfigSchema = z.object({
   amount: fieldRuleSchema,
   dueDate: fieldRuleSchema,
