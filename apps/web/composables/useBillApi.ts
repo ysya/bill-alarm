@@ -1,10 +1,14 @@
+import type { BillDetailDTO, BillDTO, BillListResponse, MonthlySummaryDTO } from '@bill-alarm/shared/types'
+
 export function useBillApi() {
   const { get, post, patch, del } = useApi()
 
   return {
     getSummary: (month?: string) => {
       const qs = month ? `?month=${month}` : ''
-      return get<any>(`/bills/summary${qs}`)
+      // breakdown/timeline are only populated when `month` is passed, but both
+      // fields are optional on MonthlySummaryDTO so this type fits either call.
+      return get<MonthlySummaryDTO>(`/bills/summary${qs}`)
     },
 
     list: (params?: { status?: string, bankId?: string, page?: number, pageSize?: number }) => {
@@ -14,19 +18,21 @@ export function useBillApi() {
       if (params?.page) query.set('page', String(params.page))
       if (params?.pageSize) query.set('pageSize', String(params.pageSize))
       const qs = query.toString()
-      return get<{ data: any[], total: number, page: number, pageSize: number }>(`/bills${qs ? `?${qs}` : ''}`)
+      return get<BillListResponse>(`/bills${qs ? `?${qs}` : ''}`)
     },
 
-    getById: (id: string) => get<any>(`/bills/${id}`),
+    getById: (id: string) => get<BillDetailDTO>(`/bills/${id}`),
 
-    update: (id: string, data: Record<string, unknown>) => patch<any>(`/bills/${id}`, data),
+    // update/markAsPaid/unpay/reparse all resolve to prisma.bill.update() without
+    // `include`, so the response has no `bank` key — matches BillDTO's optional bank.
+    update: (id: string, data: Record<string, unknown>) => patch<BillDTO>(`/bills/${id}`, data),
 
-    markAsPaid: (id: string, paidAt?: string) => patch<any>(`/bills/${id}/pay`, paidAt ? { paidAt } : {}),
+    markAsPaid: (id: string, paidAt?: string) => patch<BillDTO>(`/bills/${id}/pay`, paidAt ? { paidAt } : {}),
 
-    unpay: (id: string) => post<any>(`/bills/${id}/unpay`),
+    unpay: (id: string) => post<BillDTO>(`/bills/${id}/unpay`),
 
-    reparse: (id: string) => post<any>(`/bills/${id}/reparse`),
+    reparse: (id: string) => post<BillDTO>(`/bills/${id}/reparse`),
 
-    remove: (id: string) => del<any>(`/bills/${id}`),
+    remove: (id: string) => del<{ success: boolean }>(`/bills/${id}`),
   }
 }

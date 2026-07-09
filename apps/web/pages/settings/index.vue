@@ -3,13 +3,13 @@ import { CalendarCheck, ChevronRight, Clock, KeyRound, LogOut, Mail, Send, Spark
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import type { NotificationRule, ConfigStatus, EmailStatus } from '~/types/settings'
+import type { NotificationRuleDTO, ConfigStatus, EmailStatus } from '~/types/settings'
 import { LLM_PROVIDER_LABELS } from '~/types/settings'
 
 const settingsApi = useSettingsApi()
 const { me, isAdmin, logout } = useAuth()
 
-const rules = ref<NotificationRule[]>([])
+const rules = ref<NotificationRuleDTO[]>([])
 const emailStatus = ref<EmailStatus | null>(null)
 const calendarFeed = ref<{ token: string, feedUrl: string, feedPath: string } | null>(null)
 const configStatus = ref<ConfigStatus | null>(null)
@@ -17,9 +17,9 @@ const loading = ref(true)
 
 // Rule dialog state
 const dialogOpen = ref(false)
-const editingRule = ref<NotificationRule | null>(null)
+const editingRule = ref<NotificationRuleDTO | null>(null)
 const deleteDialogOpen = ref(false)
-const deletingRule = ref<NotificationRule | null>(null)
+const deletingRule = ref<NotificationRuleDTO | null>(null)
 const submitting = ref(false)
 const changePwOpen = ref(false)
 
@@ -88,12 +88,12 @@ function openCreateDialog() {
   dialogOpen.value = true
 }
 
-function openEditDialog(rule: NotificationRule) {
+function openEditDialog(rule: NotificationRuleDTO) {
   editingRule.value = rule
   dialogOpen.value = true
 }
 
-function openDeleteDialog(rule: NotificationRule) {
+function openDeleteDialog(rule: NotificationRuleDTO) {
   deletingRule.value = rule
   deleteDialogOpen.value = true
 }

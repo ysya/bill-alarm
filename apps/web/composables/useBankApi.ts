@@ -1,31 +1,28 @@
+import type { BankPreset } from '@bill-alarm/shared/constants'
+import type { BankDTO } from '@bill-alarm/shared/types'
+
 export function useBankApi() {
   const { get, post, patch, del } = useApi()
 
   return {
-    getPresets: () => get<Array<{
-      code: string
-      name: string
-      emailSender: string
-      emailSubject: string
-      passwordHint: string
-    }>>('/banks/presets'),
+    getPresets: () => get<BankPreset[]>('/banks/presets'),
 
-    list: () => get<any[]>('/banks'),
+    list: () => get<BankDTO[]>('/banks'),
 
     enable: (code: string, pdfPassword?: string) =>
-      post<any>(`/banks/enable/${code}`, pdfPassword ? { pdfPassword } : {}),
+      post<BankDTO>(`/banks/enable/${code}`, pdfPassword ? { pdfPassword } : {}),
 
-    disable: (code: string) => post<any>(`/banks/disable/${code}`),
+    disable: (code: string) => post<BankDTO>(`/banks/disable/${code}`),
 
-    update: (id: string, data: Record<string, unknown>) => patch<any>(`/banks/${id}`, data),
+    update: (id: string, data: Record<string, unknown>) => patch<BankDTO>(`/banks/${id}`, data),
 
     create: (data: {
       name: string
       emailSenderPattern: string
       emailSubjectPattern: string
       pdfPassword?: string
-    }) => post<any>('/banks', data),
+    }) => post<BankDTO>('/banks', data),
 
-    remove: (id: string) => del<any>(`/banks/${id}`),
+    remove: (id: string) => del<{ success: boolean }>(`/banks/${id}`),
   }
 }

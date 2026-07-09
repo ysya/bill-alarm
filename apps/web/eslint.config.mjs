@@ -3,25 +3,12 @@ import withNuxt from './.nuxt/eslint.config.mjs'
 
 export default withNuxt(
   {
-    rules: {},
-  },
-  {
     files: [
-      'composables/useBillApi.ts',
-      'composables/useBankApi.ts',
-      'composables/useSettingsApi.ts',
-      'composables/useBankAccountApi.ts',
-      'pages/settings/users.vue',
-      'pages/bills/\\[id\\].vue',
-      'components/settings/TelegramBindCard.vue',
-      'components/settings/IntegrationTelegram.vue',
-      'components/settings/IntegrationLLM.vue',
-      'components/settings/ChangePasswordDialog.vue',
-      'components/BillPdfViewer.vue',
       'components/ui/calendar/CalendarHeading.vue',
     ],
     rules: {
-      // pre-existing `any` debt, typed properly in the shared-DTO phase; new code keeps the rule
+      // shadcn-vue/reka-ui auto-generated component (see CLAUDE.md: components/ui/
+      // is generated, do not edit). The `any` is in the codegen'd slot signature.
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },

@@ -1,11 +1,4 @@
-export interface NotificationRule {
-  id: string
-  name: string
-  daysBefore: number
-  timeOfDay: string
-  channels: string[]
-  isActive: boolean
-}
+export type { NotificationRuleDTO } from '@bill-alarm/shared/types'
 
 export interface ConfigStatus {
   telegram: { isConfigured: boolean, boundCount: number }

@@ -498,6 +498,7 @@ import { getLocalTimeZone, today } from '@internationalized/date'
 import type { DateValue } from 'reka-ui'
 import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
 import type { BillDetailDTO, NotificationDTO } from '@bill-alarm/shared/types'
+import { apiErrorMessage } from '@/lib/utils'
 
 // --- Helpers ---
 
@@ -539,13 +540,13 @@ const payDate = ref(today(getLocalTimeZone())) as Ref<DateValue>
 const editing = ref(false)
 const editForm = ref<{
   amount: number
-  minimumPayment: number | null
+  minimumPayment: number | undefined
   dueDate: string
   billingPeriod: string
   status: BillStatus
 }>({
   amount: 0,
-  minimumPayment: null,
+  minimumPayment: undefined,
   dueDate: '',
   billingPeriod: '',
   status: BillStatus.PENDING,
@@ -562,7 +563,7 @@ function startEdit() {
   if (!bill.value) return
   editForm.value = {
     amount: bill.value.amount,
-    minimumPayment: bill.value.minimumPayment ?? null,
+    minimumPayment: bill.value.minimumPayment ?? undefined,
     dueDate: bill.value.dueDate,
     billingPeriod: bill.value.billingPeriod ?? '',
     status: bill.value.status,
@@ -599,8 +600,8 @@ async function handleSaveEdit() {
     editing.value = false
     await fetchBill()
   }
-  catch (e: any) {
-    toast.error('儲存失敗', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('儲存失敗', { description: apiErrorMessage(e) })
   }
   finally {
     actionLoading.value = false
@@ -615,8 +616,8 @@ async function handleReparse() {
     toast.success('AI 重新解析完成，請核對結果')
     await fetchBill()
   }
-  catch (e: any) {
-    toast.error('AI 解析失敗', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('AI 解析失敗', { description: apiErrorMessage(e) })
   }
   finally {
     reparsing.value = false

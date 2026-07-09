@@ -89,8 +89,11 @@ async function handleTest() {
     if (r.ok) toast.success(r.message)
     else toast.error(r.message)
   }
-  catch (e: any) {
-    const msg = e?.data?.message ?? e?.message ?? String(e)
+  catch (e) {
+    // /llm/test's own error shape uses `message`, not the usual `error` field —
+    // kept distinct from the shared apiErrorMessage() helper on purpose.
+    const err = e as { data?: { message?: string }, message?: string } | null | undefined
+    const msg = err?.data?.message ?? err?.message ?? String(e)
     testResult.value = { ok: false, message: msg }
     toast.error(msg)
   }

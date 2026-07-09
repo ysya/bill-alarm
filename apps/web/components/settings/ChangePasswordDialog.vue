@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
+import { apiErrorMessage } from '@/lib/utils'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ 'update:open': [value: boolean] }>()
@@ -31,8 +32,8 @@ async function submit() {
     toast.success('密碼已更新', { description: '其他裝置需重新登入。' })
     emit('update:open', false)
   }
-  catch (e: any) {
-    toast.error('修改失敗', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('修改失敗', { description: apiErrorMessage(e) })
   }
   finally {
     submitting.value = false

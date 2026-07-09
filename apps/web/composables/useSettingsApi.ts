@@ -1,5 +1,6 @@
-import type { EmailStatus } from '~/types/settings'
+import type { ConfigStatus, EmailStatus } from '~/types/settings'
 import type { ScanError, ScanErrorStage, ScanLogDTO } from '@bill-alarm/shared/scan'
+import type { NotificationRuleDTO } from '@bill-alarm/shared/types'
 
 export type { ScanError, ScanErrorStage, ScanLogDTO }
 
@@ -15,22 +16,17 @@ export function useSettingsApi() {
 
   return {
     // Notification rules
-    listRules: () => get<any[]>('/notification-rules'),
+    listRules: () => get<NotificationRuleDTO[]>('/notification-rules'),
     createRule: (data: {
       name: string
       daysBefore: number
       timeOfDay: string
       channels: string[]
-    }) => post<any>('/notification-rules', data),
+      isActive?: boolean
+    }) => post<NotificationRuleDTO>('/notification-rules', data),
     updateRule: (id: string, data: Record<string, unknown>) =>
-      patch<any>(`/notification-rules/${id}`, data),
-    deleteRule: (id: string) => del<any>(`/notification-rules/${id}`),
-
-    // Integration status (legacy overview)
-    getIntegrationStatus: () => get<{
-      email: { connected: boolean, message: string }
-      telegram: { configured: boolean }
-    }>('/integrations/status'),
+      patch<NotificationRuleDTO>(`/notification-rules/${id}`, data),
+    deleteRule: (id: string) => del<{ success: boolean }>(`/notification-rules/${id}`),
 
     // Email scan
     triggerScan: () => post<{ scanLogId?: string, scanned: number, newBills: number, errors: ScanError[] }>('/email/scan'),
@@ -71,20 +67,7 @@ export function useSettingsApi() {
       post<{ token: string, feedUrl: string, feedPath: string }>('/calendar/rotate'),
 
     // Aggregated config status
-    getConfigStatus: () => get<{
-      telegram: { isConfigured: boolean, boundCount: number }
-      scan: { interval: number, rangeDays: number, queryExtra: string }
-      gemini: { isConfigured: boolean }
-      openai: { isConfigured: boolean }
-      llm: {
-        provider: 'none' | 'gemini' | 'openai' | 'ollama'
-        geminiModel: string
-        openaiModel: string
-        openaiBaseUrl: string
-        ollamaBaseUrl: string
-        ollamaModel: string
-      }
-    }>('/config/status'),
+    getConfigStatus: () => get<ConfigStatus>('/config/status'),
 
     saveTelegramConfig: (botToken: string) =>
       post<{ success: boolean }>('/config/telegram', { botToken }),

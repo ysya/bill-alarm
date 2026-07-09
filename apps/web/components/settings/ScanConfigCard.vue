@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ChevronDown, ChevronUp, Clock, Mail } from 'lucide-vue-next'
+import type { AcceptableValue } from 'reka-ui'
 import { toast } from 'vue-sonner'
 import { SCAN_INTERVAL_OPTIONS } from '~/types/settings'
 
@@ -32,7 +33,8 @@ async function handleSaveScanConfig() {
   }
 }
 
-async function handleScanIntervalChange(value: string) {
+async function handleScanIntervalChange(value: AcceptableValue) {
+  if (typeof value !== 'string') return
   const interval = parseInt(value)
   try {
     await settingsApi.saveScanInterval(interval)
