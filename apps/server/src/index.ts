@@ -1,4 +1,8 @@
 import 'dotenv/config'
+
+// Bare-metal fallback; Docker sets this via ENV. ??= keeps explicit TZ (incl. test matrices).
+process.env.TZ ??= 'Asia/Taipei'
+
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import pino from 'pino'

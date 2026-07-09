@@ -143,6 +143,32 @@ describe('processOverdueBills: mark every tick, notify once after 09:00', () => 
     expect(await prisma.notificationLog.count()).toBe(1) // unchanged
   })
 
+  it('a reminder rule literally named 逾期警告 does not suppress the real overdue warning (dedup scoped to ruleId null)', async () => {
+    const { user, bank } = await seedUser('alice')
+    const bill = await seedBill(bank.id, addDaysYMD(todayYMD(base), -1))
+    // A user-created reminder rule happens to be named the same as the
+    // overdue-warning message. Its reminder log must not be mistaken for a
+    // prior overdue warning.
+    const rule = await prisma.notificationRule.create({
+      data: {
+        name: OVERDUE_WARNING_MESSAGE,
+        daysBefore: 3,
+        timeOfDay: '09:00',
+        channels: JSON.stringify(['telegram']),
+        userId: user.id,
+      },
+    })
+    await prisma.notificationLog.create({
+      data: { billId: bill.id, ruleId: rule.id, channel: 'telegram', message: OVERDUE_WARNING_MESSAGE, success: true },
+    })
+
+    await processOverdueBills(at(9, 10))
+
+    expect(sendOverdueWarning).toHaveBeenCalledTimes(1)
+    const realWarning = await prisma.notificationLog.findFirst({ where: { billId: bill.id, ruleId: null } })
+    expect(realWarning?.message).toBe(OVERDUE_WARNING_MESSAGE)
+  })
+
   it('multiple overdue bills across different owners are all marked and each notified once', async () => {
     const { bank: bankA } = await seedUser('alice', '111')
     const { bank: bankB } = await seedUser('bob', '222')

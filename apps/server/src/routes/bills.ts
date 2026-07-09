@@ -8,7 +8,7 @@ import { DATA_DIR } from '@/paths.js'
 import { decryptPdf } from '@/services/pdf-parser.js'
 import { parseBillWithLLM, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
 import { BillStatus } from '@bill-alarm/shared/types'
-import { todayYMD } from '@bill-alarm/shared/date'
+import { todayYMD, isValidYMD } from '@bill-alarm/shared/date'
 import { getAuthUser } from './auth.js'
 
 const app = new Hono()
@@ -21,7 +21,7 @@ async function ownBill(c: Parameters<typeof getAuthUser>[0], id: string) {
 const updateBillSchema = z.object({
   amount: z.number().int().optional(),
   minimumPayment: z.number().int().positive().nullable().optional(),
-  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dueDate 須為 YYYY-MM-DD 格式').optional(),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dueDate 須為 YYYY-MM-DD 格式').refine(isValidYMD, 'dueDate 不是有效日期').optional(),
   billingPeriod: z.string().regex(/^\d{4}-\d{2}$/, 'billingPeriod 須為 YYYY-MM 格式').optional(),
   status: z.nativeEnum(BillStatus).optional(),
 })

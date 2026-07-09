@@ -46,3 +46,33 @@ describe('notification-rules: channels validation', () => {
     expect(res.status).toBe(201)
   })
 })
+
+describe('notification-rules: timeOfDay validation', () => {
+  it('POST /api/notification-rules with timeOfDay "25:61" (out-of-range clock value) returns 400', async () => {
+    const res = await app.request('/api/notification-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({
+        name: 'Bad Clock Rule',
+        daysBefore: 3,
+        timeOfDay: '25:61',
+        channels: ['telegram'],
+      }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('POST /api/notification-rules with timeOfDay "23:59" (valid boundary) returns 201', async () => {
+    const res = await app.request('/api/notification-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({
+        name: 'Late Night Rule',
+        daysBefore: 3,
+        timeOfDay: '23:59',
+        channels: ['telegram'],
+      }),
+    })
+    expect(res.status).toBe(201)
+  })
+})
