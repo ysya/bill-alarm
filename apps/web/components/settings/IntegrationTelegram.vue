@@ -2,8 +2,8 @@
 import { CheckCircle, ChevronDown, ChevronUp, Send } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
-const props = defineProps<{
-  status: { isConfigured: boolean; boundCount: number }
+defineProps<{
+  status: { isConfigured: boolean, boundCount: number }
 }>()
 
 const emit = defineEmits<{ refresh: [] }>()
@@ -26,9 +26,11 @@ async function handleSave() {
     botToken.value = ''
     showEditForm.value = false
     emit('refresh')
-  } catch (error) {
+  }
+  catch (error) {
     toast.error('儲存失敗', { description: String(error) })
-  } finally {
+  }
+  finally {
     submitting.value = false
   }
 }
@@ -39,9 +41,11 @@ async function handleTest() {
     const result = await settingsApi.testTelegram()
     if (result.success) toast.success('測試訊息已發送', { description: '請檢查你的 Telegram。' })
     else toast.error('測試訊息發送失敗')
-  } catch (e: any) {
+  }
+  catch (e: any) {
     toast.error('發送失敗', { description: e?.data?.error ?? String(e) })
-  } finally {
+  }
+  finally {
     testingTelegram.value = false
   }
 }
@@ -54,13 +58,25 @@ async function handleTest() {
       <p class="text-xs text-muted-foreground">
         透過 @BotFather 建立 Bot 取得 Token。每位使用者在「帳號」區各自綁定接收通知。
       </p>
-      <form class="space-y-3" @submit.prevent="handleSave">
+      <form
+        class="space-y-3"
+        @submit.prevent="handleSave"
+      >
         <div class="space-y-2">
           <Label for="tBotToken">Bot Token *</Label>
-          <Input id="tBotToken" v-model="botToken" type="password" placeholder="123456:ABC-DEF..." />
+          <Input
+            id="tBotToken"
+            v-model="botToken"
+            type="password"
+            placeholder="123456:ABC-DEF..."
+          />
         </div>
         <div class="flex justify-end">
-          <Button type="submit" size="sm" :disabled="submitting">
+          <Button
+            type="submit"
+            size="sm"
+            :disabled="submitting"
+          >
             {{ submitting ? '儲存中...' : '儲存' }}
           </Button>
         </div>
@@ -73,30 +89,63 @@ async function handleTest() {
         <CheckCircle class="h-4 w-4 text-green-500" />
         <span>Bot 已設定 · 已綁定 {{ status.boundCount }} 人</span>
       </div>
-      <p v-if="status.boundCount === 0" class="text-xs text-yellow-500">
+      <p
+        v-if="status.boundCount === 0"
+        class="text-xs text-yellow-500"
+      >
         目前沒有任何使用者綁定，通知不會發送。請到「帳號」區綁定 Telegram。
       </p>
       <div class="flex gap-2">
-        <Button size="sm" variant="outline" :disabled="testingTelegram" @click="handleTest">
+        <Button
+          size="sm"
+          variant="outline"
+          :disabled="testingTelegram"
+          @click="handleTest"
+        >
           <Send class="mr-2 h-4 w-4" />
           {{ testingTelegram ? '發送中...' : '發送測試（給自己）' }}
         </Button>
-        <Button size="sm" variant="ghost" @click="showEditForm = !showEditForm">
+        <Button
+          size="sm"
+          variant="ghost"
+          @click="showEditForm = !showEditForm"
+        >
           修改 Token
-          <component :is="showEditForm ? ChevronUp : ChevronDown" class="ml-1 h-4 w-4" />
+          <component
+            :is="showEditForm ? ChevronUp : ChevronDown"
+            class="ml-1 h-4 w-4"
+          />
         </Button>
       </div>
 
-      <form v-if="showEditForm" class="space-y-3 rounded-lg border border-border p-3" @submit.prevent="handleSave">
+      <form
+        v-if="showEditForm"
+        class="space-y-3 rounded-lg border border-border p-3"
+        @submit.prevent="handleSave"
+      >
         <div class="space-y-2">
           <Label for="tBotTokenEdit">Bot Token *</Label>
-          <Input id="tBotTokenEdit" v-model="botToken" type="password" placeholder="輸入新的 Bot Token" />
+          <Input
+            id="tBotTokenEdit"
+            v-model="botToken"
+            type="password"
+            placeholder="輸入新的 Bot Token"
+          />
         </div>
         <div class="flex justify-end gap-2">
-          <Button type="button" size="sm" variant="ghost" @click="showEditForm = false; botToken = ''">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            @click="showEditForm = false; botToken = ''"
+          >
             取消
           </Button>
-          <Button type="submit" size="sm" :disabled="submitting">
+          <Button
+            type="submit"
+            size="sm"
+            :disabled="submitting"
+          >
             {{ submitting ? '儲存中...' : '儲存' }}
           </Button>
         </div>

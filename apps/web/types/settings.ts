@@ -8,8 +8,8 @@ export interface NotificationRule {
 }
 
 export interface ConfigStatus {
-  telegram: { isConfigured: boolean; boundCount: number }
-  scan: { interval: number; rangeDays: number; queryExtra: string }
+  telegram: { isConfigured: boolean, boundCount: number }
+  scan: { interval: number, rangeDays: number, queryExtra: string }
   gemini: { isConfigured: boolean }
   openai: { isConfigured: boolean }
   llm: {

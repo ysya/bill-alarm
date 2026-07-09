@@ -17,7 +17,10 @@ function isActive(to: string): boolean {
         class="flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors"
         :class="isActive(item.to) ? 'text-primary' : 'text-muted-foreground'"
       >
-        <component :is="item.icon" class="h-5 w-5" />
+        <component
+          :is="item.icon"
+          class="h-5 w-5"
+        />
         <span class="text-[11px] leading-none">{{ item.label }}</span>
       </NuxtLink>
     </div>

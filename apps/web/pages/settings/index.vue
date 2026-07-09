@@ -11,7 +11,7 @@ const { me, isAdmin, logout } = useAuth()
 
 const rules = ref<NotificationRule[]>([])
 const emailStatus = ref<EmailStatus | null>(null)
-const calendarFeed = ref<{ token: string; feedUrl: string; feedPath: string } | null>(null)
+const calendarFeed = ref<{ token: string, feedUrl: string, feedPath: string } | null>(null)
 const configStatus = ref<ConfigStatus | null>(null)
 const loading = ref(true)
 
@@ -56,9 +56,11 @@ async function fetchSelfData() {
     rules.value = ruleList
     emailStatus.value = email
     calendarFeed.value = calendar
-  } catch (error) {
+  }
+  catch (error) {
     toast.error('載入設定失敗', { description: String(error) })
-  } finally {
+  }
+  finally {
     loading.value = false
   }
 }
@@ -66,7 +68,8 @@ async function fetchSelfData() {
 async function fetchAdminData() {
   try {
     configStatus.value = await settingsApi.getConfigStatus()
-  } catch (error) {
+  }
+  catch (error) {
     toast.error('載入系統設定失敗', { description: String(error) })
   }
 }
@@ -103,9 +106,11 @@ async function handleDelete() {
     toast.success('通知規則已刪除')
     deleteDialogOpen.value = false
     await fetchSelfData()
-  } catch (error) {
+  }
+  catch (error) {
     toast.error('刪除失敗', { description: String(error) })
-  } finally {
+  }
+  finally {
     submitting.value = false
   }
 }
@@ -115,22 +120,53 @@ async function handleDelete() {
   <div class="space-y-8">
     <!-- Page Header -->
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">設定</h1>
-      <p class="text-sm text-muted-foreground mt-1">管理服務整合、通知規則與帳號。</p>
+      <h1 class="text-2xl font-bold tracking-tight">
+        設定
+      </h1>
+      <p class="text-sm text-muted-foreground mt-1">
+        管理服務整合、通知規則與帳號。
+      </p>
     </div>
 
     <!-- 服務整合（全員：自己的信箱與行事曆） -->
     <section class="space-y-3">
-      <h2 class="text-sm font-medium text-muted-foreground">服務整合</h2>
-      <div v-if="loading" class="space-y-3">
-        <div v-for="i in 2" :key="i" class="h-12 animate-pulse rounded-xl bg-muted" />
+      <h2 class="text-sm font-medium text-muted-foreground">
+        服務整合
+      </h2>
+      <div
+        v-if="loading"
+        class="space-y-3"
+      >
+        <div
+          v-for="i in 2"
+          :key="i"
+          class="h-12 animate-pulse rounded-xl bg-muted"
+        />
       </div>
       <template v-else>
-        <SettingsCard v-if="emailStatus" :icon="Mail" title="信箱（Gmail IMAP）" :status="emailCardStatus.status" :status-text="emailCardStatus.text">
-          <SettingsIntegrationEmail :email="emailStatus" @refresh="fetchSelfData" />
+        <SettingsCard
+          v-if="emailStatus"
+          :icon="Mail"
+          title="信箱（Gmail IMAP）"
+          :status="emailCardStatus.status"
+          :status-text="emailCardStatus.text"
+        >
+          <SettingsIntegrationEmail
+            :email="emailStatus"
+            @refresh="fetchSelfData"
+          />
         </SettingsCard>
-        <SettingsCard v-if="calendarFeed" :icon="CalendarCheck" title="行事曆訂閱（ICS Feed）" status="ok" status-text="已啟用">
-          <SettingsIntegrationCalendar :calendar="calendarFeed" @refresh="fetchSelfData" />
+        <SettingsCard
+          v-if="calendarFeed"
+          :icon="CalendarCheck"
+          title="行事曆訂閱（ICS Feed）"
+          status="ok"
+          status-text="已啟用"
+        >
+          <SettingsIntegrationCalendar
+            :calendar="calendarFeed"
+            @refresh="fetchSelfData"
+          />
         </SettingsCard>
       </template>
     </section>
@@ -138,8 +174,12 @@ async function handleDelete() {
     <!-- 通知規則（全員，自己的） -->
     <section>
       <SettingsNotificationRuleList
-        :rules="rules" :loading="loading"
-        @create="openCreateDialog" @edit="openEditDialog" @delete="openDeleteDialog" @refresh="fetchSelfData"
+        :rules="rules"
+        :loading="loading"
+        @create="openCreateDialog"
+        @edit="openEditDialog"
+        @delete="openDeleteDialog"
+        @refresh="fetchSelfData"
       />
     </section>
 
@@ -154,7 +194,9 @@ async function handleDelete() {
         <div class="flex min-w-0 items-center gap-3">
           <User class="h-5 w-5 shrink-0 text-muted-foreground" />
           <div class="min-w-0">
-            <p class="text-sm font-medium">登入身分</p>
+            <p class="text-sm font-medium">
+              登入身分
+            </p>
             <p class="truncate text-xs text-muted-foreground">
               {{ me?.username ?? '—' }}
               <span v-if="me"> · {{ me.role === 'admin' ? '管理員' : '使用者' }}</span>
@@ -162,12 +204,17 @@ async function handleDelete() {
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <Button variant="outline" size="sm" @click="changePwOpen = true">
+          <Button
+            variant="outline"
+            size="sm"
+            @click="changePwOpen = true"
+          >
             <KeyRound class="mr-2 h-4 w-4" />
             修改密碼
           </Button>
           <Button
-            variant="outline" size="sm"
+            variant="outline"
+            size="sm"
             class="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
             @click="logout"
           >
@@ -179,20 +226,48 @@ async function handleDelete() {
     </section>
 
     <!-- 系統管理（admin） -->
-    <section v-if="isAdmin" class="space-y-3">
-      <h2 class="text-sm font-medium text-muted-foreground">系統管理</h2>
+    <section
+      v-if="isAdmin"
+      class="space-y-3"
+    >
+      <h2 class="text-sm font-medium text-muted-foreground">
+        系統管理
+      </h2>
       <template v-if="configStatus">
-        <SettingsCard :icon="Sparkles" title="AI 解析器" :status="llmStatus.status" :status-text="llmStatus.text">
+        <SettingsCard
+          :icon="Sparkles"
+          title="AI 解析器"
+          :status="llmStatus.status"
+          :status-text="llmStatus.text"
+        >
           <SettingsIntegrationLLM
-            :llm="configStatus.llm" :gemini="configStatus.gemini" :openai="configStatus.openai"
+            :llm="configStatus.llm"
+            :gemini="configStatus.gemini"
+            :openai="configStatus.openai"
             @refresh="fetchAdminData"
           />
         </SettingsCard>
-        <SettingsCard :icon="Send" title="Telegram Bot" :status="telegramStatus.status" :status-text="telegramStatus.text">
-          <SettingsIntegrationTelegram :status="configStatus.telegram" @refresh="fetchAdminData" />
+        <SettingsCard
+          :icon="Send"
+          title="Telegram Bot"
+          :status="telegramStatus.status"
+          :status-text="telegramStatus.text"
+        >
+          <SettingsIntegrationTelegram
+            :status="configStatus.telegram"
+            @refresh="fetchAdminData"
+          />
         </SettingsCard>
-        <SettingsCard :icon="Clock" title="掃描設定" status="ok" status-text="全域">
-          <SettingsScanConfigCard :scan="configStatus.scan" @refresh="fetchAdminData" />
+        <SettingsCard
+          :icon="Clock"
+          title="掃描設定"
+          status="ok"
+          status-text="全域"
+        >
+          <SettingsScanConfigCard
+            :scan="configStatus.scan"
+            @refresh="fetchAdminData"
+          />
         </SettingsCard>
       </template>
       <Card
@@ -202,8 +277,12 @@ async function handleDelete() {
         <div class="flex min-w-0 items-center gap-3">
           <Users class="h-5 w-5 shrink-0 text-muted-foreground" />
           <div class="min-w-0">
-            <p class="text-sm font-medium">使用者管理</p>
-            <p class="truncate text-xs text-muted-foreground">新增、停用、重設使用者帳號</p>
+            <p class="text-sm font-medium">
+              使用者管理
+            </p>
+            <p class="truncate text-xs text-muted-foreground">
+              新增、停用、重設使用者帳號
+            </p>
           </div>
         </div>
         <ChevronRight class="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -228,8 +307,18 @@ async function handleDelete() {
           <DialogDescription>確定要刪除通知規則「{{ deletingRule?.name }}」嗎？此操作無法復原。</DialogDescription>
         </DialogHeader>
         <DialogFooter class="gap-2 sm:gap-0">
-          <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
-          <Button variant="destructive" :disabled="submitting" @click="handleDelete">確認刪除</Button>
+          <DialogClose as-child>
+            <Button variant="outline">
+              取消
+            </Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            :disabled="submitting"
+            @click="handleDelete"
+          >
+            確認刪除
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

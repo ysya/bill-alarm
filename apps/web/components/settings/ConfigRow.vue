@@ -12,7 +12,12 @@ defineProps<{
         <slot name="icon" />
         <span class="text-sm font-medium">{{ label }}</span>
       </div>
-      <p v-if="description" class="text-xs text-muted-foreground">{{ description }}</p>
+      <p
+        v-if="description"
+        class="text-xs text-muted-foreground"
+      >
+        {{ description }}
+      </p>
     </div>
     <div class="shrink-0 sm:ml-4">
       <slot />

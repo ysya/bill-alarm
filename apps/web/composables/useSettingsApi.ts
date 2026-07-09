@@ -1,14 +1,14 @@
 import type { EmailStatus } from '~/types/settings'
 
-export type ScanErrorStage =
-  | 'email_search'
-  | 'email_fetch'
-  | 'pdf_password'
-  | 'pdf_extract'
-  | 'parse_failed'
-  | 'sanity_check'
-  | 'unexpected'
-  | 'notification'
+export type ScanErrorStage
+  = | 'email_search'
+    | 'email_fetch'
+    | 'pdf_password'
+    | 'pdf_extract'
+    | 'parse_failed'
+    | 'sanity_check'
+    | 'unexpected'
+    | 'notification'
 
 export interface ScanError {
   stage: ScanErrorStage
@@ -54,12 +54,12 @@ export function useSettingsApi() {
 
     // Integration status (legacy overview)
     getIntegrationStatus: () => get<{
-      email: { connected: boolean; message: string }
+      email: { connected: boolean, message: string }
       telegram: { configured: boolean }
     }>('/integrations/status'),
 
     // Email scan
-    triggerScan: () => post<{ scanLogId?: string; scanned: number; newBills: number; errors: ScanError[] }>('/email/scan'),
+    triggerScan: () => post<{ scanLogId?: string, scanned: number, newBills: number, errors: ScanError[] }>('/email/scan'),
 
     listScanLogs: (limit = 20) =>
       get<{ logs: ScanLogDTO[] }>(`/scan-logs?limit=${limit}`),
@@ -69,7 +69,7 @@ export function useSettingsApi() {
 
     // Email (IMAP)
     testEmailConnection: (data: EmailConfigPayload) =>
-      post<{ ok: boolean; email?: string; error?: string }>('/email/test', {
+      post<{ ok: boolean, email?: string, error?: string }>('/email/test', {
         host: data.host ?? 'imap.gmail.com',
         port: data.port ?? 993,
         user: data.user,
@@ -89,15 +89,15 @@ export function useSettingsApi() {
 
     // Calendar (ICS feed)
     getCalendarFeed: () =>
-      get<{ token: string; feedUrl: string; feedPath: string }>('/calendar/info'),
+      get<{ token: string, feedUrl: string, feedPath: string }>('/calendar/info'),
 
     rotateCalendarToken: () =>
-      post<{ token: string; feedUrl: string; feedPath: string }>('/calendar/rotate'),
+      post<{ token: string, feedUrl: string, feedPath: string }>('/calendar/rotate'),
 
     // Aggregated config status
     getConfigStatus: () => get<{
-      telegram: { isConfigured: boolean; boundCount: number }
-      scan: { interval: number; rangeDays: number; queryExtra: string }
+      telegram: { isConfigured: boolean, boundCount: number }
+      scan: { interval: number, rangeDays: number, queryExtra: string }
       gemini: { isConfigured: boolean }
       openai: { isConfigured: boolean }
       llm: {
@@ -114,14 +114,14 @@ export function useSettingsApi() {
       post<{ success: boolean }>('/config/telegram', { botToken }),
 
     // Telegram per-user binding
-    telegramBind: () => post<{ deepLink: string; expiresAt: string }>('/auth/telegram/bind'),
+    telegramBind: () => post<{ deepLink: string, expiresAt: string }>('/auth/telegram/bind'),
     telegramConfirm: () => post<{ ok: boolean }>('/auth/telegram/confirm'),
     telegramUnbind: () => del<{ ok: boolean }>('/auth/telegram'),
 
     saveScanInterval: (interval: number) =>
       post<{ success: boolean }>('/config/scan', { interval }),
 
-    saveScanConfig: (data: { interval?: number; rangeDays?: number; queryExtra?: string }) =>
+    saveScanConfig: (data: { interval?: number, rangeDays?: number, queryExtra?: string }) =>
       post<{ success: boolean }>('/config/scan', data),
 
     saveGeminiConfig: (apiKey: string) =>
@@ -139,6 +139,6 @@ export function useSettingsApi() {
       ollamaModel?: string
     }) => post<{ success: boolean }>('/config/llm', data),
 
-    testLlm: () => post<{ ok: boolean; message: string }>('/llm/test'),
+    testLlm: () => post<{ ok: boolean, message: string }>('/llm/test'),
   }
 }

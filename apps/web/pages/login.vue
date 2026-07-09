@@ -5,16 +5,33 @@
         <CardTitle>登入 Bill Alarm</CardTitle>
       </CardHeader>
       <CardContent>
-        <form class="flex flex-col gap-4" @submit.prevent="submit">
+        <form
+          class="flex flex-col gap-4"
+          @submit.prevent="submit"
+        >
           <div class="flex flex-col gap-2">
             <Label for="username">帳號</Label>
-            <Input id="username" v-model="username" autocomplete="username" required />
+            <Input
+              id="username"
+              v-model="username"
+              autocomplete="username"
+              required
+            />
           </div>
           <div class="flex flex-col gap-2">
             <Label for="password">密碼</Label>
-            <Input id="password" v-model="password" type="password" autocomplete="current-password" required />
+            <Input
+              id="password"
+              v-model="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
           </div>
-          <Button type="submit" :disabled="loading">
+          <Button
+            type="submit"
+            :disabled="loading"
+          >
             {{ loading ? '登入中…' : '登入' }}
           </Button>
         </form>

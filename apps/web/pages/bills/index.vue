@@ -3,23 +3,43 @@
     <!-- Page Header -->
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex items-center gap-3">
-        <h2 class="text-2xl font-bold tracking-tight">帳單管理</h2>
-        <Button variant="outline" size="sm" :disabled="scanInProgress" @click="handleScan">
-          <RefreshCw class="mr-2 h-4 w-4" :class="scanInProgress ? 'animate-spin' : ''" />
+        <h2 class="text-2xl font-bold tracking-tight">
+          帳單管理
+        </h2>
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="scanInProgress"
+          @click="handleScan"
+        >
+          <RefreshCw
+            class="mr-2 h-4 w-4"
+            :class="scanInProgress ? 'animate-spin' : ''"
+          />
           <template v-if="scanProgress.active">
             掃描中 {{ scanProgress.idx }}/{{ scanProgress.total }}
-            <span v-if="scanProgress.bank" class="ml-1 text-muted-foreground">
+            <span
+              v-if="scanProgress.bank"
+              class="ml-1 text-muted-foreground"
+            >
               · {{ scanProgress.bank }}
             </span>
           </template>
-          <template v-else-if="scanning">啟動中...</template>
-          <template v-else>掃描信件</template>
+          <template v-else-if="scanning">
+            啟動中...
+          </template>
+          <template v-else>
+            掃描信件
+          </template>
         </Button>
       </div>
     </div>
 
     <!-- Live scan progress -->
-    <div v-if="scanProgress.active" class="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+    <div
+      v-if="scanProgress.active"
+      class="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3"
+    >
       <div class="flex items-center justify-between text-xs">
         <span class="font-medium">
           {{ scanProgress.trigger === 'cron' ? '自動掃描中' : '手動掃描中' }}
@@ -33,18 +53,36 @@
           :style="{ width: `${progressPercent}%` }"
         />
       </div>
-      <p v-if="scanProgress.bank || scanProgress.lastReason" class="truncate text-xs text-muted-foreground">
-        <span v-if="scanProgress.bank" class="font-medium">{{ scanProgress.bank }}</span>
-        <span v-if="scanProgress.lastReason" class="ml-1">— {{ scanProgress.lastReason }}</span>
+      <p
+        v-if="scanProgress.bank || scanProgress.lastReason"
+        class="truncate text-xs text-muted-foreground"
+      >
+        <span
+          v-if="scanProgress.bank"
+          class="font-medium"
+        >{{ scanProgress.bank }}</span>
+        <span
+          v-if="scanProgress.lastReason"
+          class="ml-1"
+        >— {{ scanProgress.lastReason }}</span>
       </p>
     </div>
 
     <!-- Status Tabs -->
-    <Tabs v-model="activeTab" class="space-y-4">
+    <Tabs
+      v-model="activeTab"
+      class="space-y-4"
+    >
       <TabsList>
         <TabsTrigger value="all">
           全部
-          <Badge v-if="total > 0" variant="secondary" class="ml-1.5">{{ total }}</Badge>
+          <Badge
+            v-if="total > 0"
+            variant="secondary"
+            class="ml-1.5"
+          >
+            {{ total }}
+          </Badge>
         </TabsTrigger>
         <TabsTrigger value="pending">
           待繳
@@ -61,10 +99,20 @@
       </TabsList>
 
       <!-- Shared content for all tabs -->
-      <TabsContent :value="activeTab" :force-mount="true">
+      <TabsContent
+        :value="activeTab"
+        :force-mount="true"
+      >
         <!-- Loading -->
-        <div v-if="loading" class="space-y-3">
-          <Card v-for="i in 4" :key="i" class="animate-pulse">
+        <div
+          v-if="loading"
+          class="space-y-3"
+        >
+          <Card
+            v-for="i in 4"
+            :key="i"
+            class="animate-pulse"
+          >
             <div class="p-4 flex items-center gap-4">
               <div class="flex-1 space-y-2">
                 <div class="h-4 w-32 rounded bg-muted" />
@@ -76,17 +124,31 @@
         </div>
 
         <!-- Empty -->
-        <Card v-else-if="bills.length === 0" class="py-12">
+        <Card
+          v-else-if="bills.length === 0"
+          class="py-12"
+        >
           <CardContent class="flex flex-col items-center text-center">
             <Inbox class="h-12 w-12 text-muted-foreground mb-4" />
-            <h4 class="text-lg font-semibold mb-1">沒有帳單</h4>
-            <p class="text-sm text-muted-foreground">目前沒有符合條件的帳單</p>
+            <h4 class="text-lg font-semibold mb-1">
+              沒有帳單
+            </h4>
+            <p class="text-sm text-muted-foreground">
+              目前沒有符合條件的帳單
+            </p>
           </CardContent>
         </Card>
 
         <!-- Bill list grouped by billing period -->
-        <div v-else class="space-y-6">
-          <section v-for="group in groupedBills" :key="group.period" class="space-y-3">
+        <div
+          v-else
+          class="space-y-6"
+        >
+          <section
+            v-for="group in groupedBills"
+            :key="group.period"
+            class="space-y-3"
+          >
             <div class="flex items-center gap-3">
               <h3 class="text-sm font-semibold text-muted-foreground">
                 {{ formatPeriodLabel(group.period) }}
@@ -106,14 +168,19 @@
                 <div class="flex-1 min-w-0 space-y-1">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-semibold truncate">{{ bill.bank?.name }}</span>
-                    <Badge :class="statusBadgeClass(bill.status)">{{ statusLabel(bill.status) }}</Badge>
+                    <Badge :class="statusBadgeClass(bill.status)">
+                      {{ statusLabel(bill.status) }}
+                    </Badge>
                   </div>
                   <div class="flex items-center gap-3 text-sm text-muted-foreground">
                     <span class="flex items-center gap-1">
                       <CalendarIcon class="h-3.5 w-3.5" />
                       {{ formatDate(bill.dueDate) }}
                     </span>
-                    <span v-if="bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE" :class="`text-xs font-medium ${daysRemainingText(bill.dueDate).className}`">
+                    <span
+                      v-if="bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE"
+                      :class="`text-xs font-medium ${daysRemainingText(bill.dueDate).className}`"
+                    >
                       {{ daysRemainingText(bill.dueDate).text }}
                     </span>
                   </div>
@@ -126,8 +193,14 @@
                     :disabled="markingPaid.has(bill.id)"
                     @click.stop="openPayDialog(bill.id)"
                   >
-                    <Loader2 v-if="markingPaid.has(bill.id)" class="h-4 w-4 animate-spin" />
-                    <CircleCheck v-else class="h-4 w-4" />
+                    <Loader2
+                      v-if="markingPaid.has(bill.id)"
+                      class="h-4 w-4 animate-spin"
+                    />
+                    <CircleCheck
+                      v-else
+                      class="h-4 w-4"
+                    />
                     {{ markingPaid.has(bill.id) ? '處理中...' : '標記已繳' }}
                   </Button>
                 </div>
@@ -137,16 +210,29 @@
         </div>
 
         <!-- Pagination -->
-        <div v-if="totalPages > 1" class="flex items-center justify-between pt-4">
+        <div
+          v-if="totalPages > 1"
+          class="flex items-center justify-between pt-4"
+        >
           <p class="text-sm text-muted-foreground">
             共 {{ total }} 筆，第 {{ currentPage }} / {{ totalPages }} 頁
           </p>
           <div class="flex items-center gap-2">
-            <Button variant="outline" size="sm" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
+            <Button
+              variant="outline"
+              size="sm"
+              :disabled="currentPage <= 1"
+              @click="goToPage(currentPage - 1)"
+            >
               <ChevronLeft class="h-4 w-4" />
               上一頁
             </Button>
-            <Button variant="outline" size="sm" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">
+            <Button
+              variant="outline"
+              size="sm"
+              :disabled="currentPage >= totalPages"
+              @click="goToPage(currentPage + 1)"
+            >
               下一頁
               <ChevronRight class="h-4 w-4" />
             </Button>
@@ -166,9 +252,19 @@
           <Calendar v-model="payDate" />
         </div>
         <DialogFooter class="gap-2">
-          <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
-          <Button :disabled="markingPaid.size > 0" @click="handleConfirmPaid">
-            <Loader2 v-if="markingPaid.size > 0" class="mr-2 h-4 w-4 animate-spin" />
+          <DialogClose as-child>
+            <Button variant="outline">
+              取消
+            </Button>
+          </DialogClose>
+          <Button
+            :disabled="markingPaid.size > 0"
+            @click="handleConfirmPaid"
+          >
+            <Loader2
+              v-if="markingPaid.size > 0"
+              class="mr-2 h-4 w-4 animate-spin"
+            />
             確認已繳
           </Button>
         </DialogFooter>
@@ -212,7 +308,7 @@ function daysUntil(date: string | Date): number {
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-function daysRemainingText(dueDate: string): { text: string; className: string } {
+function daysRemainingText(dueDate: string): { text: string, className: string } {
   const days = daysUntil(dueDate)
   if (days < 0) return { text: `已逾期 ${Math.abs(days)} 天`, className: 'text-red-500' }
   if (days === 0) return { text: '今天到期', className: 'text-red-500' }
@@ -266,8 +362,8 @@ function openPayDialog(id: string) {
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
 const groupedBills = computed(() => {
-  const groups: { period: string; bills: BillDTO[]; total: number }[] = []
-  let current: { period: string; bills: BillDTO[]; total: number } | null = null
+  const groups: { period: string, bills: BillDTO[], total: number }[] = []
+  let current: { period: string, bills: BillDTO[], total: number } | null = null
   for (const bill of bills.value) {
     const period = bill.billingPeriod ?? ''
     if (!current || current.period !== period) {
@@ -289,9 +385,11 @@ async function fetchBills() {
     const result = await list({ status, page: currentPage.value, pageSize: PAGE_SIZE })
     bills.value = result.data
     total.value = result.total
-  } catch {
+  }
+  catch {
     toast.error('載入帳單失敗', { description: '請稍後再試' })
-  } finally {
+  }
+  finally {
     loading.value = false
   }
 }
@@ -309,9 +407,11 @@ async function handleConfirmPaid() {
     toast.success('帳單已標記為已繳')
     payDialogOpen.value = false
     await fetchBills()
-  } catch {
+  }
+  catch {
     toast.error('操作失敗', { description: '無法標記帳單，請稍後再試' })
-  } finally {
+  }
+  finally {
     markingPaid.value.delete(id)
   }
 }
@@ -323,18 +423,22 @@ async function handleScan() {
     if (result.newBills > 0) {
       toast.success(`掃描完成，新增 ${result.newBills} 筆帳單`)
       await fetchBills()
-    } else if (result.scanned === 0) {
+    }
+    else if (result.scanned === 0) {
       toast.warning('沒有找到任何信件', { description: '請確認 Gmail 已連線，或信箱中沒有新的帳單通知' })
-    } else {
+    }
+    else {
       toast.info(`已檢查 ${result.scanned} 封信件，沒有新帳單`)
     }
     if (result.errors?.length > 0) {
-      const detail = result.errors.map((e) => `${e.bank ?? '未知'}: ${e.reason}`).join('\n')
+      const detail = result.errors.map(e => `${e.bank ?? '未知'}: ${e.reason}`).join('\n')
       toast.warning(`部分信件處理失敗（${result.errors.length}）`, { description: detail })
     }
-  } catch {
+  }
+  catch {
     toast.error('掃描失敗', { description: '請確認 Gmail 已連線' })
-  } finally {
+  }
+  finally {
     scanning.value = false
   }
 }

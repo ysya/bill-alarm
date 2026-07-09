@@ -17,12 +17,19 @@ const progressPercent = computed(() =>
 <template>
   <div class="space-y-6">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">掃描紀錄</h1>
-      <p class="text-sm text-muted-foreground mt-1">最近的自動與手動信箱掃描結果。</p>
+      <h1 class="text-2xl font-bold tracking-tight">
+        掃描紀錄
+      </h1>
+      <p class="text-sm text-muted-foreground mt-1">
+        最近的自動與手動信箱掃描結果。
+      </p>
     </div>
 
     <!-- Live progress (only when active) -->
-    <div v-if="scanProgress.active" class="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+    <div
+      v-if="scanProgress.active"
+      class="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3"
+    >
       <div class="flex items-center justify-between text-xs">
         <span class="font-medium">
           {{ scanProgress.trigger === 'cron' ? '自動掃描中' : '手動掃描中' }}
@@ -36,9 +43,18 @@ const progressPercent = computed(() =>
           :style="{ width: `${progressPercent}%` }"
         />
       </div>
-      <p v-if="scanProgress.bank || scanProgress.lastReason" class="truncate text-xs text-muted-foreground">
-        <span v-if="scanProgress.bank" class="font-medium">{{ scanProgress.bank }}</span>
-        <span v-if="scanProgress.lastReason" class="ml-1">— {{ scanProgress.lastReason }}</span>
+      <p
+        v-if="scanProgress.bank || scanProgress.lastReason"
+        class="truncate text-xs text-muted-foreground"
+      >
+        <span
+          v-if="scanProgress.bank"
+          class="font-medium"
+        >{{ scanProgress.bank }}</span>
+        <span
+          v-if="scanProgress.lastReason"
+          class="ml-1"
+        >— {{ scanProgress.lastReason }}</span>
       </p>
     </div>
 

@@ -3,7 +3,7 @@ import { Copy, ExternalLink, HelpCircle, RefreshCw } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
 const props = defineProps<{
-  calendar: { feedUrl: string; feedPath: string; token: string }
+  calendar: { feedUrl: string, feedPath: string, token: string }
 }>()
 
 const emit = defineEmits<{ refresh: [] }>()
@@ -24,7 +24,8 @@ async function handleCopy() {
   try {
     await navigator.clipboard.writeText(fullUrl.value)
     toast.success('已複製訂閱網址')
-  } catch (e) {
+  }
+  catch (e) {
     toast.error('複製失敗', { description: String(e) })
   }
 }
@@ -36,9 +37,11 @@ async function handleRotate() {
     await settingsApi.rotateCalendarToken()
     toast.success('已產生新的訂閱網址，請更新訂閱端')
     emit('refresh')
-  } catch (e) {
+  }
+  catch (e) {
     toast.error('產生失敗', { description: String(e) })
-  } finally {
+  }
+  finally {
     rotating.value = false
   }
 }
@@ -51,7 +54,13 @@ async function handleRotate() {
         把帳單到期日當作日曆事件單向訂閱，不需 OAuth、不需授權。複製下方網址貼到任何支援
         iCalendar 的應用程式（Google Calendar、Apple 行事曆、Outlook 等）。
       </p>
-      <Button type="button" size="sm" variant="ghost" class="shrink-0" @click="helpDialogOpen = true">
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        class="shrink-0"
+        @click="helpDialogOpen = true"
+      >
         <HelpCircle class="mr-1 h-4 w-4" />
         如何訂閱？
       </Button>
@@ -60,8 +69,17 @@ async function handleRotate() {
     <div class="space-y-2">
       <Label>訂閱網址</Label>
       <div class="flex flex-col gap-2 sm:flex-row">
-        <Input :model-value="fullUrl" readonly class="font-mono text-xs" />
-        <Button size="sm" variant="outline" class="sm:shrink-0" @click="handleCopy">
+        <Input
+          :model-value="fullUrl"
+          readonly
+          class="font-mono text-xs"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          class="sm:shrink-0"
+          @click="handleCopy"
+        >
           <Copy class="mr-2 h-4 w-4" />
           複製
         </Button>
@@ -69,14 +87,29 @@ async function handleRotate() {
     </div>
 
     <div class="flex items-center gap-2 flex-wrap">
-      <Button size="sm" variant="outline" as-child>
-        <a href="https://calendar.google.com/calendar/u/0/r/settings/addbyurl" target="_blank">
+      <Button
+        size="sm"
+        variant="outline"
+        as-child
+      >
+        <a
+          href="https://calendar.google.com/calendar/u/0/r/settings/addbyurl"
+          target="_blank"
+        >
           <ExternalLink class="mr-2 h-4 w-4" />
           到 Google Calendar 訂閱頁
         </a>
       </Button>
-      <Button size="sm" variant="ghost" :disabled="rotating" @click="handleRotate">
-        <RefreshCw class="mr-2 h-4 w-4" :class="{ 'animate-spin': rotating }" />
+      <Button
+        size="sm"
+        variant="ghost"
+        :disabled="rotating"
+        @click="handleRotate"
+      >
+        <RefreshCw
+          class="mr-2 h-4 w-4"
+          :class="{ 'animate-spin': rotating }"
+        />
         重新產生 token
       </Button>
     </div>
@@ -92,13 +125,19 @@ async function handleRotate() {
 
         <div class="space-y-4 text-sm">
           <div>
-            <p class="font-medium mb-2">Google Calendar（網頁）</p>
+            <p class="font-medium mb-2">
+              Google Calendar（網頁）
+            </p>
             <ol class="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
               <li>左側「其他日曆」旁邊的「+」→「以網址新增」</li>
               <li>貼上上方訂閱網址 → 按「新增日曆」</li>
               <li>
                 或直接前往
-                <a href="https://calendar.google.com/calendar/u/0/r/settings/addbyurl" target="_blank" class="underline inline-flex items-center gap-0.5">
+                <a
+                  href="https://calendar.google.com/calendar/u/0/r/settings/addbyurl"
+                  target="_blank"
+                  class="underline inline-flex items-center gap-0.5"
+                >
                   訂閱頁<ExternalLink class="h-3 w-3" />
                 </a>
               </li>
@@ -106,7 +145,9 @@ async function handleRotate() {
           </div>
 
           <div>
-            <p class="font-medium mb-2">Apple 行事曆（Mac/iPhone）</p>
+            <p class="font-medium mb-2">
+              Apple 行事曆（Mac/iPhone）
+            </p>
             <ol class="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
               <li>Mac：檔案 → 新增日曆訂閱 → 貼上網址</li>
               <li>iOS：設定 → 行事曆 → 帳號 → 加入帳號 → 其他 → 加入訂閱行事曆</li>
@@ -114,14 +155,18 @@ async function handleRotate() {
           </div>
 
           <div>
-            <p class="font-medium mb-2">Microsoft Outlook</p>
+            <p class="font-medium mb-2">
+              Microsoft Outlook
+            </p>
             <ol class="space-y-1 list-decimal pl-5 text-xs text-muted-foreground">
               <li>檔案 → 帳戶設定 → 網際網路行事曆 → 新增 → 貼上網址</li>
             </ol>
           </div>
 
           <div class="rounded-lg border border-border bg-muted/30 p-3 space-y-1.5 text-xs text-muted-foreground">
-            <p class="font-medium text-foreground">注意事項</p>
+            <p class="font-medium text-foreground">
+              注意事項
+            </p>
             <p>
               <span class="font-medium">同步頻率：</span>
               Google Calendar 約每 8–24 小時拉取一次，新帳單不會即時出現。Apple 與 Outlook 可手動設定間隔。
@@ -143,7 +188,9 @@ async function handleRotate() {
 
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline">了解</Button>
+            <Button variant="outline">
+              了解
+            </Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

@@ -3,10 +3,15 @@
     <template v-if="bareShell">
       <NuxtPage />
     </template>
-    <div v-else class="flex">
+    <div
+      v-else
+      class="flex"
+    >
       <!-- Desktop Sidebar -->
       <aside class="hidden md:flex w-60 flex-col border-r border-border min-h-screen p-4 gap-2">
-        <h1 class="text-lg font-bold px-3 py-2 mb-4">Bill Alarm</h1>
+        <h1 class="text-lg font-bold px-3 py-2 mb-4">
+          Bill Alarm
+        </h1>
         <NuxtLink
           v-for="item in navItems"
           :key="item.to"
@@ -14,7 +19,10 @@
           class="flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors hover:bg-accent"
           active-class="bg-accent text-accent-foreground"
         >
-          <component :is="item.icon" class="w-4 h-4" />
+          <component
+            :is="item.icon"
+            class="w-4 h-4"
+          />
           {{ item.label }}
         </NuxtLink>
       </aside>
@@ -22,7 +30,9 @@
       <!-- Mobile Header -->
       <div class="md:hidden fixed top-0 left-0 right-0 z-50 bg-background/85 backdrop-blur border-b border-border pt-safe">
         <div class="flex items-center px-4 h-14">
-          <h1 class="text-lg font-bold">{{ pageTitle }}</h1>
+          <h1 class="text-lg font-bold">
+            {{ pageTitle }}
+          </h1>
         </div>
       </div>
 

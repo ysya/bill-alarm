@@ -1,7 +1,12 @@
 <template>
   <div class="space-y-6 max-w-4xl">
     <!-- Back Button -->
-    <Button variant="ghost" size="sm" class="-ml-2" @click="navigateTo('/bills')">
+    <Button
+      variant="ghost"
+      size="sm"
+      class="-ml-2"
+      @click="navigateTo('/bills')"
+    >
       <ArrowLeft class="h-4 w-4" />
       返回帳單列表
     </Button>
@@ -22,12 +27,22 @@
     </template>
 
     <!-- Error State -->
-    <Card v-else-if="error" class="py-12">
+    <Card
+      v-else-if="error"
+      class="py-12"
+    >
       <CardContent class="flex flex-col items-center text-center">
         <AlertTriangle class="h-12 w-12 text-destructive mb-4" />
-        <h4 class="text-lg font-semibold mb-1">載入失敗</h4>
-        <p class="text-sm text-muted-foreground mb-4">無法載入帳單資料</p>
-        <Button variant="outline" @click="fetchBill">
+        <h4 class="text-lg font-semibold mb-1">
+          載入失敗
+        </h4>
+        <p class="text-sm text-muted-foreground mb-4">
+          無法載入帳單資料
+        </p>
+        <Button
+          variant="outline"
+          @click="fetchBill"
+        >
           重試
         </Button>
       </CardContent>
@@ -41,12 +56,21 @@
           <CardHeader>
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div class="space-y-1">
-                <CardTitle class="text-xl">{{ bill.bank?.name }}</CardTitle>
+                <CardTitle class="text-xl">
+                  {{ bill.bank?.name }}
+                </CardTitle>
                 <div class="flex flex-wrap gap-2 items-center">
-                  <Badge :class="statusBadgeClass(bill.status)" class="text-xs px-2 py-0.5">
+                  <Badge
+                    :class="statusBadgeClass(bill.status)"
+                    class="text-xs px-2 py-0.5"
+                  >
                     {{ statusLabel(bill.status) }}
                   </Badge>
-                  <span v-if="bill.parseSource" class="inline-flex items-center gap-1 text-xs" :class="parseSourceClass(bill.parseSource)">
+                  <span
+                    v-if="bill.parseSource"
+                    class="inline-flex items-center gap-1 text-xs"
+                    :class="parseSourceClass(bill.parseSource)"
+                  >
                     <span>{{ parseSourceIcon(bill.parseSource) }}</span>
                     {{ parseSourceLabel(bill.parseSource) }}
                   </span>
@@ -63,12 +87,27 @@
                   編輯
                 </Button>
                 <template v-else-if="editing">
-                  <Button size="sm" variant="outline" :disabled="actionLoading" @click="cancelEdit">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    :disabled="actionLoading"
+                    @click="cancelEdit"
+                  >
                     取消
                   </Button>
-                  <Button size="sm" :disabled="actionLoading" @click="handleSaveEdit">
-                    <Loader2 v-if="actionLoading" class="h-3.5 w-3.5 animate-spin" />
-                    <Save v-else class="h-3.5 w-3.5" />
+                  <Button
+                    size="sm"
+                    :disabled="actionLoading"
+                    @click="handleSaveEdit"
+                  >
+                    <Loader2
+                      v-if="actionLoading"
+                      class="h-3.5 w-3.5 animate-spin"
+                    />
+                    <Save
+                      v-else
+                      class="h-3.5 w-3.5"
+                    />
                     儲存
                   </Button>
                 </template>
@@ -86,7 +125,10 @@
               </div>
             </div>
 
-            <div v-if="bill.parseSource === 'llm'" class="mt-2 rounded-md bg-orange-500/10 border border-orange-500/30 p-2 text-xs">
+            <div
+              v-if="bill.parseSource === 'llm'"
+              class="mt-2 rounded-md bg-orange-500/10 border border-orange-500/30 p-2 text-xs"
+            >
               <Sparkles class="inline h-3.5 w-3.5 mr-1 text-orange-500" />
               此帳單由 AI 解析，數值可能有誤，建議核對 PDF 後使用編輯功能調整。
             </div>
@@ -96,10 +138,18 @@
             <!-- Hero: Amount -->
             <div>
               <Label class="text-muted-foreground text-xs uppercase tracking-wide">應繳金額</Label>
-              <p v-if="!editing" class="text-4xl font-bold leading-none mt-1">
+              <p
+                v-if="!editing"
+                class="text-4xl font-bold leading-none mt-1"
+              >
                 {{ formatAmount(bill.amount) }}
               </p>
-              <Input v-else v-model.number="editForm.amount" type="number" class="text-2xl font-bold h-12 mt-1" />
+              <Input
+                v-else
+                v-model.number="editForm.amount"
+                type="number"
+                class="text-2xl font-bold h-12 mt-1"
+              />
               <p
                 v-if="!editing && bill.minimumPayment != null && bill.minimumPayment > 0"
                 class="text-sm text-muted-foreground mt-2"
@@ -118,7 +168,10 @@
             <Separator />
 
             <!-- Paid info (if paid) -->
-            <div v-if="bill.status === BillStatus.PAID && bill.paidAt" class="rounded-md bg-green-500/10 border border-green-500/30 p-3">
+            <div
+              v-if="bill.status === BillStatus.PAID && bill.paidAt"
+              class="rounded-md bg-green-500/10 border border-green-500/30 p-3"
+            >
               <Label class="text-xs text-green-700 dark:text-green-400 uppercase tracking-wide">繳費時間</Label>
               <div class="flex items-center gap-2 mt-1">
                 <CircleCheck class="h-4 w-4 text-green-500" />
@@ -130,7 +183,10 @@
             <div class="space-y-4">
               <div>
                 <Label class="text-muted-foreground text-xs uppercase tracking-wide">繳費截止日</Label>
-                <div v-if="!editing" class="flex items-center gap-2 mt-1 flex-wrap">
+                <div
+                  v-if="!editing"
+                  class="flex items-center gap-2 mt-1 flex-wrap"
+                >
                   <CalendarIcon class="h-4 w-4 text-muted-foreground shrink-0" />
                   <span class="font-medium whitespace-nowrap">{{ formatDate(bill.dueDate) }}</span>
                   <span
@@ -141,26 +197,46 @@
                     {{ daysRemainingInfo.text }}
                   </span>
                 </div>
-                <Input v-else v-model="editForm.dueDate" type="date" class="mt-1" />
+                <Input
+                  v-else
+                  v-model="editForm.dueDate"
+                  type="date"
+                  class="mt-1"
+                />
               </div>
 
               <div v-if="bill.billingPeriod || editing">
                 <Label class="text-muted-foreground text-xs uppercase tracking-wide">帳單週期</Label>
-                <div v-if="!editing" class="flex items-center gap-2 mt-1">
+                <div
+                  v-if="!editing"
+                  class="flex items-center gap-2 mt-1"
+                >
                   <CalendarRange class="h-4 w-4 text-muted-foreground shrink-0" />
                   <span class="font-medium">{{ bill.billingPeriod }}</span>
                 </div>
-                <Input v-else v-model="editForm.billingPeriod" type="month" class="mt-1" />
+                <Input
+                  v-else
+                  v-model="editForm.billingPeriod"
+                  type="month"
+                  class="mt-1"
+                />
               </div>
 
               <div v-if="editing">
                 <Label class="text-muted-foreground text-xs uppercase tracking-wide">狀態</Label>
-                <Select v-model="editForm.status" class="mt-1">
+                <Select
+                  v-model="editForm.status"
+                  class="mt-1"
+                >
                   <SelectTrigger class="mt-1">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem v-for="s in statusOptions" :key="s" :value="s">
+                    <SelectItem
+                      v-for="s in statusOptions"
+                      :key="s"
+                      :value="s"
+                    >
                       {{ statusLabel(s) }}
                     </SelectItem>
                   </SelectContent>
@@ -192,8 +268,14 @@
               :disabled="actionLoading || editing"
               @click="handleRevertToPending"
             >
-              <Loader2 v-if="actionLoading" class="h-4 w-4 animate-spin" />
-              <Undo2 v-else class="h-4 w-4" />
+              <Loader2
+                v-if="actionLoading"
+                class="h-4 w-4 animate-spin"
+              />
+              <Undo2
+                v-else
+                class="h-4 w-4"
+              />
               恢復為待繳
             </Button>
             <Button
@@ -202,8 +284,14 @@
               :disabled="actionLoading || reparsing || editing"
               @click="handleReparse"
             >
-              <Loader2 v-if="reparsing" class="h-4 w-4 animate-spin" />
-              <Sparkles v-else class="h-4 w-4" />
+              <Loader2
+                v-if="reparsing"
+                class="h-4 w-4 animate-spin"
+              />
+              <Sparkles
+                v-else
+                class="h-4 w-4"
+              />
               {{ reparsing ? 'AI 解析中...' : 'AI 重新解析' }}
             </Button>
           </CardFooter>
@@ -242,77 +330,89 @@
         </Card>
 
         <!-- Raw Email Snippet -->
-      <Card v-if="bill.rawEmailSnippet">
-        <CardHeader
-          class="cursor-pointer select-none"
-          @click="emailExpanded = !emailExpanded"
-        >
-          <div class="flex items-center justify-between">
-            <CardTitle class="text-base flex items-center gap-2">
-              <Mail class="h-4 w-4" />
-              原始郵件內容
-            </CardTitle>
-            <Button variant="ghost" size="icon-sm" :aria-label="emailExpanded ? '收合' : '展開'">
-              <ChevronDown
-                class="h-4 w-4 transition-transform duration-200"
-                :class="{ 'rotate-180': emailExpanded }"
-              />
-            </Button>
-          </div>
-        </CardHeader>
-        <template v-if="emailExpanded">
-          <CardContent>
-            <pre class="whitespace-pre-wrap text-sm text-muted-foreground bg-muted rounded-md p-4 overflow-x-auto max-h-96 overflow-y-auto font-mono leading-relaxed">{{ bill.rawEmailSnippet }}</pre>
-          </CardContent>
-        </template>
-      </Card>
-
-      <!-- Notification History -->
-      <Card>
-        <CardHeader>
-          <CardTitle class="text-base flex items-center gap-2">
-            <Bell class="h-4 w-4" />
-            通知紀錄
-          </CardTitle>
-          <CardDescription>此帳單的提醒通知歷史</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <template v-if="notifications.length === 0">
-            <div class="flex flex-col items-center py-8 text-center">
-              <BellOff class="h-8 w-8 text-muted-foreground mb-3" />
-              <p class="text-sm text-muted-foreground">尚無通知紀錄</p>
-            </div>
-          </template>
-          <div v-else class="space-y-3">
-            <div
-              v-for="(notification, index) in notifications"
-              :key="notification.id ?? index"
-              class="flex items-start gap-3 rounded-lg border border-border p-3"
-            >
-              <div class="mt-0.5">
-                <div
-                  class="h-2 w-2 rounded-full"
-                  :class="{
-                    'bg-green-500': notification.success,
-                    'bg-red-500': !notification.success,
-                  }"
+        <Card v-if="bill.rawEmailSnippet">
+          <CardHeader
+            class="cursor-pointer select-none"
+            @click="emailExpanded = !emailExpanded"
+          >
+            <div class="flex items-center justify-between">
+              <CardTitle class="text-base flex items-center gap-2">
+                <Mail class="h-4 w-4" />
+                原始郵件內容
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                :aria-label="emailExpanded ? '收合' : '展開'"
+              >
+                <ChevronDown
+                  class="h-4 w-4 transition-transform duration-200"
+                  :class="{ 'rotate-180': emailExpanded }"
                 />
-              </div>
-              <div class="flex-1 min-w-0 space-y-1">
-                <div class="flex items-center justify-between gap-2">
-                  <span class="text-sm font-medium truncate">{{ notification.channel }}</span>
-                  <span class="text-xs text-muted-foreground whitespace-nowrap">
-                    {{ formatDate(notification.sentAt) }}
-                  </span>
-                </div>
-                <p v-if="notification.message" class="text-sm text-muted-foreground truncate">
-                  {{ notification.message }}
+              </Button>
+            </div>
+          </CardHeader>
+          <template v-if="emailExpanded">
+            <CardContent>
+              <pre class="whitespace-pre-wrap text-sm text-muted-foreground bg-muted rounded-md p-4 overflow-x-auto max-h-96 overflow-y-auto font-mono leading-relaxed">{{ bill.rawEmailSnippet }}</pre>
+            </CardContent>
+          </template>
+        </Card>
+
+        <!-- Notification History -->
+        <Card>
+          <CardHeader>
+            <CardTitle class="text-base flex items-center gap-2">
+              <Bell class="h-4 w-4" />
+              通知紀錄
+            </CardTitle>
+            <CardDescription>此帳單的提醒通知歷史</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <template v-if="notifications.length === 0">
+              <div class="flex flex-col items-center py-8 text-center">
+                <BellOff class="h-8 w-8 text-muted-foreground mb-3" />
+                <p class="text-sm text-muted-foreground">
+                  尚無通知紀錄
                 </p>
               </div>
+            </template>
+            <div
+              v-else
+              class="space-y-3"
+            >
+              <div
+                v-for="(notification, index) in notifications"
+                :key="notification.id ?? index"
+                class="flex items-start gap-3 rounded-lg border border-border p-3"
+              >
+                <div class="mt-0.5">
+                  <div
+                    class="h-2 w-2 rounded-full"
+                    :class="{
+                      'bg-green-500': notification.success,
+                      'bg-red-500': !notification.success,
+                    }"
+                  />
+                </div>
+                <div class="flex-1 min-w-0 space-y-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-sm font-medium truncate">{{ notification.channel }}</span>
+                    <span class="text-xs text-muted-foreground whitespace-nowrap">
+                      {{ formatDate(notification.sentAt) }}
+                    </span>
+                  </div>
+                  <p
+                    v-if="notification.message"
+                    class="text-sm text-muted-foreground truncate"
+                  >
+                    {{ notification.message }}
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
       </div><!-- end space-y-4 wrapper -->
     </template>
 
@@ -327,9 +427,19 @@
           <Calendar v-model="payDate" />
         </div>
         <DialogFooter class="gap-2">
-          <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
-          <Button :disabled="actionLoading" @click="handleConfirmPaid">
-            <Loader2 v-if="actionLoading" class="mr-2 h-4 w-4 animate-spin" />
+          <DialogClose as-child>
+            <Button variant="outline">
+              取消
+            </Button>
+          </DialogClose>
+          <Button
+            :disabled="actionLoading"
+            @click="handleConfirmPaid"
+          >
+            <Loader2
+              v-if="actionLoading"
+              class="mr-2 h-4 w-4 animate-spin"
+            />
             確認已繳
           </Button>
         </DialogFooter>
@@ -344,8 +454,18 @@
           <DialogDescription>確定要刪除此帳單嗎？此操作無法復原。</DialogDescription>
         </DialogHeader>
         <DialogFooter class="gap-2">
-          <DialogClose as-child><Button variant="outline">取消</Button></DialogClose>
-          <Button variant="destructive" :disabled="actionLoading" @click="handleDelete">確認刪除</Button>
+          <DialogClose as-child>
+            <Button variant="outline">
+              取消
+            </Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            :disabled="actionLoading"
+            @click="handleDelete"
+          >
+            確認刪除
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -464,7 +584,8 @@ async function handleSaveEdit() {
     }
     if (editForm.value.minimumPayment && editForm.value.minimumPayment > 0) {
       payload.minimumPayment = Math.round(editForm.value.minimumPayment)
-    } else {
+    }
+    else {
       payload.minimumPayment = null
     }
     if (/^\d{4}-\d{2}$/.test(editForm.value.billingPeriod)) {
@@ -477,9 +598,11 @@ async function handleSaveEdit() {
     toast.success('帳單已更新')
     editing.value = false
     await fetchBill()
-  } catch (e: any) {
+  }
+  catch (e: any) {
     toast.error('儲存失敗', { description: e?.data?.error ?? String(e) })
-  } finally {
+  }
+  finally {
     actionLoading.value = false
   }
 }
@@ -491,9 +614,11 @@ async function handleReparse() {
     await reparse(bill.value.id)
     toast.success('AI 重新解析完成，請核對結果')
     await fetchBill()
-  } catch (e: any) {
+  }
+  catch (e: any) {
     toast.error('AI 解析失敗', { description: e?.data?.error ?? String(e) })
-  } finally {
+  }
+  finally {
     reparsing.value = false
   }
 }
@@ -537,10 +662,12 @@ async function fetchBill() {
   error.value = false
   try {
     bill.value = await getById(billId.value)
-  } catch {
+  }
+  catch {
     error.value = true
     toast.error('載入帳單失敗')
-  } finally {
+  }
+  finally {
     loading.value = false
   }
 }
@@ -552,9 +679,11 @@ async function handleConfirmPaid() {
     toast.success('帳單已標記為已繳')
     payDialogOpen.value = false
     await fetchBill()
-  } catch {
+  }
+  catch {
     toast.error('操作失敗', { description: '無法標記帳單，請稍後再試' })
-  } finally {
+  }
+  finally {
     actionLoading.value = false
   }
 }
@@ -565,9 +694,11 @@ async function handleRevertToPending() {
     await unpay(billId.value)
     toast.success('帳單已恢復為待繳')
     await fetchBill()
-  } catch {
+  }
+  catch {
     toast.error('操作失敗', { description: '無法恢復帳單狀態，請稍後再試' })
-  } finally {
+  }
+  finally {
     actionLoading.value = false
   }
 }
@@ -578,9 +709,11 @@ async function handleDelete() {
     await remove(billId.value)
     toast.success('帳單已刪除')
     navigateTo('/bills')
-  } catch {
+  }
+  catch {
     toast.error('刪除失敗')
-  } finally {
+  }
+  finally {
     actionLoading.value = false
     deleteDialogOpen.value = false
   }

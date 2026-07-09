@@ -89,7 +89,6 @@ export async function extractPdfsFromZip(zipBuffer: Buffer): Promise<Array<{ fil
  */
 export async function getPdfBuffers(
   attachments: Attachment[],
-  zipPassword?: string,
 ): Promise<Buffer[]> {
   const pdfs: Buffer[] = []
 
@@ -100,7 +99,7 @@ export async function getPdfBuffers(
       try {
         const extracted = await extractPdfsFromZip(att.data)
         pdfs.push(...extracted.map((e) => e.data))
-      } catch (e) {
+      } catch {
         // ZIP extraction failed, skip
       }
     }

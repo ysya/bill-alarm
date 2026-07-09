@@ -38,7 +38,7 @@ const showGeminiKey = ref(false)
 const showOpenAIKey = ref(false)
 const saving = ref(false)
 const testing = ref(false)
-const testResult = ref<{ ok: boolean; message: string } | null>(null)
+const testResult = ref<{ ok: boolean, message: string } | null>(null)
 
 watch(() => props.llm, (v) => {
   form.value.provider = v.provider
@@ -71,9 +71,11 @@ async function handleSave() {
     })
     toast.success('LLM 設定已儲存')
     emit('refresh')
-  } catch (e) {
+  }
+  catch (e) {
     toast.error('儲存失敗', { description: String(e) })
-  } finally {
+  }
+  finally {
     saving.value = false
   }
 }
@@ -86,11 +88,13 @@ async function handleTest() {
     testResult.value = r
     if (r.ok) toast.success(r.message)
     else toast.error(r.message)
-  } catch (e: any) {
+  }
+  catch (e: any) {
     const msg = e?.data?.message ?? e?.message ?? String(e)
     testResult.value = { ok: false, message: msg }
     toast.error(msg)
-  } finally {
+  }
+  finally {
     testing.value = false
   }
 }
@@ -119,20 +123,34 @@ async function handleTest() {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="none">關閉（不使用 AI）</SelectItem>
-          <SelectItem value="gemini">Gemini (Google 雲端，免費額度)</SelectItem>
-          <SelectItem value="openai">OpenAI (GPT 系列，付費)</SelectItem>
-          <SelectItem value="ollama">Ollama (本地自架，隱私保護)</SelectItem>
+          <SelectItem value="none">
+            關閉（不使用 AI）
+          </SelectItem>
+          <SelectItem value="gemini">
+            Gemini (Google 雲端，免費額度)
+          </SelectItem>
+          <SelectItem value="openai">
+            OpenAI (GPT 系列，付費)
+          </SelectItem>
+          <SelectItem value="ollama">
+            Ollama (本地自架，隱私保護)
+          </SelectItem>
         </SelectContent>
       </Select>
     </div>
 
     <!-- Gemini config -->
-    <div v-if="form.provider === 'gemini'" class="space-y-3 rounded-md border p-3 bg-muted/30">
+    <div
+      v-if="form.provider === 'gemini'"
+      class="space-y-3 rounded-md border p-3 bg-muted/30"
+    >
       <div class="space-y-1">
         <div class="flex items-center justify-between">
           <Label class="text-xs">Gemini API Key</Label>
-          <span v-if="gemini.isConfigured" class="text-xs text-green-600 dark:text-green-400">✓ 已設定</span>
+          <span
+            v-if="gemini.isConfigured"
+            class="text-xs text-green-600 dark:text-green-400"
+          >✓ 已設定</span>
         </div>
         <div class="relative">
           <Input
@@ -146,32 +164,56 @@ async function handleTest() {
             class="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
             @click="showGeminiKey = !showGeminiKey"
           >
-            <Eye v-if="!showGeminiKey" class="h-4 w-4" />
-            <EyeOff v-else class="h-4 w-4" />
+            <Eye
+              v-if="!showGeminiKey"
+              class="h-4 w-4"
+            />
+            <EyeOff
+              v-else
+              class="h-4 w-4"
+            />
           </button>
         </div>
         <p class="text-xs text-muted-foreground">
-          到 <a href="https://aistudio.google.com/apikey" target="_blank" class="underline">Google AI Studio</a> 取得 API Key
+          到 <a
+            href="https://aistudio.google.com/apikey"
+            target="_blank"
+            class="underline"
+          >Google AI Studio</a> 取得 API Key
         </p>
       </div>
       <div class="space-y-1">
         <Label class="text-xs">Model</Label>
-        <Input v-model="form.geminiModel" placeholder="gemini-2.5-flash" class="font-mono text-sm" />
+        <Input
+          v-model="form.geminiModel"
+          placeholder="gemini-2.5-flash"
+          class="font-mono text-sm"
+        />
         <p class="text-xs text-muted-foreground">
           常用免費 model：<code class="px-1 rounded bg-background">gemini-2.5-flash</code>（10 RPM / 250 RPD）、
           <code class="px-1 rounded bg-background">gemini-2.5-flash-lite</code>（15 RPM / 1,000 RPD，最寬鬆）、
           <code class="px-1 rounded bg-background">gemini-2.5-pro</code>（5 RPM / 100 RPD，最強）。
-          <a href="https://ai.google.dev/gemini-api/docs/models" target="_blank" class="underline">完整清單</a>
+          <a
+            href="https://ai.google.dev/gemini-api/docs/models"
+            target="_blank"
+            class="underline"
+          >完整清單</a>
         </p>
       </div>
     </div>
 
     <!-- OpenAI config -->
-    <div v-if="form.provider === 'openai'" class="space-y-3 rounded-md border p-3 bg-muted/30">
+    <div
+      v-if="form.provider === 'openai'"
+      class="space-y-3 rounded-md border p-3 bg-muted/30"
+    >
       <div class="space-y-1">
         <div class="flex items-center justify-between">
           <Label class="text-xs">OpenAI API Key</Label>
-          <span v-if="openai.isConfigured" class="text-xs text-green-600 dark:text-green-400">✓ 已設定</span>
+          <span
+            v-if="openai.isConfigured"
+            class="text-xs text-green-600 dark:text-green-400"
+          >✓ 已設定</span>
         </div>
         <div class="relative">
           <Input
@@ -185,17 +227,31 @@ async function handleTest() {
             class="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
             @click="showOpenAIKey = !showOpenAIKey"
           >
-            <Eye v-if="!showOpenAIKey" class="h-4 w-4" />
-            <EyeOff v-else class="h-4 w-4" />
+            <Eye
+              v-if="!showOpenAIKey"
+              class="h-4 w-4"
+            />
+            <EyeOff
+              v-else
+              class="h-4 w-4"
+            />
           </button>
         </div>
         <p class="text-xs text-muted-foreground">
-          到 <a href="https://platform.openai.com/api-keys" target="_blank" class="underline">OpenAI Platform</a> 建立 API Key（需綁定付費）
+          到 <a
+            href="https://platform.openai.com/api-keys"
+            target="_blank"
+            class="underline"
+          >OpenAI Platform</a> 建立 API Key（需綁定付費）
         </p>
       </div>
       <div class="space-y-1">
         <Label class="text-xs">Model</Label>
-        <Input v-model="form.openaiModel" placeholder="gpt-4o-mini" class="font-mono text-sm" />
+        <Input
+          v-model="form.openaiModel"
+          placeholder="gpt-4o-mini"
+          class="font-mono text-sm"
+        />
         <p class="text-xs text-muted-foreground">
           推薦：<code class="px-1 rounded bg-background">gpt-4o-mini</code>（CP 值高）、
           <code class="px-1 rounded bg-background">gpt-4o</code>（更準）、
@@ -205,7 +261,11 @@ async function handleTest() {
       </div>
       <div class="space-y-1">
         <Label class="text-xs">Base URL</Label>
-        <Input v-model="form.openaiBaseUrl" placeholder="https://api.openai.com/v1" class="font-mono text-sm" />
+        <Input
+          v-model="form.openaiBaseUrl"
+          placeholder="https://api.openai.com/v1"
+          class="font-mono text-sm"
+        />
         <p class="text-xs text-muted-foreground">
           官方為 <code class="px-1 rounded bg-background">https://api.openai.com/v1</code>。也可指向相容服務（OpenRouter、本地代理等）。
         </p>
@@ -213,15 +273,28 @@ async function handleTest() {
     </div>
 
     <!-- Ollama config -->
-    <div v-if="form.provider === 'ollama'" class="space-y-2 rounded-md border p-3 bg-muted/30">
+    <div
+      v-if="form.provider === 'ollama'"
+      class="space-y-2 rounded-md border p-3 bg-muted/30"
+    >
       <div class="space-y-1">
         <Label class="text-xs">Ollama Base URL</Label>
-        <Input v-model="form.ollamaBaseUrl" placeholder="http://ollama:11434" class="font-mono text-sm" />
-        <p class="text-xs text-muted-foreground">Docker 內通常是 http://ollama:11434；本機開發用 http://localhost:11434</p>
+        <Input
+          v-model="form.ollamaBaseUrl"
+          placeholder="http://ollama:11434"
+          class="font-mono text-sm"
+        />
+        <p class="text-xs text-muted-foreground">
+          Docker 內通常是 http://ollama:11434；本機開發用 http://localhost:11434
+        </p>
       </div>
       <div class="space-y-1">
         <Label class="text-xs">Model</Label>
-        <Input v-model="form.ollamaModel" placeholder="qwen2.5:1.5b" class="font-mono text-sm" />
+        <Input
+          v-model="form.ollamaModel"
+          placeholder="qwen2.5:1.5b"
+          class="font-mono text-sm"
+        />
         <p class="text-xs text-muted-foreground">
           預設 qwen2.5:1.5b（~1GB，繁中佳）；更省資源選 qwen2.5:0.5b。<br>
           docker compose 會自動 pull。要換模型可改 .env 的 <code class="px-1 rounded bg-background">OLLAMA_MODEL</code> 後 <code class="px-1 rounded bg-background">docker compose up -d</code>
@@ -238,18 +311,34 @@ async function handleTest() {
         :disabled="testing"
         @click="handleTest"
       >
-        <Loader2 v-if="testing" class="h-3.5 w-3.5 animate-spin" />
+        <Loader2
+          v-if="testing"
+          class="h-3.5 w-3.5 animate-spin"
+        />
         測試連線
       </Button>
       <span v-else />
-      <Button size="sm" :disabled="saving" @click="handleSave">
+      <Button
+        size="sm"
+        :disabled="saving"
+        @click="handleSave"
+      >
         {{ saving ? '儲存中...' : '儲存' }}
       </Button>
     </div>
 
-    <div v-if="testResult" class="flex items-center gap-2 text-xs">
-      <CheckCircle v-if="testResult.ok" class="h-3.5 w-3.5 text-green-500" />
-      <XCircle v-else class="h-3.5 w-3.5 text-red-500" />
+    <div
+      v-if="testResult"
+      class="flex items-center gap-2 text-xs"
+    >
+      <CheckCircle
+        v-if="testResult.ok"
+        class="h-3.5 w-3.5 text-green-500"
+      />
+      <XCircle
+        v-else
+        class="h-3.5 w-3.5 text-red-500"
+      />
       <span :class="testResult.ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
         {{ testResult.message }}
       </span>

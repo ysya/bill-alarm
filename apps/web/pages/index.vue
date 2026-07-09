@@ -1,18 +1,33 @@
 <template>
   <div class="space-y-6">
     <InstallPrompt variant="banner" />
-    <Card v-if="!emailReady" class="border-primary/40 bg-primary/5 p-4 text-sm">
-      <p class="font-medium">還差一步就能自動追蹤帳單</p>
+    <Card
+      v-if="!emailReady"
+      class="border-primary/40 bg-primary/5 p-4 text-sm"
+    >
+      <p class="font-medium">
+        還差一步就能自動追蹤帳單
+      </p>
       <p class="mt-1 text-muted-foreground">
-        先到 <NuxtLink to="/settings" class="underline">設定 → 信箱</NuxtLink> 完成 IMAP 設定，再到
-        <NuxtLink to="/banks" class="underline">銀行</NuxtLink> 啟用你的銀行。
+        先到 <NuxtLink
+          to="/settings"
+          class="underline"
+        >設定 → 信箱</NuxtLink> 完成 IMAP 設定，再到
+        <NuxtLink
+          to="/banks"
+          class="underline"
+        >銀行</NuxtLink> 啟用你的銀行。
       </p>
     </Card>
     <!-- Page Header -->
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h2 class="text-2xl font-bold tracking-tight">總覽</h2>
-        <p class="text-muted-foreground">信用卡帳單繳費狀態一覽</p>
+        <h2 class="text-2xl font-bold tracking-tight">
+          總覽
+        </h2>
+        <p class="text-muted-foreground">
+          信用卡帳單繳費狀態一覽
+        </p>
       </div>
       <div class="w-full sm:w-auto">
         <Select v-model="selectedMonth">
@@ -36,7 +51,9 @@
     <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
       <Card>
         <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle class="text-sm font-medium">待繳總金額</CardTitle>
+          <CardTitle class="text-sm font-medium">
+            待繳總金額
+          </CardTitle>
           <DollarSign class="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -48,47 +65,67 @@
 
       <Card>
         <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle class="text-sm font-medium">待繳帳單</CardTitle>
+          <CardTitle class="text-sm font-medium">
+            待繳帳單
+          </CardTitle>
           <Clock class="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
           <div class="text-2xl font-bold">
             {{ summary?.pendingCount ?? 0 }}
           </div>
-          <p class="text-xs text-muted-foreground">筆帳單待繳</p>
+          <p class="text-xs text-muted-foreground">
+            筆帳單待繳
+          </p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle class="text-sm font-medium">本月已繳</CardTitle>
+          <CardTitle class="text-sm font-medium">
+            本月已繳
+          </CardTitle>
           <CircleCheck class="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
           <div class="text-2xl font-bold">
             {{ summary?.paidCount ?? 0 }}
           </div>
-          <p class="text-xs text-muted-foreground">筆帳單已繳清</p>
+          <p class="text-xs text-muted-foreground">
+            筆帳單已繳清
+          </p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle class="text-sm font-medium">逾期帳單</CardTitle>
+          <CardTitle class="text-sm font-medium">
+            逾期帳單
+          </CardTitle>
           <AlertTriangle class="h-4 w-4 text-destructive" />
         </CardHeader>
         <CardContent>
-          <div class="text-2xl font-bold" :class="{ 'text-destructive': (summary?.overdueCount ?? 0) > 0 }">
+          <div
+            class="text-2xl font-bold"
+            :class="{ 'text-destructive': (summary?.overdueCount ?? 0) > 0 }"
+          >
             {{ summary?.overdueCount ?? 0 }}
           </div>
-          <p class="text-xs text-muted-foreground">筆帳單已逾期</p>
+          <p class="text-xs text-muted-foreground">
+            筆帳單已逾期
+          </p>
         </CardContent>
       </Card>
     </div>
 
     <!-- Monthly Breakdown -->
-    <div v-if="summary?.breakdown?.length" class="space-y-4">
-      <h3 class="text-lg font-semibold">月度明細</h3>
+    <div
+      v-if="summary?.breakdown?.length"
+      class="space-y-4"
+    >
+      <h3 class="text-lg font-semibold">
+        月度明細
+      </h3>
       <Card>
         <CardContent class="p-0">
           <div class="divide-y">
@@ -99,7 +136,13 @@
             >
               <div class="flex items-center gap-2">
                 <span class="font-medium text-sm">{{ item.bankName }}</span>
-                <Badge v-if="item.autoDebit" variant="secondary" class="text-xs">自動扣款</Badge>
+                <Badge
+                  v-if="item.autoDebit"
+                  variant="secondary"
+                  class="text-xs"
+                >
+                  自動扣款
+                </Badge>
               </div>
               <div class="text-right">
                 <span class="font-bold">{{ formatAmount(item.totalAmount) }}</span>
@@ -112,8 +155,13 @@
     </div>
 
     <!-- Due Date Timeline -->
-    <div v-if="summary?.timeline?.length" class="space-y-4">
-      <h3 class="text-lg font-semibold">繳費時程</h3>
+    <div
+      v-if="summary?.timeline?.length"
+      class="space-y-4"
+    >
+      <h3 class="text-lg font-semibold">
+        繳費時程
+      </h3>
       <div class="space-y-2">
         <Card
           v-for="item in summary.timeline"
@@ -127,11 +175,19 @@
                 <span class="font-medium text-sm">{{ item.bankName }}</span>
                 <span class="text-xs text-muted-foreground">截止 {{ formatDate(item.dueDate) }}</span>
               </div>
-              <Badge v-if="item.autoDebit" variant="secondary" class="text-xs">自動扣款</Badge>
+              <Badge
+                v-if="item.autoDebit"
+                variant="secondary"
+                class="text-xs"
+              >
+                自動扣款
+              </Badge>
             </div>
             <div class="flex items-center gap-3">
               <span class="font-bold">{{ formatAmount(item.amount) }}</span>
-              <Badge :class="statusBadgeClass(item.status)">{{ statusLabel(item.status) }}</Badge>
+              <Badge :class="statusBadgeClass(item.status)">
+                {{ statusLabel(item.status) }}
+              </Badge>
             </div>
           </CardContent>
         </Card>
@@ -141,9 +197,14 @@
     <!-- Pending Bills List -->
     <div class="space-y-4">
       <div class="flex items-center justify-between">
-        <h3 class="text-lg font-semibold">待繳帳單</h3>
+        <h3 class="text-lg font-semibold">
+          待繳帳單
+        </h3>
         <NuxtLink to="/bills">
-          <Button variant="ghost" size="sm">
+          <Button
+            variant="ghost"
+            size="sm"
+          >
             查看全部
             <ArrowRight class="ml-1 h-4 w-4" />
           </Button>
@@ -151,8 +212,15 @@
       </div>
 
       <!-- Loading State -->
-      <div v-if="loading" class="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-        <Card v-for="n in 3" :key="n" class="animate-pulse">
+      <div
+        v-if="loading"
+        class="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+      >
+        <Card
+          v-for="n in 3"
+          :key="n"
+          class="animate-pulse"
+        >
           <CardHeader>
             <div class="h-4 w-24 rounded bg-muted" />
             <div class="h-3 w-32 rounded bg-muted" />
@@ -164,10 +232,15 @@
       </div>
 
       <!-- Empty State -->
-      <Card v-else-if="pendingBills.length === 0" class="flex flex-col items-center justify-center py-12">
+      <Card
+        v-else-if="pendingBills.length === 0"
+        class="flex flex-col items-center justify-center py-12"
+      >
         <CardContent class="flex flex-col items-center text-center">
           <CircleCheck class="h-12 w-12 text-muted-foreground mb-4" />
-          <h4 class="text-lg font-semibold mb-1">沒有待繳帳單</h4>
+          <h4 class="text-lg font-semibold mb-1">
+            沒有待繳帳單
+          </h4>
           <p class="text-sm text-muted-foreground">
             本月所有帳單皆已繳清，做得好！
           </p>
@@ -175,7 +248,10 @@
       </Card>
 
       <!-- Bill Cards -->
-      <div v-else class="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+      <div
+        v-else
+        class="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+      >
         <Card
           v-for="bill in pendingBills"
           :key="bill.id"
@@ -185,7 +261,9 @@
           <CardHeader class="pb-3">
             <div class="flex items-start justify-between">
               <div>
-                <CardTitle class="text-base">{{ bill.bank?.name }}</CardTitle>
+                <CardTitle class="text-base">
+                  {{ bill.bank?.name }}
+                </CardTitle>
               </div>
               <Badge :class="statusBadgeClass(bill.status)">
                 {{ statusLabel(bill.status) }}
@@ -212,15 +290,20 @@
               :disabled="markingPaid.has(bill.id)"
               @click.stop="handleMarkAsPaid(bill.id)"
             >
-              <Loader2 v-if="markingPaid.has(bill.id)" class="h-4 w-4 animate-spin" />
-              <CircleCheck v-else class="h-4 w-4" />
+              <Loader2
+                v-if="markingPaid.has(bill.id)"
+                class="h-4 w-4 animate-spin"
+              />
+              <CircleCheck
+                v-else
+                class="h-4 w-4"
+              />
               {{ markingPaid.has(bill.id) ? '處理中...' : '標記已繳' }}
             </Button>
           </CardFooter>
         </Card>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -294,13 +377,16 @@ const DaysRemainingBadge = defineComponent({
       if (days < 0) {
         text = `已逾期 ${Math.abs(days)} 天`
         className = 'text-red-500 bg-red-500/10'
-      } else if (days === 0) {
+      }
+      else if (days === 0) {
         text = '今天到期'
         className = 'text-red-500 bg-red-500/10'
-      } else if (days <= 3) {
+      }
+      else if (days <= 3) {
         text = `剩 ${days} 天`
         className = 'text-yellow-500 bg-yellow-500/10'
-      } else {
+      }
+      else {
         text = `剩 ${days} 天`
         className = 'text-muted-foreground bg-muted'
       }
@@ -330,9 +416,11 @@ async function fetchData() {
     ])
     summary.value = summaryData
     pendingBills.value = billsData.data
-  } catch {
+  }
+  catch {
     toast.error('載入資料失敗', { description: '請稍後再試' })
-  } finally {
+  }
+  finally {
     loading.value = false
   }
 }
@@ -343,9 +431,11 @@ async function handleMarkAsPaid(id: string) {
     await markAsPaid(id)
     toast.success('帳單已標記為已繳')
     await fetchData()
-  } catch {
+  }
+  catch {
     toast.error('操作失敗', { description: '無法標記帳單，請稍後再試' })
-  } finally {
+  }
+  finally {
     markingPaid.value.delete(id)
   }
 }
@@ -359,7 +449,8 @@ onMounted(async () => {
   try {
     const s = await useSettingsApi().getEmailStatus()
     emailReady.value = s.hasCredentials
-  } catch {
+  }
+  catch {
     // leave true — never block the overview on this hint
   }
 })

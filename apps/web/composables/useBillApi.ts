@@ -7,14 +7,14 @@ export function useBillApi() {
       return get<any>(`/bills/summary${qs}`)
     },
 
-    list: (params?: { status?: string; bankId?: string; page?: number; pageSize?: number }) => {
+    list: (params?: { status?: string, bankId?: string, page?: number, pageSize?: number }) => {
       const query = new URLSearchParams()
       if (params?.status) query.set('status', params.status)
       if (params?.bankId) query.set('bankId', params.bankId)
       if (params?.page) query.set('page', String(params.page))
       if (params?.pageSize) query.set('pageSize', String(params.pageSize))
       const qs = query.toString()
-      return get<{ data: any[]; total: number; page: number; pageSize: number }>(`/bills${qs ? `?${qs}` : ''}`)
+      return get<{ data: any[], total: number, page: number, pageSize: number }>(`/bills${qs ? `?${qs}` : ''}`)
     },
 
     getById: (id: string) => get<any>(`/bills/${id}`),

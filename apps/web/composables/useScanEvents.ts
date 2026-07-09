@@ -1,26 +1,26 @@
-export type ScanEvent =
+export type ScanEvent
+  = | {
+    type: 'start'
+    scanLogId: string
+    total: number
+    trigger: 'manual' | 'cron'
+  }
   | {
-      type: 'start'
-      scanLogId: string
-      total: number
-      trigger: 'manual' | 'cron'
-    }
+    type: 'progress'
+    scanLogId: string
+    idx: number
+    total: number
+    bank?: string
+    status: 'matched' | 'success' | 'error' | 'skipped'
+    reason?: string
+  }
   | {
-      type: 'progress'
-      scanLogId: string
-      idx: number
-      total: number
-      bank?: string
-      status: 'matched' | 'success' | 'error' | 'skipped'
-      reason?: string
-    }
-  | {
-      type: 'complete'
-      scanLogId: string
-      scanned: number
-      newBills: number
-      errorCount: number
-    }
+    type: 'complete'
+    scanLogId: string
+    scanned: number
+    newBills: number
+    errorCount: number
+  }
 
 export type ScanItemStatus = 'matched' | 'success' | 'error' | 'skipped'
 
@@ -93,13 +93,22 @@ export function useScanEvents() {
     if (es) return
     es = new EventSource('/api/scan-events')
     es.addEventListener('start', (ev) => {
-      try { handleStart(JSON.parse((ev as MessageEvent).data)) } catch { /* ignore */ }
+      try {
+        handleStart(JSON.parse((ev as MessageEvent).data))
+      }
+      catch { /* ignore */ }
     })
     es.addEventListener('progress', (ev) => {
-      try { handleProgress(JSON.parse((ev as MessageEvent).data)) } catch { /* ignore */ }
+      try {
+        handleProgress(JSON.parse((ev as MessageEvent).data))
+      }
+      catch { /* ignore */ }
     })
     es.addEventListener('complete', (ev) => {
-      try { handleComplete(JSON.parse((ev as MessageEvent).data)) } catch { /* ignore */ }
+      try {
+        handleComplete(JSON.parse((ev as MessageEvent).data))
+      }
+      catch { /* ignore */ }
     })
     // hello / ping events are ignored — EventSource auto-reconnects on error.
   }

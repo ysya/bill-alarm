@@ -20,7 +20,7 @@ const credForm = ref({
 })
 const submitting = ref(false)
 const testing = ref(false)
-const testResult = ref<{ ok: boolean; message: string } | null>(null)
+const testResult = ref<{ ok: boolean, message: string } | null>(null)
 const scanning = ref(false)
 const showCredentials = ref(false)
 const helpDialogOpen = ref(false)
@@ -45,14 +45,17 @@ async function handleTestConnection() {
     if (r.ok) {
       testResult.value = { ok: true, message: `連線成功（${r.email}）` }
       toast.success('連線成功', { description: r.email })
-    } else {
+    }
+    else {
       testResult.value = { ok: false, message: r.error ?? '未知錯誤' }
       toast.error('連線失敗', { description: r.error })
     }
-  } catch (e) {
+  }
+  catch (e) {
     testResult.value = { ok: false, message: String(e) }
     toast.error('測試失敗', { description: String(e) })
-  } finally {
+  }
+  finally {
     testing.value = false
   }
 }
@@ -69,9 +72,11 @@ async function handleSaveCredentials() {
     credForm.value.password = ''
     showCredentials.value = false
     emit('refresh')
-  } catch (e) {
+  }
+  catch (e) {
     toast.error('儲存失敗', { description: String(e) })
-  } finally {
+  }
+  finally {
     submitting.value = false
   }
 }
@@ -96,10 +101,12 @@ async function handleScan() {
     const action = { label: '查看紀錄', onClick: () => navigateTo('/scan-logs') }
     if (errorCount > 0) {
       toast.warning('郵件掃描完成（有錯誤）', { description: desc, action })
-    } else {
+    }
+    else {
       toast.success('郵件掃描完成', { description: desc, action })
     }
-  } catch (e) {
+  }
+  catch (e) {
     console.error('[scan] failed:', e)
     const status = (e as { response?: { status?: number } })?.response?.status
     const desc = status === 404
@@ -108,7 +115,8 @@ async function handleScan() {
         ? `HTTP ${status}：${(e as Error).message}`
         : String(e)
     toast.error('掃描失敗', { description: desc })
-  } finally {
+  }
+  finally {
     scanning.value = false
   }
 }
@@ -122,47 +130,100 @@ async function handleScan() {
         <p class="text-xs text-muted-foreground">
           使用 Gmail App Password 直接以 IMAP 連線。完全跳過 OAuth，token 永不過期。
         </p>
-        <Button type="button" size="sm" variant="ghost" class="shrink-0" @click="helpDialogOpen = true">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          class="shrink-0"
+          @click="helpDialogOpen = true"
+        >
           <HelpCircle class="mr-1 h-4 w-4" />
           如何取得？
         </Button>
       </div>
-      <form class="space-y-3" @submit.prevent="handleSaveCredentials">
+      <form
+        class="space-y-3"
+        @submit.prevent="handleSaveCredentials"
+      >
         <div class="grid grid-cols-3 gap-2">
           <div class="col-span-2 space-y-2">
             <Label for="imapHost">IMAP Host</Label>
-            <Input id="imapHost" v-model="credForm.host" placeholder="imap.gmail.com" />
+            <Input
+              id="imapHost"
+              v-model="credForm.host"
+              placeholder="imap.gmail.com"
+            />
           </div>
           <div class="space-y-2">
             <Label for="imapPort">Port</Label>
-            <Input id="imapPort" v-model.number="credForm.port" type="number" placeholder="993" />
+            <Input
+              id="imapPort"
+              v-model.number="credForm.port"
+              type="number"
+              placeholder="993"
+            />
           </div>
         </div>
         <div class="space-y-2">
           <Label for="imapUser">Email *</Label>
-          <Input id="imapUser" v-model="credForm.user" type="email" placeholder="you@gmail.com" />
+          <Input
+            id="imapUser"
+            v-model="credForm.user"
+            type="email"
+            placeholder="you@gmail.com"
+          />
         </div>
         <div class="space-y-2">
           <Label for="imapPass">App Password *</Label>
-          <Input id="imapPass" v-model="credForm.password" type="password" placeholder="xxxx xxxx xxxx xxxx" />
+          <Input
+            id="imapPass"
+            v-model="credForm.password"
+            type="password"
+            placeholder="xxxx xxxx xxxx xxxx"
+          />
         </div>
 
-        <div v-if="testResult" class="flex items-center gap-2 text-xs"
-          :class="testResult.ok ? 'text-green-500' : 'text-red-500'">
-          <CheckCircle v-if="testResult.ok" class="h-4 w-4" />
-          <XCircle v-else class="h-4 w-4" />
+        <div
+          v-if="testResult"
+          class="flex items-center gap-2 text-xs"
+          :class="testResult.ok ? 'text-green-500' : 'text-red-500'"
+        >
+          <CheckCircle
+            v-if="testResult.ok"
+            class="h-4 w-4"
+          />
+          <XCircle
+            v-else
+            class="h-4 w-4"
+          />
           <span>{{ testResult.message }}</span>
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <Button type="button" size="sm" variant="outline" :disabled="testing" @click="handleTestConnection">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            :disabled="testing"
+            @click="handleTestConnection"
+          >
             {{ testing ? '測試中...' : '測試連線' }}
           </Button>
           <div class="flex gap-2">
-            <Button v-if="email.hasCredentials" type="button" size="sm" variant="ghost" @click="showCredentials = false">
+            <Button
+              v-if="email.hasCredentials"
+              type="button"
+              size="sm"
+              variant="ghost"
+              @click="showCredentials = false"
+            >
               取消
             </Button>
-            <Button type="submit" size="sm" :disabled="submitting">
+            <Button
+              type="submit"
+              size="sm"
+              :disabled="submitting"
+            >
               {{ submitting ? '儲存中...' : '儲存' }}
             </Button>
           </div>
@@ -172,38 +233,71 @@ async function handleScan() {
 
     <!-- State 2: Configured -->
     <template v-else>
-      <Alert v-if="!email.connected" variant="destructive">
+      <Alert
+        v-if="!email.connected"
+        variant="destructive"
+      >
         <XCircle class="h-4 w-4" />
         <AlertTitle>信箱連線失敗</AlertTitle>
-        <AlertDescription><span v-if="email.user" class="mr-1">（{{ email.user }}）</span>{{ email.message }}</AlertDescription>
+        <AlertDescription>
+          <span
+            v-if="email.user"
+            class="mr-1"
+          >（{{ email.user }}）</span>{{ email.message }}
+        </AlertDescription>
       </Alert>
-      <div v-else class="flex items-center gap-2 text-sm">
+      <div
+        v-else
+        class="flex items-center gap-2 text-sm"
+      >
         <CheckCircle class="h-4 w-4 text-green-500" />
         <span>信箱已連線</span>
-        <span v-if="email.user" class="text-muted-foreground">({{ email.user }})</span>
+        <span
+          v-if="email.user"
+          class="text-muted-foreground"
+        >({{ email.user }})</span>
       </div>
 
       <!-- Action buttons -->
       <div class="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" :disabled="scanInProgress || !email.connected" @click="handleScan">
+        <Button
+          size="sm"
+          variant="outline"
+          :disabled="scanInProgress || !email.connected"
+          @click="handleScan"
+        >
           <Mail class="mr-2 h-4 w-4" />
           <template v-if="scanProgress.active">
             掃描中 {{ scanProgress.idx }}/{{ scanProgress.total }}
-            <span v-if="scanProgress.bank" class="ml-1 text-muted-foreground">
+            <span
+              v-if="scanProgress.bank"
+              class="ml-1 text-muted-foreground"
+            >
               · {{ scanProgress.bank }}
             </span>
           </template>
-          <template v-else-if="scanning">啟動中...</template>
-          <template v-else>立即掃描郵件</template>
+          <template v-else-if="scanning">
+            啟動中...
+          </template>
+          <template v-else>
+            立即掃描郵件
+          </template>
         </Button>
-        <Button size="sm" variant="ghost" @click="showCredentials = true">
+        <Button
+          size="sm"
+          variant="ghost"
+          @click="showCredentials = true"
+        >
           修改設定
           <ChevronDown class="ml-1 h-4 w-4" />
         </Button>
       </div>
 
       <!-- Live scan progress -->
-      <div v-if="scanProgress.active" class="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+      <div
+        v-if="scanProgress.active"
+        class="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3"
+      >
         <div class="flex items-center justify-between text-xs">
           <span class="font-medium">
             {{ scanProgress.trigger === 'cron' ? '自動掃描中' : '手動掃描中' }}
@@ -217,12 +311,20 @@ async function handleScan() {
             :style="{ width: `${progressPercent}%` }"
           />
         </div>
-        <p v-if="scanProgress.bank || scanProgress.lastReason" class="truncate text-xs text-muted-foreground">
-          <span v-if="scanProgress.bank" class="font-medium">{{ scanProgress.bank }}</span>
-          <span v-if="scanProgress.lastReason" class="ml-1">— {{ scanProgress.lastReason }}</span>
+        <p
+          v-if="scanProgress.bank || scanProgress.lastReason"
+          class="truncate text-xs text-muted-foreground"
+        >
+          <span
+            v-if="scanProgress.bank"
+            class="font-medium"
+          >{{ scanProgress.bank }}</span>
+          <span
+            v-if="scanProgress.lastReason"
+            class="ml-1"
+          >— {{ scanProgress.lastReason }}</span>
         </p>
       </div>
-
     </template>
 
     <!-- App Password 取得方式 Dialog -->
@@ -241,7 +343,11 @@ async function handleScan() {
               <span class="font-medium">啟用兩階段驗證</span>（必要前置）
               <p class="text-xs text-muted-foreground mt-1">
                 到
-                <a href="https://myaccount.google.com/security" target="_blank" class="underline inline-flex items-center gap-0.5">
+                <a
+                  href="https://myaccount.google.com/security"
+                  target="_blank"
+                  class="underline inline-flex items-center gap-0.5"
+                >
                   Google 帳戶 → 安全性<ExternalLink class="h-3 w-3" />
                 </a>
                 打開「兩步驟驗證」。如果已開啟可略過。
@@ -250,7 +356,11 @@ async function handleScan() {
             <li>
               <span class="font-medium">前往 App Password 頁面</span>
               <p class="text-xs text-muted-foreground mt-1">
-                <a href="https://myaccount.google.com/apppasswords" target="_blank" class="underline inline-flex items-center gap-0.5">
+                <a
+                  href="https://myaccount.google.com/apppasswords"
+                  target="_blank"
+                  class="underline inline-flex items-center gap-0.5"
+                >
                   myaccount.google.com/apppasswords<ExternalLink class="h-3 w-3" />
                 </a>
               </p>
@@ -267,12 +377,16 @@ async function handleScan() {
             </li>
             <li>
               <span class="font-medium">貼到上方「App Password」欄位</span>
-              <p class="text-xs text-muted-foreground mt-1">空格可以保留，系統會自動處理。Email 欄位填你完整的 Gmail 地址。</p>
+              <p class="text-xs text-muted-foreground mt-1">
+                空格可以保留，系統會自動處理。Email 欄位填你完整的 Gmail 地址。
+              </p>
             </li>
           </ol>
 
           <div class="rounded-lg border border-border bg-muted/30 p-3 space-y-1.5 text-xs text-muted-foreground">
-            <p class="font-medium text-foreground">常見問題</p>
+            <p class="font-medium text-foreground">
+              常見問題
+            </p>
             <p>
               <span class="font-medium">看不到 App Password 選項？</span>
               代表還沒開兩階段驗證，或你的帳戶被組織限制（例如公司 Google Workspace 鎖了）。
@@ -290,10 +404,15 @@ async function handleScan() {
 
         <DialogFooter>
           <DialogClose as-child>
-            <Button variant="outline">了解</Button>
+            <Button variant="outline">
+              了解
+            </Button>
           </DialogClose>
           <Button as-child>
-            <a href="https://myaccount.google.com/apppasswords" target="_blank">
+            <a
+              href="https://myaccount.google.com/apppasswords"
+              target="_blank"
+            >
               <ExternalLink class="mr-2 h-4 w-4" />
               開啟 App Password 頁面
             </a>

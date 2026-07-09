@@ -26,12 +26,18 @@ function onLoadError(e: unknown) {
 <template>
   <div class="relative rounded-md border bg-muted overflow-auto max-h-[80vh]">
     <!-- Loading overlay -->
-    <div v-if="loading" class="absolute inset-0 flex items-center justify-center text-muted-foreground pointer-events-none">
+    <div
+      v-if="loading"
+      class="absolute inset-0 flex items-center justify-center text-muted-foreground pointer-events-none"
+    >
       <Loader2 class="h-6 w-6 animate-spin" />
     </div>
 
     <!-- Error -->
-    <div v-else-if="error" class="flex flex-col items-center justify-center gap-2 p-6 text-destructive">
+    <div
+      v-else-if="error"
+      class="flex flex-col items-center justify-center gap-2 p-6 text-destructive"
+    >
       <AlertTriangle class="h-6 w-6" />
       <span class="text-sm">{{ error }}</span>
     </div>
