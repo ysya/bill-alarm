@@ -13,6 +13,18 @@ const { processReminderRules, processNewBill } = await import('../notification.j
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
+// processReminderRules gates on now's HH:mm vs the rule's timeOfDay ('09:00'),
+// so a bare call would depend on when the suite runs. Seed data and the
+// injected tick derive from ONE base Date, so these tests pass at any
+// wall-clock time and in any timezone (and can't disagree across midnight).
+const base = new Date()
+
+function at(h: number, m: number): Date {
+  const d = new Date(base)
+  d.setHours(h, m, 0, 0)
+  return d
+}
+
 function okResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200 })
 }
@@ -35,7 +47,7 @@ async function seedUserWithDueBill(username: string, chatId: string | null, dele
     data: { name: `${username}-bank`, emailSenderPattern: 'x@x', emailSubjectPattern: 'b', userId: user.id },
   })
   const bill = await prisma.bill.create({
-    data: { bankId: bank.id, billingPeriod: '2026-07', amount: 100, dueDate: addDaysYMD(todayYMD(), 3) },
+    data: { bankId: bank.id, billingPeriod: '2026-07', amount: 100, dueDate: addDaysYMD(todayYMD(base), 3) },
   })
   await prisma.notificationRule.create({
     data: { name: 'r', daysBefore: 3, timeOfDay: '09:00', channels: JSON.stringify(['telegram']), userId: user.id },
@@ -59,7 +71,7 @@ describe('owner-targeted notifications', () => {
     await seedUserWithDueBill('gone', '333', new Date())
     fetchMock.mockResolvedValue(okResponse({ ok: true }))
 
-    await processReminderRules()
+    await processReminderRules(at(12, 0)) // past the rule's 09:00 fire time
 
     const sentChatIds = fetchMock.mock.calls.map(call => JSON.parse(call[1].body).chat_id).sort()
     expect(sentChatIds).toEqual(['111', '222']) // no 333
@@ -71,7 +83,7 @@ describe('owner-targeted notifications', () => {
   it('owner without binding gets a failed log row', async () => {
     await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
     await seedUserWithDueBill('carol', null)
-    await processReminderRules()
+    await processReminderRules(at(12, 0)) // past the rule's 09:00 fire time
     const logs = await prisma.notificationLog.findMany()
     expect(logs).toHaveLength(1)
     expect(logs[0].success).toBe(false)
