@@ -3,11 +3,13 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import prisma from '@/prisma.js'
 import { hashPassword, destroyUserSessions } from '@/services/auth.js'
+import { adminOnly } from '@/middleware/admin-only.js'
 import { credsSchema, passwordSchema } from './auth.js'
 
-// Admin-only by construction: /api/users/* is not in the member allow-list,
-// so authGuard rejects members before these handlers run.
+// Admin-only: every route in this router requires adminOnly (mounted below),
+// so authGuard alone is not enough — non-admins are 403'd before handlers run.
 const app = new Hono()
+app.use('*', adminOnly)
 
 function toDTO(u: { id: string; username: string; role: string; telegramChatId: string | null; imapUser: string | null; imapPassword: string | null; deletedAt: Date | null; createdAt: Date }) {
   return {
@@ -32,7 +34,7 @@ app.post('/', zValidator('json', credsSchema), async (c) => {
   if (existing) return c.json({ error: '帳號名稱已存在' }, 409)
   try {
     const user = await prisma.user.create({
-      data: { username, passwordHash: hashPassword(password), role: 'member' },
+      data: { username, passwordHash: await hashPassword(password), role: 'member' },
     })
     return c.json(toDTO(user), 201)
   } catch (e) {
@@ -50,7 +52,7 @@ app.post('/:id/reset-password', zValidator('json', z.object({ password: password
   if (!user) return c.json({ error: '找不到使用者' }, 404)
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash: hashPassword(c.req.valid('json').password) },
+    data: { passwordHash: await hashPassword(c.req.valid('json').password) },
   })
   await destroyUserSessions(user.id)
   return c.json({ ok: true })

@@ -12,7 +12,10 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const pageCount = ref(0)
 
-function onLoaded(doc: any) {
+// vue-pdf-embed's `loaded` event emits a pdfjs-dist PDFDocumentProxy; pdfjs-dist
+// isn't a direct dependency here, so duck-type just the field we read instead of
+// reaching into vue-pdf-embed's transitive dependency for the real type.
+function onLoaded(doc: { numPages: number } | null | undefined) {
   loading.value = false
   pageCount.value = doc?.numPages ?? 0
 }

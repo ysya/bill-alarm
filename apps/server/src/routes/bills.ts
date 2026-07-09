@@ -7,6 +7,7 @@ import prisma from '@/prisma.js'
 import { DATA_DIR } from '@/paths.js'
 import { decryptPdf } from '@/services/pdf-parser.js'
 import { parseBillWithLLM, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
+import { getBankPdfPassword } from '@/services/secrets.js'
 import { BillStatus } from '@bill-alarm/shared/types'
 import { todayYMD, isValidYMD } from '@bill-alarm/shared/date'
 import { getAuthUser } from './auth.js'
@@ -128,6 +129,34 @@ app.get('/:id', async (c) => {
   return c.json(bill)
 })
 
+/**
+ * Derive a paidAt override for the generic PATCH /:id path ONLY. When a patch
+ * flips status: entering PAID stamps paidAt (unless one is already set),
+ * leaving PAID clears it. A patch that doesn't touch status leaves paidAt
+ * alone. Returns the paidAt override, or undefined when no change is
+ * warranted.
+ *
+ * /pay and /unpay intentionally do NOT call this helper — they have their own,
+ * different, explicit-date semantics and routing them through here would
+ * change their behavior:
+ * - /pay always writes the caller-supplied (or defaulted) paidAt, even when
+ *   the bill is already paid. This helper ignores explicit dates and
+ *   no-ops when already paid, which would silently break the
+ *   choose-your-payment-date feature (a user picking a specific paid date
+ *   from a date picker).
+ * - /unpay always clears paidAt unconditionally, regardless of the current
+ *   value.
+ * This is a deliberate three-way split, not an oversight.
+ */
+function paidAtForStatusChange(
+  newStatus: BillStatus | undefined,
+  currentPaidAt: Date | null,
+): { paidAt: Date | null } | undefined {
+  if (newStatus === undefined) return undefined
+  if (newStatus === BillStatus.PAID) return currentPaidAt ? undefined : { paidAt: new Date() }
+  return currentPaidAt ? { paidAt: null } : undefined
+}
+
 // Update bill
 app.patch('/:id', zValidator('json', updateBillSchema), async (c) => {
   const own = await ownBill(c, c.req.param('id'))
@@ -136,7 +165,7 @@ app.patch('/:id', zValidator('json', updateBillSchema), async (c) => {
 
   const bill = await prisma.bill.update({
     where: { id: own.id },
-    data,
+    data: { ...data, ...paidAtForStatusChange(data.status, own.paidAt) },
   })
   return c.json(bill)
 })
@@ -186,7 +215,7 @@ app.post('/:id/reparse', async (c) => {
   try {
     const filePath = path.join(DATA_DIR, bill.pdfPath)
     const buffer = await fs.readFile(filePath)
-    const decrypted = await decryptPdf(buffer, bill.bank.pdfPassword ?? undefined)
+    const decrypted = await decryptPdf(buffer, getBankPdfPassword(bill.bank))
     const mupdf = await import('mupdf')
     const doc = mupdf.Document.openDocument(decrypted, 'application/pdf')
     const pages: string[] = []
@@ -233,15 +262,20 @@ app.get('/:id/pdf', async (c) => {
   const filePath = path.join(DATA_DIR, bill.pdfPath)
   try {
     const encrypted = await fs.readFile(filePath)
-    const password = bill.bank.pdfPassword || undefined
-    const decrypted = await decryptPdf(encrypted, password)
+    const decrypted = await decryptPdf(encrypted, getBankPdfPassword(bill.bank))
     return new Response(new Uint8Array(decrypted), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${path.basename(bill.pdfPath)}"`,
       },
     })
-  } catch {
+  } catch (e) {
+    // getBankPdfPassword/decryptSecret throws a distinct "ENCRYPTION_KEY is
+    // not set but the stored value is encrypted" message when ciphertext
+    // exists but the key to read it is gone — surface that operator
+    // misconfiguration instead of the generic (and here misleading) 404.
+    const message = (e as Error).message
+    if (message.includes('ENCRYPTION_KEY')) return c.json({ error: message }, 500)
     return c.json({ error: 'PDF file missing' }, 404)
   }
 })

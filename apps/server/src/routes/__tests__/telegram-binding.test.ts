@@ -114,7 +114,7 @@ describe('telegram binding', () => {
   it('two users with outstanding codes never bind each other chat id', async () => {
     await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
     await prisma.user.create({
-      data: { username: 'kid', passwordHash: hashPassword('member-password'), role: 'member' },
+      data: { username: 'kid', passwordHash: await hashPassword('member-password'), role: 'member' },
     })
     const login = await app.request('/api/auth/login', {
       method: 'POST',

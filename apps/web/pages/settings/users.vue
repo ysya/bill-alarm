@@ -3,6 +3,7 @@ import { ArrowLeft, KeyRound, Plus, UserX, Users } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { apiErrorMessage } from '@/lib/utils'
 import type { UserDTO } from '~/composables/useUsersApi'
 
 definePageMeta({ middleware: 'admin' })
@@ -30,8 +31,8 @@ async function fetchUsers() {
   try {
     users.value = await usersApi.list()
   }
-  catch (e: any) {
-    toast.error('載入使用者失敗', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('載入使用者失敗', { description: apiErrorMessage(e) })
   }
   finally {
     loading.value = false
@@ -51,8 +52,8 @@ async function handleCreate() {
     createForm.value = { username: '', password: '' }
     await fetchUsers()
   }
-  catch (e: any) {
-    toast.error('建立失敗', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('建立失敗', { description: apiErrorMessage(e) })
   }
   finally {
     submitting.value = false
@@ -72,8 +73,8 @@ async function handleReset() {
     resetTarget.value = null
     resetPassword.value = ''
   }
-  catch (e: any) {
-    toast.error('重設失敗', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('重設失敗', { description: apiErrorMessage(e) })
   }
   finally {
     submitting.value = false
@@ -89,8 +90,8 @@ async function handleDeactivate() {
     deactivateTarget.value = null
     await fetchUsers()
   }
-  catch (e: any) {
-    toast.error('停用失敗', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('停用失敗', { description: apiErrorMessage(e) })
   }
   finally {
     submitting.value = false
@@ -104,8 +105,8 @@ async function handleRestore(user: UserDTO) {
     toast.success(`已還原 ${user.username}`)
     await fetchUsers()
   }
-  catch (e: any) {
-    toast.error('還原失敗', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('還原失敗', { description: apiErrorMessage(e) })
   }
   finally {
     submitting.value = false
@@ -121,8 +122,8 @@ async function handlePurge() {
     purgeTarget.value = null
     await fetchUsers()
   }
-  catch (e: any) {
-    toast.error('刪除失敗', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('刪除失敗', { description: apiErrorMessage(e) })
   }
   finally {
     submitting.value = false

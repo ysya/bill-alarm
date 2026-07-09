@@ -9,7 +9,9 @@ import { parseAmount, parseDate, extractBillingPeriod, deriveBillingPeriod } fro
  * -34,745 0 -24,117 0 115/03/26
  *
  * 帳期：「115年02月信用卡消費明細表」
- * 金額可能為負數（溢繳），取絕對值。
+ * 金額可能為負數（溢繳/信用餘額），保留正負號、不取絕對值——與 LLM 慣例一致
+ * （負數＝溢繳，見 llm-parser.ts），sanityCheck（email-parser.ts）比較最低應繳
+ * 金額時才另外取絕對值。
  */
 export const yuantaParser: BillEmailParser = {
   bankCode: 'yuanta',

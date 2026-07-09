@@ -78,15 +78,6 @@ function setSessionCookie(c: Context, token: string, expiresAt: Date): void {
   })
 }
 
-// Global-infrastructure surface: only the admin may touch these. Every other
-// authenticated route is available to all users and self-scopes its data.
-const ADMIN_ONLY: Array<{ method: string; pattern: RegExp }> = [
-  { method: '*', pattern: /^\/api\/users(\/|$)/ },
-  { method: 'POST', pattern: /^\/api\/config\/(llm|gemini|openai|telegram|scan)$/ },
-  { method: 'GET', pattern: /^\/api\/config\/status$/ },
-  { method: 'POST', pattern: /^\/api\/llm\/test$/ },
-]
-
 const app = new Hono()
 
 // Unauthenticated surface: cap request bodies so oversized payloads can't
@@ -106,12 +97,21 @@ app.post('/setup', zValidator('json', credsSchema), async (c) => {
     return c.json({ error: '已完成初始化' }, 403)
   }
   const { username, password } = c.req.valid('json')
-  const user = await prisma.user.create({
-    data: { username, passwordHash: hashPassword(password), role: 'admin' },
-  })
-  const { token, expiresAt } = await createSession(user.id)
-  setSessionCookie(c, token, expiresAt)
-  return c.json({ ok: true })
+  try {
+    const user = await prisma.user.create({
+      data: { username, passwordHash: await hashPassword(password), role: 'admin' },
+    })
+    const { token, expiresAt } = await createSession(user.id)
+    setSessionCookie(c, token, expiresAt)
+    return c.json({ ok: true })
+  } catch (e) {
+    // Unique-constraint race with a concurrent setup call: map to the same 403
+    // as the pre-check so the HTTP contract holds under concurrency (mirrors users.ts:41).
+    if ((e as { code?: string }).code === 'P2002') {
+      return c.json({ error: '已完成初始化' }, 403)
+    }
+    throw e
+  }
 })
 
 app.post('/login', zValidator('json', credsSchema.extend({ password: z.string().min(1).max(256) })), async (c) => {
@@ -120,7 +120,7 @@ app.post('/login', zValidator('json', credsSchema.extend({ password: z.string().
     return c.json({ error: '嘗試次數過多，請 15 分鐘後再試' }, 429)
   }
   const user = await prisma.user.findUnique({ where: { username } })
-  const ok = !!user && verifyPassword(password, user.passwordHash)
+  const ok = !!user && await verifyPassword(password, user.passwordHash)
   if (!ok) {
     recordFailure(username)
     return c.json({ error: '帳號或密碼錯誤' }, 401)
@@ -157,11 +157,11 @@ app.post('/password', zValidator('json', z.object({
   const { currentPassword, newPassword } = c.req.valid('json')
   const user = await prisma.user.findUnique({ where: { id: authUser.id } })
   if (!user) return c.json({ error: 'unauthorized' }, 401)
-  if (!verifyPassword(currentPassword, user.passwordHash)) {
+  if (!await verifyPassword(currentPassword, user.passwordHash)) {
     // 400 (not 401): the SPA's 401 interceptor would bounce the user to /login.
     return c.json({ error: '目前密碼錯誤' }, 400)
   }
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(newPassword) } })
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(newPassword) } })
   const token = getCookie(c, SESSION_COOKIE)
   await destroyUserSessions(user.id, token)
   return c.json({ ok: true })
@@ -207,11 +207,6 @@ export async function authGuard(c: Context, next: () => Promise<void>): Promise<
     const session = await validateSession(token)
     if (session.valid && session.user) {
       c.set('authUser', session.user)
-      if (session.user.role !== 'admin') {
-        const method = c.req.method === 'HEAD' ? 'GET' : c.req.method
-        const denied = ADMIN_ONLY.some(r => (r.method === '*' || r.method === method) && r.pattern.test(path))
-        if (denied) return c.json({ error: 'forbidden' }, 403)
-      }
       if (session.extended && session.expiresAt) {
         setSessionCookie(c, token, session.expiresAt)
       }

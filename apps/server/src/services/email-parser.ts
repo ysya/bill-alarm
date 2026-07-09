@@ -3,10 +3,11 @@ import path from 'node:path'
 import { PDF_DIR } from '@/paths.js'
 import { logger } from '@/index.js'
 import prisma from '@/prisma.js'
-import { getEmailProviderFor, type MailboxOwner } from './email/index.js'
+import { getEmailProviderFor, type MailboxOwner, type SearchCriteria } from './email/index.js'
 import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
 import { parseBill } from './bill-parser.js'
 import { getSetting, KEYS } from './settings.js'
+import { getBankPdfPassword } from './secrets.js'
 import { scanEvents } from './scan-events.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus, type ParsedBill } from '@bill-alarm/shared/types'
@@ -78,19 +79,24 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
     return result
   }
 
-  const senderPatterns = banks.map((b) => `from:(${b.emailSenderPattern})`).join(' OR ')
   const rangeDaysRaw = await getSetting(KEYS.SCAN_RANGE_DAYS)
   const rangeDays = rangeDaysRaw ? Math.max(1, parseInt(rangeDaysRaw)) : 60
-  const extraQuery = (await getSetting(KEYS.SCAN_GMAIL_QUERY_EXTRA)) || ''
-  const query = `(${senderPatterns}) newer_than:${rangeDays}d has:attachment${extraQuery ? ` ${extraQuery.trim()}` : ''}`
+  // Structured, provider-agnostic criteria — each EmailProvider is responsible for
+  // translating this into its own search syntax (Gmail's gmailraw extension,
+  // standard IMAP SearchObject, etc.). See services/email/providers/gmail-imap.ts.
+  const criteria: SearchCriteria = {
+    senders: banks.map((b) => b.emailSenderPattern),
+    sinceDays: rangeDays,
+    hasAttachment: true,
+  }
 
-  logger.info({ query, rangeDays }, 'Email scan query')
+  logger.info({ senders: criteria.senders, sinceDays: rangeDays }, 'Email scan criteria')
 
   try {
     return await provider.withSession(async (session) => {
       let messageRefs: { id: string }[]
       try {
-        messageRefs = await session.search({ query, sinceDays: rangeDays })
+        messageRefs = await session.search(criteria)
       } catch (e) {
         result.errors.push({
           stage: 'email_search',
@@ -146,7 +152,7 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
           let lastPdfError: string | null = null
           for (const pdfBuf of pdfBuffers) {
             try {
-              pdfText = await extractPdfText(pdfBuf, bank.pdfPassword ?? undefined)
+              pdfText = await extractPdfText(pdfBuf, getBankPdfPassword(bank))
               if (pdfText) {
                 matchedPdfBuf = pdfBuf
                 break
@@ -270,59 +276,85 @@ export interface RecordedScan {
   scanLogId: string
 }
 
+/** Thrown by `runScanWithLog` when the same user already has a scan in flight. */
+export class ScanInProgressError extends Error {
+  constructor(userId: string) {
+    super(`Scan already in progress for user ${userId}`)
+    this.name = 'ScanInProgressError'
+  }
+}
+
+/**
+ * Per-user mutex: userIds with a scan currently in flight. Prevents a manual
+ * trigger from racing the hourly cron (or a double-click) into processing the
+ * same mailbox twice concurrently. Different users never block each other.
+ */
+const scanning = new Set<string>()
+
 /**
  * Run a scan and persist a ScanLog row capturing counts + structured errors.
  * Caller is responsible for any post-scan side effects (notifications),
  * which can be appended via `appendScanLogErrors`.
+ *
+ * Throws `ScanInProgressError` (before any ScanLog row is created) if this
+ * user already has a scan running.
  */
 export async function runScanWithLog(trigger: 'manual' | 'cron', user: ScanUser): Promise<RecordedScan> {
-  const log = await prisma.scanLog.create({
-    data: { trigger, startedAt: new Date(), userId: user.id },
-  })
-
-  let result: ScanResult = { scanned: 0, newBills: [], errors: [] }
-  let fatal: string | null = null
+  if (scanning.has(user.id)) {
+    throw new ScanInProgressError(user.id)
+  }
+  scanning.add(user.id)
   try {
-    result = await scanAndProcessEmails(user, {
-      onStart: (total) => {
-        scanEvents.emitEvent({ type: 'start', userId: user.id, scanLogId: log.id, total, trigger })
-      },
-      onProgress: (idx, total, bank, status, reason) => {
-        scanEvents.emitEvent({ type: 'progress', userId: user.id, scanLogId: log.id, idx, total, bank, status, reason })
+    const log = await prisma.scanLog.create({
+      data: { trigger, startedAt: new Date(), userId: user.id },
+    })
+
+    let result: ScanResult = { scanned: 0, newBills: [], errors: [] }
+    let fatal: string | null = null
+    try {
+      result = await scanAndProcessEmails(user, {
+        onStart: (total) => {
+          scanEvents.emitEvent({ type: 'start', userId: user.id, scanLogId: log.id, total, trigger })
+        },
+        onProgress: (idx, total, bank, status, reason) => {
+          scanEvents.emitEvent({ type: 'progress', userId: user.id, scanLogId: log.id, idx, total, bank, status, reason })
+        },
+      })
+    } catch (e) {
+      fatal = (e as Error).message ?? String(e)
+      logger.error({ error: fatal }, 'Scan crashed unexpectedly')
+    }
+
+    await prisma.scanLog.update({
+      where: { id: log.id },
+      data: {
+        finishedAt: new Date(),
+        scanned: result.scanned,
+        newBillsCount: result.newBills.length,
+        errorCount: result.errors.length + (fatal ? 1 : 0),
+        errors: result.errors.length > 0 ? JSON.stringify(result.errors) : null,
+        fatalError: fatal,
       },
     })
-  } catch (e) {
-    fatal = (e as Error).message ?? String(e)
-    logger.error({ error: fatal }, 'Scan crashed unexpectedly')
-  }
 
-  await prisma.scanLog.update({
-    where: { id: log.id },
-    data: {
-      finishedAt: new Date(),
+    if (fatal) {
+      // Surface as a structured error so callers see the same shape.
+      result.errors.push({ stage: 'unexpected', reason: fatal })
+    }
+
+    scanEvents.emitEvent({
+      type: 'complete',
+      userId: user.id,
+      scanLogId: log.id,
       scanned: result.scanned,
-      newBillsCount: result.newBills.length,
-      errorCount: result.errors.length + (fatal ? 1 : 0),
-      errors: result.errors.length > 0 ? JSON.stringify(result.errors) : null,
-      fatalError: fatal,
-    },
-  })
+      newBills: result.newBills.length,
+      errorCount: result.errors.length,
+    })
 
-  if (fatal) {
-    // Surface as a structured error so callers see the same shape.
-    result.errors.push({ stage: 'unexpected', reason: fatal })
+    return { result, scanLogId: log.id }
+  } finally {
+    scanning.delete(user.id)
   }
-
-  scanEvents.emitEvent({
-    type: 'complete',
-    userId: user.id,
-    scanLogId: log.id,
-    scanned: result.scanned,
-    newBills: result.newBills.length,
-    errorCount: result.errors.length,
-  })
-
-  return { result, scanLogId: log.id }
 }
 
 /**

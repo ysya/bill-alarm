@@ -14,19 +14,32 @@ export interface ParsedBill {
   billingPeriod: string
 }
 
-/** API 回傳的帳單（列表用） */
+/**
+ * API 回傳的帳單（列表用）。`bank` 在 GET /bills、GET /bills/:id 才會附上（完整子集
+ * 欄位）；PATCH /bills/:id、/pay、/unpay、/reparse 回傳的是未 include 關聯的原始 row，
+ * 故 bank 為 undefined —— 標成 optional 以反映實際回應。
+ */
 export interface BillDTO {
   id: string
-  bank?: { name: string }
+  bank?: { id: string, name: string, code: string | null, autoDebit: boolean, isActive: boolean }
   amount: number
   minimumPayment?: number
   dueDate: string
   status: BillStatus
   billingPeriod: string
   pdfPath?: string | null
+  paidAt?: string | null
   // 'generic': legacy rows only — the generic fallback parser was removed in 0.4;
   // new bills only ever write 'template' | 'hardcoded' | 'llm'.
   parseSource?: 'template' | 'hardcoded' | 'generic' | 'llm' | null
+}
+
+/** GET /bills 分頁列表回應 */
+export interface BillListResponse {
+  data: BillDTO[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 /** API 回傳的帳單詳情 */
@@ -34,7 +47,6 @@ export interface BillDetailDTO extends BillDTO {
   rawEmailSnippet?: string
   notifications?: NotificationDTO[]
   createdAt?: string
-  paidAt?: string | null
 }
 
 export interface NotificationDTO {
@@ -59,6 +71,33 @@ export interface BankAccountDTO {
   name: string
   bankName: string
   note?: string | null
+}
+
+/** API 回傳的銀行設定（列表用）。pdfPassword 遮罩：只回 hasPdfPassword，不回明碼。 */
+export interface BankDTO {
+  id: string
+  code: string | null
+  name: string
+  emailSenderPattern: string
+  emailSubjectPattern: string
+  parserConfig: string | null
+  isBuiltin: boolean
+  isActive: boolean
+  autoDebit: boolean
+  bankAccountId: string | null
+  bankAccount?: BankAccountDTO | null
+  hasPdfPassword: boolean
+  _count?: { bills: number }
+}
+
+/** API 回傳的通知規則 */
+export interface NotificationRuleDTO {
+  id: string
+  name: string
+  daysBefore: number
+  timeOfDay: string
+  channels: string[]
+  isActive: boolean
 }
 
 export interface BillBreakdownItem {

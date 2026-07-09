@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { CheckCircle, ChevronDown, ChevronUp, Send } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
+import { apiErrorMessage } from '@/lib/utils'
 
 defineProps<{
   status: { isConfigured: boolean, boundCount: number }
@@ -42,8 +43,8 @@ async function handleTest() {
     if (result.success) toast.success('測試訊息已發送', { description: '請檢查你的 Telegram。' })
     else toast.error('測試訊息發送失敗')
   }
-  catch (e: any) {
-    toast.error('發送失敗', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('發送失敗', { description: apiErrorMessage(e) })
   }
   finally {
     testingTelegram.value = false

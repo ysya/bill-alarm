@@ -19,11 +19,11 @@ export function useApi() {
     return apiFetch<T>(`${baseURL}${path}`)
   }
 
-  async function post<T>(path: string, body?: unknown): Promise<T> {
+  async function post<T>(path: string, body?: Record<string, unknown>): Promise<T> {
     return apiFetch<T>(`${baseURL}${path}`, { method: 'POST', body })
   }
 
-  async function patch<T>(path: string, body?: unknown): Promise<T> {
+  async function patch<T>(path: string, body?: Record<string, unknown>): Promise<T> {
     return apiFetch<T>(`${baseURL}${path}`, { method: 'PATCH', body })
   }
 

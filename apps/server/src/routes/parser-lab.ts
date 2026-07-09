@@ -1,20 +1,14 @@
 import { Hono } from 'hono'
-import { streamSSE } from 'hono/streaming'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { scanEvents, eventVisibleTo, type ScanEvent } from '@/services/scan-events.js'
-import { verifyConnectionFor, getEmailProviderFor } from '@/services/email/index.js'
-import { extractPdfText, getPdfBuffers } from '@/services/pdf-parser.js'
+import { getEmailProviderFor } from '@/services/email/index.js'
+import { extractPdfText, getPdfBuffers, decryptPdf } from '@/services/pdf-parser.js'
 import { parseBill } from '@/services/bill-parser.js'
-import { suggestRuleWithLLM, testLlmConnection, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
+import { getBankPdfPassword } from '@/services/secrets.js'
 import prisma from '@/prisma.js'
 import { DATA_DIR } from '@/paths.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { decryptPdf } from '@/services/pdf-parser.js'
-import { runScanWithLog, appendScanLogErrors, type ScanError } from '@/services/email-parser.js'
-import { processNewBill } from '@/services/notification.js'
-import { sendTestMessage, isConfigured as telegramConfigured } from '@/services/telegram.js'
 import { getAuthUser } from './auth.js'
 import { listParserCodes } from '@/parsers/registry.js'
 import { parseWithTemplateDetailed } from '@/parsers/template.js'
@@ -26,149 +20,30 @@ async function currentUser(c: Parameters<typeof getAuthUser>[0]) {
   return prisma.user.findUnique({ where: { id: getAuthUser(c).id } })
 }
 
-// Manual email scan trigger
-app.post('/email/scan', async (c) => {
-  const me = await currentUser(c)
-  if (!me) return c.json({ error: 'unauthorized' }, 401)
-  try {
-    const { result, scanLogId } = await runScanWithLog('manual', me)
-
-    // Send notifications for new bills
-    const notifyErrors: ScanError[] = []
-    for (const { bill, bank, warning } of result.newBills) {
-      try {
-        await processNewBill(bill, bank, warning)
-      } catch (e) {
-        notifyErrors.push({
-          stage: 'notification',
-          bank: bank.name,
-          reason: `通知發送失敗：${(e as Error).message}`,
-        })
-      }
-    }
-    if (notifyErrors.length > 0) {
-      await appendScanLogErrors(scanLogId, notifyErrors)
-    }
-
-    return c.json({
-      scanLogId,
-      scanned: result.scanned,
-      newBills: result.newBills.length,
-      errors: [...result.errors, ...notifyErrors],
-    })
-  } catch (e) {
-    return c.json({
-      error: (e as Error).message,
-      scanned: 0,
-      newBills: 0,
-      errors: [{ stage: 'unexpected', reason: (e as Error).message }],
-    }, 500)
-  }
-})
-
-// Live scan progress via Server-Sent Events.
-// Stays open and forwards events emitted from runScanWithLog().
-app.get('/scan-events', (c) => {
-  const me = getAuthUser(c)
-  return streamSSE(c, async (stream) => {
-    let resolveDone: () => void = () => {}
-    const done = new Promise<void>((r) => { resolveDone = r })
-
-    const listener = (event: ScanEvent) => {
-      if (!eventVisibleTo(event, me.id)) return
-      stream
-        .writeSSE({ event: event.type, data: JSON.stringify(event) })
-        .catch(() => { /* client disconnected mid-write */ })
-    }
-    scanEvents.on('scan', listener)
-
-    stream.onAbort(() => {
-      scanEvents.off('scan', listener)
-      resolveDone()
-    })
-
-    // Initial hello so EventSource considers the stream open.
-    await stream.writeSSE({ event: 'hello', data: '{}' })
-
-    // If a scan is in progress right now, replay the latest known state
-    // so a freshly-connected client (e.g. after page refresh) catches up
-    // instead of waiting for the next event.
-    const snapshot = scanEvents.getSnapshot()
-    if (snapshot && eventVisibleTo(snapshot.start, me.id)) {
-      await stream.writeSSE({ event: 'start', data: JSON.stringify(snapshot.start) })
-      if (snapshot.progress) {
-        await stream.writeSSE({ event: 'progress', data: JSON.stringify(snapshot.progress) })
-      }
-    }
-
-    // Heartbeat every 30s to keep proxies / Nuxt devProxy happy.
-    const heartbeat = setInterval(() => {
-      stream.writeSSE({ event: 'ping', data: '{}' }).catch(() => {})
-    }, 30_000)
-
-    try {
-      await done
-    } finally {
-      clearInterval(heartbeat)
-    }
-  })
-})
-
-// Recent scan logs (most recent first)
-app.get('/scan-logs', async (c) => {
-  const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '20'), 1), 100)
-  const logs = await prisma.scanLog.findMany({
-    where: { userId: getAuthUser(c).id },
-    orderBy: { startedAt: 'desc' },
-    take: limit,
-  })
-  return c.json({
-    logs: logs.map((l) => ({
-      id: l.id,
-      trigger: l.trigger,
-      startedAt: l.startedAt.toISOString(),
-      finishedAt: l.finishedAt?.toISOString() ?? null,
-      scanned: l.scanned,
-      newBillsCount: l.newBillsCount,
-      errorCount: l.errorCount,
-      errors: l.errors ? JSON.parse(l.errors) as ScanError[] : [],
-      fatalError: l.fatalError,
-    })),
-  })
-})
-
-// Telegram test — sends to the requester's own binding
-app.post('/telegram/test', async (c) => {
-  const authUser = getAuthUser(c)
-  const user = await prisma.user.findUnique({ where: { id: authUser.id } })
-  if (!user?.telegramChatId) return c.json({ error: '請先在帳號區綁定 Telegram' }, 400)
-  const success = await sendTestMessage(user.telegramChatId)
-  return c.json({ success })
-})
-
-// Integration status overview
-app.get('/integrations/status', async (c) => {
-  const me = await currentUser(c)
-  const email = (me?.imapUser && me?.imapPassword)
-    ? await verifyConnectionFor(me)
-    : { connected: false, message: '信箱尚未設定' }
-  return c.json({
-    email: { connected: email.connected, message: email.message },
-    telegram: { configured: await telegramConfigured() },
-  })
-})
-
-// --- Parser debug / test routes (available in production) ---
-
-// Search inbox and preview emails
+// Search inbox and preview emails — Gmail-only debug tool. Uses the raw Gmail
+// search syntax (searchRaw), since it needs free-form query strings that the
+// structured SearchCriteria used by the real scan pipeline can't express.
+// Non-Gmail providers/hosts don't implement searchRaw; see gmail-imap.ts.
 app.get('/email/search', async (c) => {
   const q = c.req.query('q') || 'newer_than:7d has:attachment'
   const max = Number(c.req.query('max')) || 10
   const me = await currentUser(c)
   const provider = me ? getEmailProviderFor(me) : null
   if (!provider) return c.json({ error: 'Email provider not configured' }, 400)
-  const refs = await provider.withSession((session) => session.search({ query: q, sinceDays: 30, maxResults: max }))
-  return c.json({ query: q, count: refs.length, messageIds: refs.map((r) => r.id) })
+
+  const refs = await provider.withSession((session) => (
+    session.searchRaw ? session.searchRaw(q) : Promise.resolve(null)
+  ))
+  if (refs === null) {
+    return c.json({ error: 'This mailbox provider does not support raw debug search (Gmail-only tool)' }, 400)
+  }
+  const trimmed = refs.length > max ? refs.slice(-max) : refs
+  return c.json({
+    query: q,
+    count: trimmed.length,
+    messageIds: trimmed.map((r) => r.id),
+    note: 'Gmail-only debug query',
+  })
 })
 
 // Get email details + attachments info
@@ -330,39 +205,6 @@ app.get('/parser/list', (c) => {
   })
 })
 
-// --- LLM routes ---
-
-// Current LLM provider status
-app.get('/llm/status', async (c) => {
-  const provider = await getLlmProvider()
-  return c.json({ provider })
-})
-
-// Test LLM connection (provider + config must already be saved)
-app.post('/llm/test', async (c) => {
-  const provider = await getLlmProvider()
-  if (provider === LlmProvider.None) return c.json({ ok: false, message: 'LLM 提供者未設定' })
-  const result = await testLlmConnection(provider)
-  return c.json(result)
-})
-
-// Ask LLM to suggest a rule from a selection
-app.post('/llm/suggest-rule', zValidator('json', z.object({
-  text: z.string().min(1),
-  value: z.string().min(1),
-  startIndex: z.number().int().min(0),
-  fieldLabel: z.string().min(1),
-})), async (c) => {
-  const { text, value, startIndex, fieldLabel } = c.req.valid('json')
-  try {
-    const rule = await suggestRuleWithLLM(text, value, startIndex, fieldLabel)
-    if (!rule) return c.json({ error: 'LLM 回傳格式無法解析' }, 422)
-    return c.json({ rule })
-  } catch (e) {
-    return c.json({ error: (e as Error).message }, 500)
-  }
-})
-
 // Bootstrap parser editor from an existing bill:
 // - Loads bill + bank
 // - Re-extracts PDF text from the saved PDF
@@ -379,7 +221,7 @@ app.get('/parser/bootstrap/:billId', async (c) => {
   try {
     const filePath = path.join(DATA_DIR, bill.pdfPath)
     const buffer = await fs.readFile(filePath)
-    const decrypted = await decryptPdf(buffer, bill.bank.pdfPassword ?? undefined)
+    const decrypted = await decryptPdf(buffer, getBankPdfPassword(bill.bank))
     // Re-extract text using mupdf
     const mupdf = await import('mupdf')
     const doc = mupdf.Document.openDocument(decrypted, 'application/pdf')

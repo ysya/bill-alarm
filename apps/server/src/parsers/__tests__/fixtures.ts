@@ -7,8 +7,12 @@
 // dueDate is 繳款截止日, and billingPeriod is the statement month.
 //
 // This is a characterization suite: it pins CURRENT parser behavior. See
-// task-13-report.md for two documented parser quirks (esun amount column,
-// yuanta negative-amount abs) that these fixtures deliberately steer around.
+// task-13-report.md for the two findings originally recorded here, and
+// task-b15-report.md for how Plan A Task 15 landed them: the esun amount
+// regex had a real off-by-one (fixed — see the esun fixture below, which now
+// uses distinct previous-balance/new-charges/total values so it fails if the
+// wrong table field is captured); the yuanta negative-amount note was a
+// stale comment only (code already preserved sign — no behavior change).
 
 export interface ParserFixture {
   text: string
@@ -21,14 +25,18 @@ export interface ParserFixture {
 }
 
 export const FIXTURES: Record<string, ParserFixture> = {
-  // 玉山: amount regex 1 (本期應繳總金額…\nTWD 0 A A B — captures 2nd field),
-  // dueDate regex 1 (two consecutive `N 元` lines then a ROC date),
-  // min regex 1 (4th field of the TWD row), billingPeriod via 「115年02月…信用卡」.
+  // 玉山: amount regex 1 (本期應繳總金額…\nTWD A B C D — captures 3rd field,
+  // 本期應繳總額; see esun.ts header comment). Fixture uses 4 DISTINCT numbers
+  // (前期餘額 5,000 ≠ 本期新增 64,988 ≠ 應繳總額 69,988 ≠ 最低應繳 6,999) so the
+  // test fails if the parser grabs the wrong field — pre-fix code captured
+  // the 2nd field (64,988) instead of the 3rd (69,988). dueDate regex 1 (two
+  // consecutive `N 元` lines then a ROC date), min regex 1 (4th field of the
+  // TWD row), billingPeriod via 「115年02月…信用卡」.
   esun: {
     text: [
       '115年02月 信用卡帳單',
       '本期應繳總金額 本期最低應繳金額',
-      'TWD 0 69,988 69,988 6,999',
+      'TWD 5,000 64,988 69,988 6,999',
       '69,988 元',
       '6,999 元',
       '115/04/13',

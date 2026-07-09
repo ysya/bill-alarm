@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { Bell, Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
-import type { NotificationRule } from '~/types/settings'
+import type { NotificationRuleDTO } from '~/types/settings'
 
 defineProps<{
-  rules: NotificationRule[]
+  rules: NotificationRuleDTO[]
   loading: boolean
 }>()
 
 const emit = defineEmits<{
   create: []
-  edit: [rule: NotificationRule]
-  delete: [rule: NotificationRule]
+  edit: [rule: NotificationRuleDTO]
+  delete: [rule: NotificationRuleDTO]
   refresh: []
 }>()
 
@@ -21,7 +21,7 @@ function formatChannelLabel(channel: string): string {
   return channel === 'telegram' ? 'Telegram' : channel === 'calendar' ? 'Calendar' : channel
 }
 
-async function handleToggleActive(rule: NotificationRule) {
+async function handleToggleActive(rule: NotificationRuleDTO) {
   try {
     await settingsApi.updateRule(rule.id, { isActive: !rule.isActive })
     rule.isActive = !rule.isActive

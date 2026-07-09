@@ -3,6 +3,7 @@ import { CheckCircle, ExternalLink, Send } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { apiErrorMessage, isApiErrorStatus } from '@/lib/utils'
 
 const settingsApi = useSettingsApi()
 const { me, fetchMe } = useAuth()
@@ -16,8 +17,8 @@ async function startBind() {
     const res = await settingsApi.telegramBind()
     deepLink.value = res.deepLink
   }
-  catch (e: any) {
-    toast.error('無法產生綁定連結', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('無法產生綁定連結', { description: apiErrorMessage(e) })
   }
   finally {
     working.value = false
@@ -32,13 +33,13 @@ async function confirmBind() {
     await fetchMe()
     toast.success('Telegram 綁定成功', { description: '之後的帳單通知會發送給你。' })
   }
-  catch (e: any) {
+  catch (e) {
     // 410 = code expired and consumed server-side; drop the stale link so the
     // card returns to the initial state where a fresh link can be generated.
-    if (e?.status === 410 || e?.statusCode === 410) {
+    if (isApiErrorStatus(e, 410)) {
       deepLink.value = null
     }
-    toast.error('綁定尚未完成', { description: e?.data?.error ?? String(e) })
+    toast.error('綁定尚未完成', { description: apiErrorMessage(e) })
   }
   finally {
     working.value = false
@@ -52,8 +53,8 @@ async function unbind() {
     await fetchMe()
     toast.success('已解除 Telegram 綁定')
   }
-  catch (e: any) {
-    toast.error('解除綁定失敗', { description: e?.data?.error ?? String(e) })
+  catch (e) {
+    toast.error('解除綁定失敗', { description: apiErrorMessage(e) })
   }
   finally {
     working.value = false

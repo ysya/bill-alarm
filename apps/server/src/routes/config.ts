@@ -4,11 +4,12 @@ import { z } from 'zod'
 import { getSetting, setSetting, KEYS } from '@/services/settings.js'
 import { LlmProvider } from '@/services/llm-parser.js'
 import prisma from '@/prisma.js'
+import { adminOnly } from '@/middleware/admin-only.js'
 
 const app = new Hono()
 
 // Save Telegram config (bot token only; chat ids live on users now)
-app.post('/telegram', zValidator('json', z.object({
+app.post('/telegram', adminOnly, zValidator('json', z.object({
   botToken: z.string().min(1),
 })), async (c) => {
   await setSetting(KEYS.TELEGRAM_BOT_TOKEN, c.req.valid('json').botToken)
@@ -16,7 +17,7 @@ app.post('/telegram', zValidator('json', z.object({
 })
 
 // Set scan config (interval + range + extra query)
-app.post('/scan', zValidator('json', z.object({
+app.post('/scan', adminOnly, zValidator('json', z.object({
   interval: z.number().int().min(0).optional(),
   rangeDays: z.number().int().min(1).max(365).optional(),
   queryExtra: z.string().max(500).optional(),
@@ -29,17 +30,17 @@ app.post('/scan', zValidator('json', z.object({
 })
 
 // LLM API key shortcuts
-app.post('/gemini', zValidator('json', z.object({ apiKey: z.string().min(1) })), async (c) => {
+app.post('/gemini', adminOnly, zValidator('json', z.object({ apiKey: z.string().min(1) })), async (c) => {
   await setSetting(KEYS.GEMINI_API_KEY, c.req.valid('json').apiKey)
   return c.json({ success: true })
 })
 
-app.post('/openai', zValidator('json', z.object({ apiKey: z.string().min(1) })), async (c) => {
+app.post('/openai', adminOnly, zValidator('json', z.object({ apiKey: z.string().min(1) })), async (c) => {
   await setSetting(KEYS.OPENAI_API_KEY, c.req.valid('json').apiKey)
   return c.json({ success: true })
 })
 
-app.post('/llm', zValidator('json', z.object({
+app.post('/llm', adminOnly, zValidator('json', z.object({
   provider: z.nativeEnum(LlmProvider),
   geminiModel: z.string().min(1).optional(),
   openaiModel: z.string().min(1).optional(),
@@ -58,7 +59,7 @@ app.post('/llm', zValidator('json', z.object({
 })
 
 // Aggregated config status
-app.get('/status', async (c) => {
+app.get('/status', adminOnly, async (c) => {
   const [
     botToken,
     geminiKey, openaiKey,

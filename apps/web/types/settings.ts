@@ -1,11 +1,4 @@
-export interface NotificationRule {
-  id: string
-  name: string
-  daysBefore: number
-  timeOfDay: string
-  channels: string[]
-  isActive: boolean
-}
+export type { NotificationRuleDTO } from '@bill-alarm/shared/types'
 
 export interface ConfigStatus {
   telegram: { isConfigured: boolean, boundCount: number }
@@ -24,8 +17,10 @@ export interface ConfigStatus {
 
 export interface EmailStatus {
   hasCredentials: boolean
-  connected: boolean
-  message: string
+  // Only present when fetched with getEmailStatus(true) (?verify=1) — the
+  // default lazy fetch skips the live IMAP probe and omits these.
+  connected?: boolean
+  message?: string
   email?: string
   host: string
   port: number

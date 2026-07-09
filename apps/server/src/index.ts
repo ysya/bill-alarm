@@ -4,20 +4,24 @@ import 'dotenv/config'
 process.env.TZ ??= 'Asia/Taipei'
 
 import { Hono } from 'hono'
-import { cors } from 'hono/cors'
+import { bodyLimit } from 'hono/body-limit'
 import pino from 'pino'
 import { pinoLogger } from 'hono-pino'
 import bankRoutes from './routes/banks.js'
 import bankAccountRoutes from './routes/bank-accounts.js'
 import billRoutes from './routes/bills.js'
-import settingsRoutes from './routes/settings.js'
-import systemRoutes from './routes/system.js'
+import notificationRulesRoutes from './routes/notification-rules.js'
+import scanRoutes from './routes/scan.js'
+import parserLabRoutes from './routes/parser-lab.js'
+import llmRoutes from './routes/llm.js'
+import integrationsRoutes from './routes/integrations.js'
 import configRoutes from './routes/config.js'
 import emailRoutes from './routes/email.js'
 import calendarFeedRoutes from './routes/calendar-feed.js'
 import authRoutes, { authGuard } from './routes/auth.js'
 import userRoutes from './routes/users.js'
 import { startScheduler } from './services/scheduler.js'
+import { encryptionEnabled } from './services/secrets.js'
 
 const isDev = process.env.NODE_ENV !== 'production'
 
@@ -38,6 +42,8 @@ export const logger = pino({
     },
   },
 })
+
+if (!encryptionEnabled()) logger.warn('ENCRYPTION_KEY not set — secrets stored in plaintext')
 
 const app = new Hono()
 
@@ -70,7 +76,20 @@ app.use(pinoLogger({
     reqId: false,
   },
 }))
-app.use('/api/*', cors())
+
+// Any error thrown by a route or middleware below is caught here — log full
+// detail server-side via pino, never leak internals (message/stack) to the
+// client.
+app.onError((err, c) => {
+  logger.error({ err: err.message, stack: err.stack, path: c.req.path }, 'Unhandled route error')
+  return c.json({ error: '伺服器內部錯誤' }, 500)
+})
+
+// Same-origin deploy + cookie auth: no cross-origin caller is ever legitimate,
+// so cors() was a no-op that only risked loosening credential-less reads.
+// Cap request bodies for all API routes; auth's own stricter 16KB limit
+// (mounted inside its sub-app) still applies on top of this for /api/auth/*.
+app.use('/api/*', bodyLimit({ maxSize: 25 * 1024 * 1024, onError: (c) => c.json({ error: '請求內容過大' }, 413) }))
 app.use('/api/*', authGuard)
 
 // API routes
@@ -80,8 +99,11 @@ app.route('/api/users', userRoutes)
 app.route('/api/banks', bankRoutes)
 app.route('/api/bank-accounts', bankAccountRoutes)
 app.route('/api/bills', billRoutes)
-app.route('/api/notification-rules', settingsRoutes)
-app.route('/api', systemRoutes)
+app.route('/api/notification-rules', notificationRulesRoutes)
+app.route('/api', scanRoutes)
+app.route('/api', parserLabRoutes)
+app.route('/api', llmRoutes)
+app.route('/api', integrationsRoutes)
 app.route('/api/config', configRoutes)
 app.route('/api/email', emailRoutes)
 app.route('/api/calendar', calendarFeedRoutes)

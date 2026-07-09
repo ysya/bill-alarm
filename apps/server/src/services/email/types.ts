@@ -19,10 +19,13 @@ export interface EmailMessage {
   attachments: Attachment[]
 }
 
-export interface SearchOptions {
-  query: string
+export interface SearchCriteria {
+  /** OR-matched FROM patterns (bank sender addresses). */
+  senders: string[]
   sinceDays: number
-  maxResults?: number
+  /** Gmail fast-path filter only; standard IMAP has no such criterion and ignores
+   *  this — the scan pipeline already post-filters by PDF attachment presence. */
+  hasAttachment: boolean
 }
 
 export interface VerifyResult {
@@ -32,7 +35,10 @@ export interface VerifyResult {
 }
 
 export interface EmailSession {
-  search(opts: SearchOptions): Promise<MessageRef[]>
+  search(criteria: SearchCriteria): Promise<MessageRef[]>
+  /** Gmail-only debug escape hatch (raw `gmailraw`/X-GM-RAW query). Undefined on
+   *  non-Gmail providers/hosts — callers must feature-detect before use. */
+  searchRaw?(query: string): Promise<MessageRef[]>
   fetch(ref: MessageRef): Promise<EmailMessage | null>
 }
 

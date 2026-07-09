@@ -1,4 +1,5 @@
 import type { Attachment } from './email/types.js'
+import { withTimeout } from './util/timeout.js'
 
 async function parsePdf(buffer: Buffer, password?: string): Promise<string> {
   const mupdf = await import('mupdf')
@@ -15,16 +16,6 @@ async function parsePdf(buffer: Buffer, password?: string): Promise<string> {
     pages.push(text)
   }
   return pages.join('\n')
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label} 超時（${ms / 1000}秒）`)), ms)
-    promise.then(
-      (v) => { clearTimeout(timer); resolve(v) },
-      (e) => { clearTimeout(timer); reject(e) },
-    )
-  })
 }
 
 /**

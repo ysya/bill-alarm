@@ -29,7 +29,7 @@ export const esunParser: BillEmailParser = {
 function extractAmount(text: string): number | null {
   const patterns = [
     // 表格行 TWD 0 69,988 69,988 6,999（第三個數字）
-    /本期應繳總金額\s+本期最低應繳金額\nTWD\s+[\d,]+\s+([\d,]+)\s+[\d,]+/,
+    /本期應繳總金額\s+本期最低應繳金額\nTWD\s+[\d,]+\s+[\d,]+\s+([\d,]+)/,
     // N,NNN 元 連續出現（第一個常是應繳）
     /([\d,]{3,})\s*元\n[\s\S]{0,20}?([\d,]{3,})\s*元/,
     // 標準格式

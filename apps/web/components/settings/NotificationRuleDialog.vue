@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
-import type { NotificationRule } from '~/types/settings'
+import type { NotificationRuleDTO } from '~/types/settings'
 import { CHANNEL_OPTIONS } from '~/types/settings'
 
 const props = defineProps<{
   open: boolean
-  editingRule: NotificationRule | null
+  editingRule: NotificationRuleDTO | null
 }>()
 
 const emit = defineEmits<{
