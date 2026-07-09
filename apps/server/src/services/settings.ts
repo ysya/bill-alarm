@@ -1,4 +1,5 @@
 import prisma from '@/prisma.js'
+import { encryptSecret, decryptSecret } from './secrets.js'
 
 // Setting keys
 export const KEYS = {
@@ -38,22 +39,35 @@ const ENV_MAP: Record<string, string> = {
   [KEYS.APP_BASE_URL]: 'APP_BASE_URL',
 }
 
+// Keys whose DB-stored value is a genuine secret and should be encrypted at
+// rest (see services/secrets.ts). Env-sourced values (ENV_MAP above) are
+// NEVER encrypted — getSetting returns them before ever touching the DB or
+// decryptSecret, so an operator-supplied env var is always plaintext as-is.
+const ENCRYPTED_KEYS = new Set<string>([
+  KEYS.TELEGRAM_BOT_TOKEN,
+  KEYS.GEMINI_API_KEY,
+  KEYS.OPENAI_API_KEY,
+])
+
 export async function getSetting(key: string): Promise<string | null> {
-  // Env takes priority over DB
+  // Env takes priority over DB, and env values are never encrypted.
   const envKey = ENV_MAP[key]
   const envVal = envKey ? process.env[envKey] : undefined
   if (envVal) return envVal
 
-  // Fallback to DB
+  // Fallback to DB. Legacy plaintext rows (no enc:v1: prefix) pass through
+  // decryptSecret unchanged, so pre-existing values keep working as-is.
   const row = await prisma.setting.findUnique({ where: { key } })
-  return row?.value ?? null
+  if (!row) return null
+  return ENCRYPTED_KEYS.has(key) ? decryptSecret(row.value) : row.value
 }
 
 export async function setSetting(key: string, value: string): Promise<void> {
+  const stored = ENCRYPTED_KEYS.has(key) ? encryptSecret(value) : value
   await prisma.setting.upsert({
     where: { key },
-    update: { value },
-    create: { key, value },
+    update: { value: stored },
+    create: { key, value: stored },
   })
 }
 

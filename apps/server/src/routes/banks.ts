@@ -4,6 +4,7 @@ import { z } from 'zod'
 import prisma from '@/prisma.js'
 import { BANK_PRESETS } from '@bill-alarm/shared/constants'
 import { templateParserConfigSchema } from '@bill-alarm/shared/template-parser'
+import { encryptSecret } from '@/services/secrets.js'
 import { getAuthUser } from './auth.js'
 
 const app = new Hono()
@@ -46,12 +47,14 @@ app.post('/enable/:code', zValidator('json', z.object({
   if (!preset) return c.json({ error: 'Unknown bank code' }, 404)
 
   const body = c.req.valid('json')
+  // pdfPassword undefined (not sent) leaves the stored value untouched — computed
+  // once and reused below so both branches (update/create) encrypt identically.
+  const pdfPassword = body?.pdfPassword ? encryptSecret(body.pdfPassword) : body?.pdfPassword
   const existing = await prisma.bank.findFirst({ where: { userId, code } })
   if (existing) {
     const updated = await prisma.bank.update({
       where: { id: existing.id },
-      // pdfPassword undefined (not sent) leaves the stored value untouched.
-      data: { isActive: true, pdfPassword: body?.pdfPassword },
+      data: { isActive: true, pdfPassword },
     })
     return c.json(updated)
   }
@@ -62,7 +65,7 @@ app.post('/enable/:code', zValidator('json', z.object({
       name: preset.name,
       emailSenderPattern: preset.emailSender,
       emailSubjectPattern: preset.emailSubject,
-      pdfPassword: body?.pdfPassword,
+      pdfPassword,
       isBuiltin: true,
       isActive: true,
       userId,
@@ -109,6 +112,9 @@ app.patch('/:id', zValidator('json', z.object({
     const account = await prisma.bankAccount.findFirst({ where: { id: data.bankAccountId, userId } })
     if (!account) return c.json({ error: '找不到帳戶' }, 404)
   }
+  // Absent (undefined) leaves the stored value untouched, null clears it —
+  // only a genuine non-empty string (already enforced by .min(1) above) gets encrypted.
+  if (data.pdfPassword) data.pdfPassword = encryptSecret(data.pdfPassword)
   const bank = await prisma.bank.update({ where: { id: existing.id }, data })
   return c.json(bank)
 })
@@ -120,6 +126,7 @@ app.post('/', zValidator('json', z.object({
   pdfPassword: z.string().optional(),
 })), async (c) => {
   const data = c.req.valid('json')
+  if (data.pdfPassword) data.pdfPassword = encryptSecret(data.pdfPassword)
   const bank = await prisma.bank.create({
     data: { ...data, isBuiltin: false, isActive: true, userId: getAuthUser(c).id },
   })

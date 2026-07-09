@@ -7,6 +7,7 @@ import prisma from '@/prisma.js'
 import { DATA_DIR } from '@/paths.js'
 import { decryptPdf } from '@/services/pdf-parser.js'
 import { parseBillWithLLM, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
+import { getBankPdfPassword } from '@/services/secrets.js'
 import { BillStatus } from '@bill-alarm/shared/types'
 import { todayYMD, isValidYMD } from '@bill-alarm/shared/date'
 import { getAuthUser } from './auth.js'
@@ -214,7 +215,7 @@ app.post('/:id/reparse', async (c) => {
   try {
     const filePath = path.join(DATA_DIR, bill.pdfPath)
     const buffer = await fs.readFile(filePath)
-    const decrypted = await decryptPdf(buffer, bill.bank.pdfPassword ?? undefined)
+    const decrypted = await decryptPdf(buffer, getBankPdfPassword(bill.bank))
     const mupdf = await import('mupdf')
     const doc = mupdf.Document.openDocument(decrypted, 'application/pdf')
     const pages: string[] = []
@@ -261,8 +262,7 @@ app.get('/:id/pdf', async (c) => {
   const filePath = path.join(DATA_DIR, bill.pdfPath)
   try {
     const encrypted = await fs.readFile(filePath)
-    const password = bill.bank.pdfPassword || undefined
-    const decrypted = await decryptPdf(encrypted, password)
+    const decrypted = await decryptPdf(encrypted, getBankPdfPassword(bill.bank))
     return new Response(new Uint8Array(decrypted), {
       headers: {
         'Content-Type': 'application/pdf',

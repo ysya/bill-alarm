@@ -7,6 +7,7 @@ import { getEmailProviderFor, type MailboxOwner, type SearchCriteria } from './e
 import { extractPdfText, getPdfBuffers } from './pdf-parser.js'
 import { parseBill } from './bill-parser.js'
 import { getSetting, KEYS } from './settings.js'
+import { getBankPdfPassword } from './secrets.js'
 import { scanEvents } from './scan-events.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus, type ParsedBill } from '@bill-alarm/shared/types'
@@ -151,7 +152,7 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
           let lastPdfError: string | null = null
           for (const pdfBuf of pdfBuffers) {
             try {
-              pdfText = await extractPdfText(pdfBuf, bank.pdfPassword ?? undefined)
+              pdfText = await extractPdfText(pdfBuf, getBankPdfPassword(bank))
               if (pdfText) {
                 matchedPdfBuf = pdfBuf
                 break

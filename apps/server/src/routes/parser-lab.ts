@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { getEmailProviderFor } from '@/services/email/index.js'
 import { extractPdfText, getPdfBuffers, decryptPdf } from '@/services/pdf-parser.js'
 import { parseBill } from '@/services/bill-parser.js'
+import { getBankPdfPassword } from '@/services/secrets.js'
 import prisma from '@/prisma.js'
 import { DATA_DIR } from '@/paths.js'
 import fs from 'node:fs/promises'
@@ -220,7 +221,7 @@ app.get('/parser/bootstrap/:billId', async (c) => {
   try {
     const filePath = path.join(DATA_DIR, bill.pdfPath)
     const buffer = await fs.readFile(filePath)
-    const decrypted = await decryptPdf(buffer, bill.bank.pdfPassword ?? undefined)
+    const decrypted = await decryptPdf(buffer, getBankPdfPassword(bill.bank))
     // Re-extract text using mupdf
     const mupdf = await import('mupdf')
     const doc = mupdf.Document.openDocument(decrypted, 'application/pdf')

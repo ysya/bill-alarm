@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { setupTestDb } from '../../services/__tests__/helpers/test-db.js'
 
 setupTestDb()
@@ -6,6 +6,7 @@ process.env.LOG_LEVEL = 'silent'
 
 const { default: app } = await import('@/index.js')
 const { default: prisma } = await import('@/prisma.js')
+const { getBankPdfPassword } = await import('@/services/secrets.js')
 
 function cookieOf(res: Response): string {
   return res.headers.get('set-cookie')?.split(';')[0] ?? ''
@@ -119,6 +120,110 @@ describe('banks: pdfPassword validation', () => {
     expect(body.pdfPassword).toBeNull()
     const stored = await prisma.bank.findUnique({ where: { id: bank.id } })
     expect(stored?.pdfPassword).toBeNull()
+  })
+})
+
+describe('banks: pdfPassword at-rest encryption (all 3 write sites)', () => {
+  let originalKey: string | undefined
+
+  beforeEach(() => {
+    originalKey = process.env.ENCRYPTION_KEY
+    process.env.ENCRYPTION_KEY = 'banks-encryption-test-key'
+  })
+
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.ENCRYPTION_KEY
+    else process.env.ENCRYPTION_KEY = originalKey
+  })
+
+  it('POST /api/banks/enable/:code (create branch, fresh code) stores enc:v1: ciphertext; getBankPdfPassword decrypts it back', async () => {
+    const res = await app.request('/api/banks/enable/ctbc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ pdfPassword: 'CtbcPlainPass1' }),
+    })
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.pdfPassword.startsWith('enc:v1:')).toBe(true)
+
+    const stored = await prisma.bank.findUnique({ where: { id: body.id } })
+    expect(stored?.pdfPassword?.startsWith('enc:v1:')).toBe(true)
+    expect(stored?.pdfPassword).not.toBe('CtbcPlainPass1')
+    expect(getBankPdfPassword(stored!)).toBe('CtbcPlainPass1')
+  })
+
+  it('POST /api/banks/enable/:code (update branch, existing disabled bank) stores enc:v1: ciphertext', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: {
+        code: 'taishin',
+        name: '台新銀行',
+        emailSenderPattern: 'webmaster@bhurecv.taishinbank.com.tw',
+        emailSubjectPattern: '台新信用卡電子帳單',
+        isBuiltin: true,
+        isActive: false,
+        userId: user!.id,
+      },
+    })
+
+    const res = await app.request(`/api/banks/enable/${bank.code}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ pdfPassword: 'TaishinPlainPass2' }),
+    })
+    expect(res.status).toBe(200)
+
+    const stored = await prisma.bank.findUnique({ where: { id: bank.id } })
+    expect(stored?.pdfPassword?.startsWith('enc:v1:')).toBe(true)
+    expect(getBankPdfPassword(stored!)).toBe('TaishinPlainPass2')
+  })
+
+  it('PATCH /api/banks/:id with a new pdfPassword stores enc:v1: ciphertext', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: { name: 'Patch Enc Bank', emailSenderPattern: 'pe@pe', emailSubjectPattern: 'pe', userId: user!.id },
+    })
+
+    const res = await app.request(`/api/banks/${bank.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ pdfPassword: 'PatchPlainPass3' }),
+    })
+    expect(res.status).toBe(200)
+
+    const stored = await prisma.bank.findUnique({ where: { id: bank.id } })
+    expect(stored?.pdfPassword?.startsWith('enc:v1:')).toBe(true)
+    expect(getBankPdfPassword(stored!)).toBe('PatchPlainPass3')
+  })
+
+  it('POST /api/banks/ (custom bank create) with a pdfPassword stores enc:v1: ciphertext', async () => {
+    const res = await app.request('/api/banks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({
+        name: 'Custom Encrypted Bank',
+        emailSenderPattern: 'custom-enc@x',
+        emailSubjectPattern: 'custom-enc',
+        pdfPassword: 'CustomPlainPass4',
+      }),
+    })
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.pdfPassword.startsWith('enc:v1:')).toBe(true)
+
+    const stored = await prisma.bank.findUnique({ where: { id: body.id } })
+    expect(getBankPdfPassword(stored!)).toBe('CustomPlainPass4')
+  })
+
+  it('a legacy plaintext pdfPassword (written before encryption was enabled) still decrypts as-is via getBankPdfPassword', async () => {
+    const user = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: { name: 'Legacy Plaintext Bank', emailSenderPattern: 'legacy@x', emailSubjectPattern: 'legacy', pdfPassword: 'LegacyRawPass5', userId: user!.id },
+    })
+
+    // ENCRYPTION_KEY is set (see beforeEach) — but this row predates it and
+    // was never run through encryptSecret, so it has no enc:v1: prefix.
+    expect(getBankPdfPassword(bank)).toBe('LegacyRawPass5')
   })
 })
 

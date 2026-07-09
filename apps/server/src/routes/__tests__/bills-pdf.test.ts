@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { describe, it, expect, afterAll } from 'vitest'
+import { describe, it, expect, afterAll, beforeEach, afterEach } from 'vitest'
 import { setupTestDb } from '../../services/__tests__/helpers/test-db.js'
 
 // Point DATA_DIR at an isolated temp dir BEFORE importing '@/index.js' (which
@@ -18,6 +18,7 @@ process.env.LOG_LEVEL = 'silent'
 const { default: app } = await import('@/index.js')
 const { default: prisma } = await import('@/prisma.js')
 const { PDF_DIR } = await import('@/paths.js')
+const { encryptSecret } = await import('@/services/secrets.js')
 
 function cookieOf(res: Response): string {
   return res.headers.get('set-cookie')?.split(';')[0] ?? ''
@@ -107,5 +108,55 @@ describe('bills: GET /:id/pdf ownership gate (discriminating, real encrypted PDF
     // pdfPath at all.
     const foreignRes = await app.request(`/api/bills/${bill.id}/pdf`, { headers: { Cookie: kid } })
     expect(foreignRes.status).toBe(404)
+  })
+})
+
+describe('bills: GET /:id/pdf decrypts an at-rest-encrypted bank.pdfPassword (secrets choke point)', () => {
+  let originalKey: string | undefined
+
+  beforeEach(() => {
+    originalKey = process.env.ENCRYPTION_KEY
+    process.env.ENCRYPTION_KEY = 'bills-pdf-secrets-test-key'
+  })
+
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.ENCRYPTION_KEY
+    else process.env.ENCRYPTION_KEY = originalKey
+  })
+
+  it('a bank.pdfPassword stored as enc:v1: ciphertext is decrypted correctly to open the real PDF', async () => {
+    const bossUser = await prisma.user.findUnique({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: {
+        name: 'PDF Fixture Bank (encrypted at rest)',
+        emailSenderPattern: 'pdf-enc@pdf',
+        emailSubjectPattern: 'pdf-enc',
+        // Simulates what routes/banks.ts's write path produces: the real
+        // encryptSecret(), not a hand-rolled fake ciphertext.
+        pdfPassword: encryptSecret(PDF_PASSWORD),
+        userId: bossUser!.id,
+      },
+    })
+
+    fs.mkdirSync(PDF_DIR, { recursive: true })
+    const filename = `${bank.id}_fixture.pdf`
+    fs.writeFileSync(path.join(PDF_DIR, filename), await buildEncryptedPdfFixture(PDF_PASSWORD))
+
+    const bill = await prisma.bill.create({
+      data: {
+        bankId: bank.id,
+        billingPeriod: '2026-07',
+        amount: 555,
+        dueDate: '2026-07-21',
+        pdfPath: `pdfs/${filename}`,
+      },
+    })
+
+    // If GET /:id/pdf still read bank.pdfPassword raw (the enc:v1: ciphertext)
+    // instead of decrypting it first, decryptPdf would be handed the wrong
+    // password and this would 404 (caught by the route's catch-all).
+    const res = await app.request(`/api/bills/${bill.id}/pdf`, { headers: { Cookie: boss } })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('application/pdf')
   })
 })

@@ -21,6 +21,7 @@ import calendarFeedRoutes from './routes/calendar-feed.js'
 import authRoutes, { authGuard } from './routes/auth.js'
 import userRoutes from './routes/users.js'
 import { startScheduler } from './services/scheduler.js'
+import { encryptionEnabled } from './services/secrets.js'
 
 const isDev = process.env.NODE_ENV !== 'production'
 
@@ -41,6 +42,8 @@ export const logger = pino({
     },
   },
 })
+
+if (!encryptionEnabled()) logger.warn('ENCRYPTION_KEY not set — secrets stored in plaintext')
 
 const app = new Hono()
 

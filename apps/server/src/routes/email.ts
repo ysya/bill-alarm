@@ -4,6 +4,7 @@ import { z } from 'zod'
 import prisma from '@/prisma.js'
 import { GmailImapProvider } from '@/services/email/providers/gmail-imap.js'
 import { verifyConnectionFor } from '@/services/email/index.js'
+import { encryptSecret } from '@/services/secrets.js'
 import { getAuthUser } from './auth.js'
 
 const app = new Hono()
@@ -30,7 +31,7 @@ app.post('/save', zValidator('json', imapConfigSchema.extend({
   const { host, port, user, password } = c.req.valid('json')
   await prisma.user.update({
     where: { id: getAuthUser(c).id },
-    data: { imapHost: host, imapPort: port, imapUser: user, imapPassword: password },
+    data: { imapHost: host, imapPort: port, imapUser: user, imapPassword: encryptSecret(password) },
   })
   return c.json({ success: true })
 })

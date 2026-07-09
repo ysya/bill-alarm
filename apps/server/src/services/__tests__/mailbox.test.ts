@@ -1,17 +1,24 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setupTestDb } from './helpers/test-db.js'
 import type { SearchCriteria } from '../email/types.js'
 
-const { searchMock } = vi.hoisted(() => ({
+const { searchMock, imapFlowConstructorSpy } = vi.hoisted(() => ({
   // Typed via the generic param (not a named-arg implementation) so the mock
   // records `client.search(query, options)` calls without unused-param lint noise.
   searchMock: vi.fn<(query: any, options?: any) => Promise<number[] | false>>(),
+  // Captures the ImapFlowOptions each `new ImapFlow(...)` call receives, so
+  // tests can assert exactly what `auth.pass` reached the wire — the only
+  // way to prove getEmailProviderFor decrypted the password rather than
+  // merely "didn't crash".
+  imapFlowConstructorSpy: vi.fn<(options: unknown) => void>(),
 }))
 
 vi.mock('imapflow', () => ({
   // Must be a real class (not an arrow fn) — gmail-imap.ts calls `new ImapFlow(...)`.
   ImapFlow: class {
-    constructor(public options: unknown) {}
+    constructor(public options: unknown) {
+      imapFlowConstructorSpy(options)
+    }
     connect = vi.fn(async () => {})
     logout = vi.fn(async () => {})
     getMailboxLock = vi.fn(async () => ({ release: vi.fn(), path: 'INBOX' }))
@@ -29,6 +36,7 @@ const { GmailImapProvider } = await import('../email/providers/gmail-imap.js')
 const { listScannableUsers } = await import('../scheduler.js')
 const { eventVisibleTo } = await import('../scan-events.js')
 const { setSetting, deleteSetting } = await import('../settings.js')
+const { encryptSecret } = await import('../secrets.js')
 
 describe('per-user mailbox', () => {
   it('getEmailProviderFor: null without credentials, instance with them, defaults applied', () => {
@@ -169,5 +177,58 @@ describe('GmailImapProvider.search: structured criteria dispatch by host', () =>
     await provider.withSession(async (session) => {
       expect(session.searchRaw).toBeUndefined()
     })
+  })
+})
+
+// getEmailProviderFor is the single choke point every mailbox use goes
+// through (routes/email.ts, routes/parser-lab.ts, services/email-parser.ts),
+// so decrypting there — rather than at each call site — covers all of them.
+describe('secrets: getEmailProviderFor decrypts imapPassword (read choke point)', () => {
+  let originalKey: string | undefined
+
+  beforeEach(() => {
+    originalKey = process.env.ENCRYPTION_KEY
+    imapFlowConstructorSpy.mockClear()
+  })
+
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.ENCRYPTION_KEY
+    else process.env.ENCRYPTION_KEY = originalKey
+  })
+
+  it('an enc:v1: imapPassword is decrypted before reaching the IMAP client', async () => {
+    process.env.ENCRYPTION_KEY = 'mailbox-decrypt-test-key'
+    const stored = encryptSecret('real-mailbox-password-999')
+    expect(stored.startsWith('enc:v1:')).toBe(true)
+
+    const provider = getEmailProviderFor({ imapHost: 'imap.gmail.com', imapPort: 993, imapUser: 'me@gmail.com', imapPassword: stored })
+    expect(provider).not.toBeNull()
+    await provider!.verify()
+
+    expect(imapFlowConstructorSpy).toHaveBeenCalledTimes(1)
+    const [opts] = imapFlowConstructorSpy.mock.calls[0]
+    expect((opts as { auth: { pass: string } }).auth.pass).toBe('real-mailbox-password-999')
+  })
+
+  it('a legacy plaintext imapPassword (no enc:v1: prefix) still reaches the IMAP client unchanged, even with a key configured', async () => {
+    process.env.ENCRYPTION_KEY = 'mailbox-decrypt-test-key-2'
+
+    const provider = getEmailProviderFor({ imapHost: 'imap.gmail.com', imapPort: 993, imapUser: 'me@gmail.com', imapPassword: 'legacy-plaintext-pw' })
+    await provider!.verify()
+
+    const [opts] = imapFlowConstructorSpy.mock.calls[0]
+    expect((opts as { auth: { pass: string } }).auth.pass).toBe('legacy-plaintext-pw')
+  })
+
+  it('an enc:v1: imapPassword with no ENCRYPTION_KEY configured throws eagerly (misconfiguration), instead of leaking ciphertext to the IMAP client', async () => {
+    process.env.ENCRYPTION_KEY = 'mailbox-decrypt-test-key-3'
+    const stored = encryptSecret('will-lose-the-key-next')
+    delete process.env.ENCRYPTION_KEY
+
+    // Decryption happens while constructing the provider (getEmailProviderFor
+    // is the choke point), so the throw surfaces from this call itself — not
+    // deferred to a later verify()/withSession() call.
+    expect(() => getEmailProviderFor({ imapHost: 'imap.gmail.com', imapPort: 993, imapUser: 'me@gmail.com', imapPassword: stored })).toThrow()
+    expect(imapFlowConstructorSpy).not.toHaveBeenCalled()
   })
 })
