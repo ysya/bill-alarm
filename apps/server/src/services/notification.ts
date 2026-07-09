@@ -3,6 +3,7 @@ import { logger } from '@/index.js'
 import { sendNewBillAlert, sendBillReminder, sendOverdueWarning } from './telegram.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus } from '@bill-alarm/shared/types'
+import { todayYMD, addDaysYMD } from '@bill-alarm/shared/date'
 
 async function logNotification(
   billId: string,
@@ -51,17 +52,13 @@ export async function processReminderRules(): Promise<void> {
   today.setHours(0, 0, 0, 0)
 
   for (const rule of rules) {
-    const targetDate = new Date(today)
-    targetDate.setDate(targetDate.getDate() + rule.daysBefore)
+    const targetYMD = addDaysYMD(todayYMD(), rule.daysBefore)
 
     const bills = await prisma.bill.findMany({
       where: {
         status: BillStatus.PENDING,
         bank: { userId: rule.userId },
-        dueDate: {
-          gte: targetDate,
-          lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000),
-        },
+        dueDate: targetYMD,
       },
       include: { bank: true },
     })
@@ -100,13 +97,10 @@ export async function processReminderRules(): Promise<void> {
 }
 
 export async function processOverdueBills(): Promise<void> {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
   const overdueBills = await prisma.bill.findMany({
     where: {
       status: BillStatus.PENDING,
-      dueDate: { lt: today },
+      dueDate: { lt: todayYMD() },
     },
     include: { bank: { include: { user: { select: { deletedAt: true } } } } },
   })

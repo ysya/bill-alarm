@@ -8,6 +8,7 @@ import { DATA_DIR } from '@/paths.js'
 import { decryptPdf } from '@/services/pdf-parser.js'
 import { parseBillWithLLM, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
 import { BillStatus } from '@bill-alarm/shared/types'
+import { todayYMD } from '@bill-alarm/shared/date'
 import { getAuthUser } from './auth.js'
 
 const app = new Hono()
@@ -20,7 +21,7 @@ async function ownBill(c: Parameters<typeof getAuthUser>[0], id: string) {
 const updateBillSchema = z.object({
   amount: z.number().int().optional(),
   minimumPayment: z.number().int().positive().nullable().optional(),
-  dueDate: z.string().datetime().optional(),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dueDate 須為 YYYY-MM-DD 格式').optional(),
   billingPeriod: z.string().regex(/^\d{4}-\d{2}$/, 'billingPeriod 須為 YYYY-MM 格式').optional(),
   status: z.nativeEnum(BillStatus).optional(),
 })
@@ -28,8 +29,8 @@ const updateBillSchema = z.object({
 // Dashboard summary
 app.get('/summary', async (c) => {
   const month = c.req.query('month')
-  const now = new Date()
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const today = todayYMD()
+  const currentMonth = today.slice(0, 7)
   const userId = getAuthUser(c).id
 
   const [pending, paid, overdue] = await Promise.all([
@@ -40,8 +41,8 @@ app.get('/summary', async (c) => {
 
   const totalPending = pending.reduce((sum, b) => sum + b.amount, 0)
   const upcomingBills = pending
-    .filter((b) => b.dueDate >= now)
-    .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
+    .filter((b) => b.dueDate >= today)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
 
   const result: Record<string, unknown> = {
     totalPending,
@@ -132,12 +133,10 @@ app.patch('/:id', zValidator('json', updateBillSchema), async (c) => {
   const own = await ownBill(c, c.req.param('id'))
   if (!own) return c.json({ error: 'Bill not found' }, 404)
   const data = c.req.valid('json')
-  const updateData: Record<string, unknown> = { ...data }
-  if (data.dueDate) updateData.dueDate = new Date(data.dueDate)
 
   const bill = await prisma.bill.update({
     where: { id: own.id },
-    data: updateData,
+    data,
   })
   return c.json(bill)
 })

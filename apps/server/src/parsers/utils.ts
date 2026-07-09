@@ -1,3 +1,10 @@
+import { ymdFromParts } from '@bill-alarm/shared/date'
+
+export { deriveBillingPeriod } from '@bill-alarm/shared/date'
+
+/** Parse y/m/d fragments (ROC or AD) into a 'YYYY-MM-DD' string, or null. */
+export const parseDate = ymdFromParts
+
 /** Parse a ROC or AD year string to AD year */
 export function parseYear(yearStr: string): number {
   let year = parseInt(yearStr)
@@ -36,22 +43,5 @@ export function extractBillingPeriod(text: string): string | null {
       }
     }
   }
-  return null
-}
-
-/** Derive billing period from due date (fallback: due date - 1 month) */
-export function deriveBillingPeriod(dueDate: Date): string {
-  const d = new Date(dueDate)
-  d.setMonth(d.getMonth() - 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
-
-/** Parse a date from year/month/day strings, handling ROC years */
-export function parseDate(yearStr: string, monthStr: string, dayStr: string): Date | null {
-  const year = parseYear(yearStr)
-  const month = parseInt(monthStr)
-  const day = parseInt(dayStr)
-  const date = new Date(year, month - 1, day)
-  if (!isNaN(date.getTime()) && date.getFullYear() >= 2020) return date
   return null
 }

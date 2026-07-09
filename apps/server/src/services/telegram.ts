@@ -1,6 +1,8 @@
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import prisma from '@/prisma.js'
 import { getSetting, KEYS } from './settings.js'
+import { formatAmount } from '@bill-alarm/shared/format'
+import { daysUntil, formatYMD } from '@bill-alarm/shared/date'
 
 const API_BASE = 'https://api.telegram.org/bot'
 
@@ -103,22 +105,6 @@ export async function getUpdates(): Promise<TgUpdate[]> {
   }
 }
 
-function formatAmount(amount: number): string {
-  return `NT$ ${amount.toLocaleString('zh-TW')}`
-}
-
-function formatDate(date: Date): string {
-  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`
-}
-
-function daysUntil(date: Date): number {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  const target = new Date(date)
-  target.setHours(0, 0, 0, 0)
-  return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-}
-
 export async function sendNewBillAlert(bill: Bill, bank: Bank): Promise<SendOutcome> {
   const days = daysUntil(bill.dueDate)
   const usedLlm = bill.parseSource === 'llm'
@@ -130,7 +116,7 @@ export async function sendNewBillAlert(bill: Bill, bank: Bank): Promise<SendOutc
     `💰 應繳金額：${formatAmount(bill.amount)}`,
   ]
   if (bill.minimumPayment) lines.push(`📉 最低應繳：${formatAmount(bill.minimumPayment)}`)
-  lines.push(`📅 截止日：${formatDate(bill.dueDate)}`)
+  lines.push(`📅 截止日：${formatYMD(bill.dueDate)}`)
   lines.push(`⏰ 還有 ${days} 天`)
 
   if (usedLlm) {
@@ -157,7 +143,7 @@ export async function sendBillReminder(bill: Bill, bank: Bank): Promise<SendOutc
     '',
     `🏦 ${bank.name}`,
     `💰 應繳金額：${formatAmount(bill.amount)}`,
-    `📅 截止日：${formatDate(bill.dueDate)}`,
+    `📅 截止日：${formatYMD(bill.dueDate)}`,
     days === 0 ? '⚠️ 今天是最後繳費日！' : `⏰ 還有 ${days} 天`,
   ].join('\n')
 
@@ -170,7 +156,7 @@ export async function sendOverdueWarning(bill: Bill, bank: Bank): Promise<SendOu
     '',
     `🏦 ${bank.name}`,
     `💰 應繳金額：${formatAmount(bill.amount)}`,
-    `📅 截止日：${formatDate(bill.dueDate)}（已逾期）`,
+    `📅 截止日：${formatYMD(bill.dueDate)}（已逾期）`,
     '',
     '⚠️ 請儘速繳款以避免延遲利息！',
   ].join('\n')

@@ -47,15 +47,14 @@ model Bank {
 model Bill {
   id               String            @id @default(uuid(7))
   bankId           String
-  bank             Bank              @relation(fields: [bankId], references: [id])
+  bank             Bank              @relation(fields: [bankId], references: [id], onDelete: Cascade)
   billingPeriod    String
   amount           Int
   minimumPayment   Int?
-  dueDate          DateTime
+  dueDate          String            // calendar date, 'YYYY-MM-DD'
   status           String            @default("pending")
-  parseSource      String?           // 'template' | 'hardcoded' | 'generic' | 'llm'
+  parseSource      String?           // 'template' | 'hardcoded' | 'llm' ('generic' exists on legacy rows)
   paidAt           DateTime?
-  calendarEventId  String?
   sourceEmailId    String?
   rawEmailSnippet  String?
   pdfPath          String?
@@ -64,6 +63,8 @@ model Bill {
   notifications    NotificationLog[]
 
   @@unique([bankId, billingPeriod])
+  @@index([status, dueDate])
+  @@index([bankId])
   @@map("bills")
 }
 
@@ -86,9 +87,9 @@ model NotificationRule {
 model NotificationLog {
   id           String            @id @default(uuid(7))
   billId       String
-  bill         Bill              @relation(fields: [billId], references: [id])
+  bill         Bill              @relation(fields: [billId], references: [id], onDelete: Cascade)
   ruleId       String?
-  rule         NotificationRule? @relation(fields: [ruleId], references: [id])
+  rule         NotificationRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
   channel      String
   message      String
   success      Boolean
@@ -156,5 +157,6 @@ model Session {
   expiresAt      DateTime
   lastExtendedAt DateTime @default(now())
 
+  @@index([expiresAt])
   @@map("sessions")
 }

@@ -563,7 +563,7 @@ function startEdit() {
   editForm.value = {
     amount: bill.value.amount,
     minimumPayment: bill.value.minimumPayment ?? null,
-    dueDate: new Date(bill.value.dueDate).toISOString().split('T')[0],
+    dueDate: bill.value.dueDate,
     billingPeriod: bill.value.billingPeriod ?? '',
     status: bill.value.status,
   }
@@ -580,7 +580,7 @@ async function handleSaveEdit() {
   try {
     const payload: Record<string, unknown> = {
       amount: Math.round(editForm.value.amount),
-      dueDate: new Date(editForm.value.dueDate + 'T00:00:00').toISOString(),
+      dueDate: editForm.value.dueDate,
     }
     if (editForm.value.minimumPayment && editForm.value.minimumPayment > 0) {
       payload.minimumPayment = Math.round(editForm.value.minimumPayment)

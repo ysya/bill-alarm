@@ -227,7 +227,7 @@ app.get('/email/message/:id/parse', async (c) => {
     regexResult: extracted ? {
       amount: extracted.bill.amount,
       minimumPayment: extracted.bill.minimumPayment,
-      dueDate: extracted.bill.dueDate.toISOString().split('T')[0],
+      dueDate: extracted.bill.dueDate,
       billingPeriod: extracted.bill.billingPeriod,
       source: extracted.source,
     } : null,
@@ -273,7 +273,7 @@ app.post('/parser/test-pdf', async (c) => {
     regexResult: extracted ? {
       amount: extracted.bill.amount,
       minimumPayment: extracted.bill.minimumPayment,
-      dueDate: extracted.bill.dueDate.toISOString().split('T')[0],
+      dueDate: extracted.bill.dueDate,
       billingPeriod: extracted.bill.billingPeriod,
       source: extracted.source,
     } : null,
@@ -302,7 +302,7 @@ app.post('/parser/test-text', async (c) => {
     regexResult: extracted ? {
       amount: extracted.bill.amount,
       minimumPayment: extracted.bill.minimumPayment,
-      dueDate: extracted.bill.dueDate.toISOString().split('T')[0],
+      dueDate: extracted.bill.dueDate,
       billingPeriod: extracted.bill.billingPeriod,
       source: extracted.source,
     } : null,
@@ -333,7 +333,7 @@ app.post('/parser/test-template', zValidator('json', z.object({
     result: detail.bill ? {
       amount: detail.bill.amount,
       minimumPayment: detail.bill.minimumPayment,
-      dueDate: detail.bill.dueDate.toISOString().split('T')[0],
+      dueDate: detail.bill.dueDate,
       billingPeriod: detail.bill.billingPeriod,
     } : null,
     matches: detail.matches,
@@ -418,7 +418,7 @@ app.get('/parser/bootstrap/:billId', async (c) => {
       id: bill.id,
       amount: bill.amount,
       minimumPayment: bill.minimumPayment,
-      dueDate: bill.dueDate.toISOString().split('T')[0],
+      dueDate: bill.dueDate,
       billingPeriod: bill.billingPeriod,
       parseSource: bill.parseSource,
     },

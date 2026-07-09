@@ -1,5 +1,5 @@
 import type { BillEmailParser } from './types.js'
-import { parseAmount } from './utils.js'
+import { parseAmount, parseDate } from './utils.js'
 
 /**
  * 滙豐銀行帳單解析器
@@ -25,22 +25,16 @@ export const hsbcTwParser: BillEmailParser = {
       amount,
       minimumPayment: extractMinimumPayment(text, amount),
       dueDate,
-      billingPeriod: `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`,
+      billingPeriod: dueDate.slice(0, 7),
     }
   },
 }
 
 /** 第一個 YYYY/MM/DD（西元年格式） */
-function extractDueDate(text: string): Date | null {
+function extractDueDate(text: string): string | null {
   const match = text.match(/(\d{4})\/(\d{2})\/(\d{2})/)
   if (!match) return null
-  const date = new Date(
-    parseInt(match[1]),
-    parseInt(match[2]) - 1,
-    parseInt(match[3]),
-  )
-  if (!isNaN(date.getTime()) && date.getFullYear() >= 2020) return date
-  return null
+  return parseDate(match[1], match[2], match[3])
 }
 
 /**

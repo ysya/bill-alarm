@@ -3,16 +3,14 @@ import { createEvents, type EventAttributes, type DateArray } from 'ics'
 import prisma from '@/prisma.js'
 import { getSetting, KEYS } from '@/services/settings.js'
 import { BillStatus } from '@bill-alarm/shared/types'
+import { formatAmount } from '@bill-alarm/shared/format'
 import { getAuthUser } from './auth.js'
 
 const app = new Hono()
 
-function formatAmount(amount: number): string {
-  return `NT$ ${amount.toLocaleString('zh-TW')}`
-}
-
-function dateToArray(d: Date): DateArray {
-  return [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()]
+function dateToArray(ymd: string): DateArray {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return [y, m, d]
 }
 
 function newFeedToken(): string {

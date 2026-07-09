@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setupTestDb } from './helpers/test-db.js'
+import { todayYMD, addDaysYMD } from '@bill-alarm/shared/date'
 
 setupTestDb()
 process.env.LOG_LEVEL = 'silent'
@@ -33,11 +34,8 @@ async function seedUserWithDueBill(username: string, chatId: string | null, dele
   const bank = await prisma.bank.create({
     data: { name: `${username}-bank`, emailSenderPattern: 'x@x', emailSubjectPattern: 'b', userId: user.id },
   })
-  const due = new Date()
-  due.setHours(0, 0, 0, 0)
-  due.setDate(due.getDate() + 3)
   const bill = await prisma.bill.create({
-    data: { bankId: bank.id, billingPeriod: '2026-07', amount: 100, dueDate: due },
+    data: { bankId: bank.id, billingPeriod: '2026-07', amount: 100, dueDate: addDaysYMD(todayYMD(), 3) },
   })
   await prisma.notificationRule.create({
     data: { name: 'r', daysBefore: 3, timeOfDay: '09:00', channels: JSON.stringify(['telegram']), userId: user.id },

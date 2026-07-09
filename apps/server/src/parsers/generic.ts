@@ -44,7 +44,7 @@ function extractAmount(text: string): number | null {
   return null
 }
 
-function extractDueDate(text: string): Date | null {
+function extractDueDate(text: string): string | null {
   const patterns: Array<{ re: RegExp; groups: [number, number, number] }> = [
     { re: /(?:繳款截止日|繳費期限|最後繳款日|繳款期限|Payment\s*Due\s*Date)[：:\s]*(\d{4})[./\-](\d{1,2})[./\-](\d{1,2})/, groups: [1, 2, 3] },
     { re: /(?:繳款截止日|繳費期限|最後繳款日|繳款期限)[：:\s]*(\d{2,3})[./\-](\d{1,2})[./\-](\d{1,2})/, groups: [1, 2, 3] },

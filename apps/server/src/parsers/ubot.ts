@@ -33,7 +33,7 @@ function extractAmount(text: string): number | null {
   return null
 }
 
-function extractDueDate(text: string): Date | null {
+function extractDueDate(text: string): string | null {
   // 標題下方的第一個民國年日期為繳款截止日
   const match = text.match(/消費帳單[：:]\n[\d,]+\s+[\d,]+\n(\d{3})\/(\d{2})\/(\d{2})/)
   if (match) return parseDate(match[1], match[2], match[3])

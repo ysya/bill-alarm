@@ -10,7 +10,7 @@ export type NotificationChannel = 'telegram' | 'calendar'
 export interface ParsedBill {
   amount: number
   minimumPayment?: number
-  dueDate: Date
+  dueDate: string // 'YYYY-MM-DD'
   billingPeriod: string
 }
 

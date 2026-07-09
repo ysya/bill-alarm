@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { setupTestDb } from '../../services/__tests__/helpers/test-db.js'
+import { todayYMD } from '@bill-alarm/shared/date'
 
 setupTestDb()
 process.env.LOG_LEVEL = 'silent'
@@ -95,7 +96,7 @@ describe('tenant isolation — bills', () => {
       data: { name: 'B-Bank', emailSenderPattern: 'b@b', emailSubjectPattern: 'bill', userId: bossUser!.id },
     })
     const bill = await prisma.bill.create({
-      data: { bankId: bank.id, billingPeriod: '2026-07', amount: 1234, dueDate: new Date() },
+      data: { bankId: bank.id, billingPeriod: '2026-07', amount: 1234, dueDate: todayYMD() },
     })
     bossBillId = bill.id
     expect(bossBillId).toBeTruthy()

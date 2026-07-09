@@ -56,7 +56,7 @@ function toAmount(result: RuleResult): number | null {
   return Number.isFinite(v) ? v : null
 }
 
-function toDate(type: FieldType, result: RuleResult): Date | null {
+function toYMD(type: FieldType, result: RuleResult): string | null {
   const m = result.match
   if (type === 'rocDate' || type === 'adDate') return parseDate(m[1], m[2], m[3])
   return null
@@ -102,12 +102,12 @@ export function parseWithTemplateDetailed(
 
   // dueDate
   const dueRes = extractByRule(text, config.dueDate)
-  let dueDate: Date | null = null
+  let dueDate: string | null = null
   if (!dueRes) {
     errors.dueDate = `找不到關鍵字「${config.dueDate.keyword}」後的第 ${config.dueDate.nth ?? 1} 個日期`
   } else {
     matches.dueDate = dueRes.info
-    dueDate = toDate(config.dueDate.type, dueRes)
+    dueDate = toYMD(config.dueDate.type, dueRes)
     if (!dueDate) errors.dueDate = `匹配到的值「${dueRes.info.value}」無法解析為日期`
   }
 

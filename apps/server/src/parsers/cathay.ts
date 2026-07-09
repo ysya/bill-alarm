@@ -35,7 +35,7 @@ function extractAmount(text: string): number | null {
   return null
 }
 
-function extractDueDate(text: string): Date | null {
+function extractDueDate(text: string): string | null {
   // 日期區塊：結帳日後下一行為繳款截止日（民國年）
   const match = text.match(/\d{3}\/\d{2}\/\d{2}\n(\d{3})\/(\d{2})\/(\d{2})/)
   if (match) return parseDate(match[1], match[2], match[3])

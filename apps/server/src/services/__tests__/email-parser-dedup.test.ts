@@ -24,7 +24,7 @@ describe('scan dedup guards', () => {
         bankId,
         billingPeriod: '2026-05',
         amount: 7100,
-        dueDate: new Date('2026-06-08'),
+        dueDate: '2026-06-08',
         sourceEmailId: '46567',
       },
     })
@@ -40,11 +40,11 @@ describe('scan dedup guards', () => {
 
   it('duplicateBillExists: true for same bank+amount+dueDate even with different period', async () => {
     // 滙豐案例：provider 遷移後同帳單換了 msgId，只有這道防線擋得住
-    expect(await duplicateBillExists(bankId, 7100, new Date('2026-06-08'))).toBe(true)
+    expect(await duplicateBillExists(bankId, 7100, '2026-06-08')).toBe(true)
   })
 
   it('duplicateBillExists: false when amount differs', async () => {
-    expect(await duplicateBillExists(bankId, 9999, new Date('2026-06-08'))).toBe(false)
+    expect(await duplicateBillExists(bankId, 9999, '2026-06-08')).toBe(false)
   })
 
   it('emailAlreadyProcessed: IMAP UIDs are per-mailbox — another user with the same UID is not suppressed', async () => {
@@ -69,7 +69,7 @@ describe('scan dedup guards', () => {
         bankId: bankA.id,
         billingPeriod: '2026-05',
         amount: 3200,
-        dueDate: new Date('2026-06-10'),
+        dueDate: '2026-06-10',
         sourceEmailId: '12345',
       },
     })

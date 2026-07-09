@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai'
 import { getSetting, KEYS } from './settings.js'
+import { deriveBillingPeriod, isValidYMD } from '@bill-alarm/shared/date'
 import type { ParsedBill } from '@bill-alarm/shared/types'
 import type { FieldRule, FieldType } from '@bill-alarm/shared/template-parser'
 
@@ -221,23 +222,15 @@ export function parseBillResponse(raw: string): ParsedBill | null {
   if (!raw) return null
   try {
     const data = JSON.parse(raw)
-    if (data.amount == null || !data.dueDate) return null
+    if (data.amount == null || typeof data.dueDate !== 'string') return null
 
-    const dueDate = new Date(data.dueDate)
-    if (isNaN(dueDate.getTime())) return null
+    const dueDate = data.dueDate.trim()
+    if (!isValidYMD(dueDate)) return null
 
-    let billingPeriod: string
-    if (typeof data.billingPeriod === 'string' && /^\d{4}-\d{2}$/.test(data.billingPeriod)) {
-      billingPeriod = data.billingPeriod
-    } else {
-      // Derive previous month from due date; month arithmetic only, so
-      // end-of-month dates (29-31) can't overflow into the wrong month.
-      const y = dueDate.getUTCFullYear()
-      const m = dueDate.getUTCMonth() // 0-based; equals previous month in 1-based terms
-      const prevYear = m === 0 ? y - 1 : y
-      const prevMonth = m === 0 ? 12 : m
-      billingPeriod = `${prevYear}-${String(prevMonth).padStart(2, '0')}`
-    }
+    const billingPeriod =
+      typeof data.billingPeriod === 'string' && /^\d{4}-\d{2}$/.test(data.billingPeriod)
+        ? data.billingPeriod
+        : deriveBillingPeriod(dueDate)
 
     return {
       amount: Math.round(data.amount),

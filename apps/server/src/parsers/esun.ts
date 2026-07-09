@@ -47,7 +47,7 @@ function extractAmount(text: string): number | null {
   return null
 }
 
-function extractDueDate(text: string): Date | null {
+function extractDueDate(text: string): string | null {
   const patterns = [
     // N,NNN 元 後的民國年日期
     /(?:[\d,]+\s*元\n)([\d,]+)\s*元\n(\d{2,3})[./\-](\d{1,2})[./\-](\d{1,2})/,

@@ -45,7 +45,7 @@ function extractAmount(text: string): number | null {
   return null
 }
 
-function extractDueDate(text: string): Date | null {
+function extractDueDate(text: string): string | null {
   // 繳款截止日\t115/04/13
   const match = text.match(/繳款截止日\s+(\d{2,3})\/(\d{2})\/(\d{2})/)
   if (match) {

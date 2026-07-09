@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { setupTestDb } from '../../services/__tests__/helpers/test-db.js'
+import { todayYMD } from '@bill-alarm/shared/date'
 
 setupTestDb()
 process.env.LOG_LEVEL = 'silent'
@@ -86,7 +87,7 @@ describe('users management', () => {
       data: { name: 'KidBank', emailSenderPattern: 'x@x', emailSubjectPattern: 'b', userId: kid!.id },
     })
     const bill = await prisma.bill.create({
-      data: { bankId: bank.id, billingPeriod: '2026-07', amount: 42, dueDate: new Date() },
+      data: { bankId: bank.id, billingPeriod: '2026-07', amount: 42, dueDate: todayYMD() },
     })
     await prisma.notificationLog.create({
       data: { billId: bill.id, channel: 'telegram', message: 'x', success: true },

@@ -46,7 +46,7 @@ function extractAmount(text: string): number | null {
   return null
 }
 
-function extractDueDate(text: string): Date | null {
+function extractDueDate(text: string): string | null {
   const patterns = [
     // 表頭：115/04/08 後接金額行
     /(\d{3})\/(\d{2})\/(\d{2})\n[\d,]+\n[\d,]+\n/,

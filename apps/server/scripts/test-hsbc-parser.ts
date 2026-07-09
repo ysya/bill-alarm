@@ -31,11 +31,7 @@ for (const exp of expected) {
   }
 
   const result = hsbcParser.parse(text)
-  // Use local date string (not UTC) to avoid timezone shift
-  const d = result?.dueDate
-  const dueStr = d
-    ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    : null
+  const dueStr = result?.dueDate ?? null
 
   const checks = [
     { field: 'amount', got: result?.amount, want: exp.amount },

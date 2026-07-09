@@ -13,6 +13,7 @@ import { getSetting, KEYS } from './settings.js'
 import { scanEvents } from './scan-events.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus, type ParsedBill } from '@bill-alarm/shared/types'
+import { daysUntil } from '@bill-alarm/shared/date'
 import type { ScanError, ScanItemStatus } from '@bill-alarm/shared/scan'
 
 export type { ScanError }
@@ -42,9 +43,7 @@ function sanityCheck(parsed: ParsedBill): string | null {
   if (parsed.minimumPayment != null && parsed.minimumPayment > Math.abs(parsed.amount)) {
     return '最低應繳超過本期應繳總額'
   }
-  const now = Date.now()
-  const diff = parsed.dueDate.getTime() - now
-  const days = diff / (1000 * 60 * 60 * 24)
+  const days = daysUntil(parsed.dueDate)
   if (days < -90) return '繳款截止日在過去 90 天以前'
   if (days > 90) return '繳款截止日超過未來 90 天'
   return null
@@ -57,7 +56,7 @@ export async function emailAlreadyProcessed(msgId: string, userId: string): Prom
 
 /** True if a bill with the same bank/amount/dueDate exists — catches the same
  *  statement re-ingested under a different email ID (e.g. provider migration). */
-export async function duplicateBillExists(bankId: string, amount: number, dueDate: Date): Promise<boolean> {
+export async function duplicateBillExists(bankId: string, amount: number, dueDate: string): Promise<boolean> {
   return (await prisma.bill.count({ where: { bankId, amount, dueDate } })) > 0
 }
 

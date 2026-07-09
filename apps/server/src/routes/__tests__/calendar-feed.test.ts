@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { setupTestDb } from '../../services/__tests__/helpers/test-db.js'
+import { todayYMD, addDaysYMD } from '@bill-alarm/shared/date'
 
 setupTestDb()
 process.env.LOG_LEVEL = 'silent'
@@ -41,7 +42,7 @@ describe('per-user calendar feed', () => {
       data: { name: 'BossBank', emailSenderPattern: 'x@x', emailSubjectPattern: 'b', userId: bossUser!.id },
     })
     await prisma.bill.create({
-      data: { bankId: bossBank.id, billingPeriod: '2026-07', amount: 500, dueDate: new Date(Date.now() + 86400000) },
+      data: { bankId: bossBank.id, billingPeriod: '2026-07', amount: 500, dueDate: addDaysYMD(todayYMD(), 1) },
     })
 
     const bossFeed = await app.request(`/api/calendar/feed/${bossInfo.token}.ics`)

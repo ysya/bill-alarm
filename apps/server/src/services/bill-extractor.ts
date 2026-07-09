@@ -27,7 +27,7 @@ export function extractBillFromText(
       source,
       bankCode,
       amount: bill.amount,
-      dueDate: bill.dueDate.toISOString().split('T')[0],
+      dueDate: bill.dueDate,
     },
     'Bill parsed successfully',
   )
