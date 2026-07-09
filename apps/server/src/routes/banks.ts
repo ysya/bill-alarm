@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import prisma from '@/prisma.js'
 import { BANK_PRESETS } from '@bill-alarm/shared/constants'
+import { templateParserConfigSchema } from '@bill-alarm/shared/template-parser'
 import { getAuthUser } from './auth.js'
 
 const app = new Hono()
@@ -78,6 +79,16 @@ app.patch('/:id', zValidator('json', z.object({
   const existing = await prisma.bank.findFirst({ where: { id: c.req.param('id'), userId } })
   if (!existing) return c.json({ error: 'Not found' }, 404)
   const data = c.req.valid('json')
+  if (typeof data.parserConfig === 'string') {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(data.parserConfig)
+    } catch {
+      return c.json({ error: 'parserConfig 不是合法 JSON' }, 400)
+    }
+    const check = templateParserConfigSchema.safeParse(parsed)
+    if (!check.success) return c.json({ error: `parserConfig 格式錯誤：${check.error.issues[0]?.message}` }, 400)
+  }
   if (data.bankAccountId) {
     const account = await prisma.bankAccount.findFirst({ where: { id: data.bankAccountId, userId } })
     if (!account) return c.json({ error: '找不到帳戶' }, 404)

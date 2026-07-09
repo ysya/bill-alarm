@@ -18,7 +18,7 @@ import { sendTestMessage, isConfigured as telegramConfigured } from '@/services/
 import { getAuthUser } from './auth.js'
 import { listParserCodes } from '@/parsers/registry.js'
 import { parseWithTemplateDetailed } from '@/parsers/template.js'
-import type { TemplateParserConfig } from '@bill-alarm/shared/template-parser'
+import { templateParserConfigSchema } from '@bill-alarm/shared/template-parser'
 
 const app = new Hono()
 
@@ -302,22 +302,12 @@ app.post('/parser/test-text', async (c) => {
 })
 
 // Test a template config inline (not stored) against provided text
-const fieldRuleSchema = z.object({
-  keyword: z.string().min(1),
-  type: z.enum(['amount', 'rocDate', 'adDate', 'yearMonth']),
-  nth: z.number().int().positive().optional(),
-})
 app.post('/parser/test-template', zValidator('json', z.object({
   text: z.string().min(1),
-  config: z.object({
-    amount: fieldRuleSchema,
-    dueDate: fieldRuleSchema,
-    minimumPayment: fieldRuleSchema.optional(),
-    billingPeriod: fieldRuleSchema.optional(),
-  }),
+  config: templateParserConfigSchema,
 })), async (c) => {
   const { text, config } = c.req.valid('json')
-  const detail = parseWithTemplateDetailed(text, config as TemplateParserConfig)
+  const detail = parseWithTemplateDetailed(text, config)
 
   return c.json({
     success: !!detail.bill,
