@@ -79,9 +79,9 @@ export function startScheduler() {
     await setSetting(KEYS.LAST_SCAN_AT, new Date().toISOString())
   })
 
-  // Process reminders daily at 00:05
-  cron.schedule('5 0 * * *', async () => {
-    logger.info('Processing reminder rules...')
+  // Process reminders every 15 minutes (honors each rule's timeOfDay)
+  cron.schedule('*/15 * * * *', async () => {
+    logger.debug('Processing reminder rules...')
     try {
       await processReminderRules()
       await processOverdueBills()

@@ -43,22 +43,27 @@ export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
   logger.info({ bank: bank.name, ok: r.ok }, 'Telegram notification sent')
 }
 
-export async function processReminderRules(): Promise<void> {
+/** Runs on a 15-minute tick. A rule fires once per day, at the first tick
+ *  at/after its timeOfDay — so a missed tick (deploy, downtime) self-heals
+ *  on the next one, and bills scanned in after the hour still remind today. */
+export async function processReminderRules(now: Date = new Date()): Promise<void> {
   const rules = await prisma.notificationRule.findMany({
     where: { isActive: true, user: { deletedAt: null } },
   })
-  logger.info({ ruleCount: rules.length }, 'Processing reminder rules')
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  logger.debug({ ruleCount: rules.length }, 'Processing reminder rules')
+  const today = todayYMD(now)
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const todayStart = new Date(now)
+  todayStart.setHours(0, 0, 0, 0)
 
   for (const rule of rules) {
-    const targetYMD = addDaysYMD(todayYMD(), rule.daysBefore)
+    if (hhmm < rule.timeOfDay) continue // not yet time today (string compare works for HH:mm)
 
     const bills = await prisma.bill.findMany({
       where: {
         status: BillStatus.PENDING,
         bank: { userId: rule.userId },
-        dueDate: targetYMD,
+        dueDate: addDaysYMD(today, rule.daysBefore),
       },
       include: { bank: true },
     })
@@ -68,17 +73,8 @@ export async function processReminderRules(): Promise<void> {
     for (const bill of bills) {
       if (bill.bank.autoDebit) continue
 
-      const todayStart = new Date(today)
-      const todayEnd = new Date(today)
-      todayEnd.setDate(todayEnd.getDate() + 1)
-
       const alreadySent = await prisma.notificationLog.findFirst({
-        where: {
-          billId: bill.id,
-          ruleId: rule.id,
-          sentAt: { gte: todayStart, lt: todayEnd },
-          success: true,
-        },
+        where: { billId: bill.id, ruleId: rule.id, sentAt: { gte: todayStart }, success: true },
       })
       if (alreadySent) continue
 
