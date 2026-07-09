@@ -19,7 +19,7 @@ export type ScanUser = { id: string } & MailboxOwner
 
 export interface ScanResult {
   scanned: number
-  newBills: Array<{ bill: Bill; bank: Bank }>
+  newBills: Array<{ bill: Bill; bank: Bank; warning?: string }>
   errors: ScanError[]
 }
 
@@ -240,7 +240,7 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
           })
 
           logger.info({ bank: bank.name, amount: parsed.amount, dueDate: parsed.dueDate }, 'New bill created')
-          result.newBills.push({ bill, bank })
+          result.newBills.push({ bill, bank, warning: sanityErr ?? undefined })
           if (progressStatus !== 'error') progressStatus = 'success'
         } catch (e) {
           const msg = (e as Error).message ?? String(e)

@@ -18,7 +18,7 @@ async function logNotification(
   })
 }
 
-export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
+export async function processNewBill(bill: Bill, bank: Bank, warning?: string): Promise<void> {
   logger.info({ bank: bank.name, amount: bill.amount }, 'Processing new bill notifications')
 
   if (bill.status === BillStatus.NO_PAYMENT) {
@@ -38,7 +38,7 @@ export async function processNewBill(bill: Bill, bank: Bank): Promise<void> {
     return
   }
 
-  const r = await sendNewBillAlert(bill, bank)
+  const r = await sendNewBillAlert(bill, bank, warning)
   await logNotification(bill.id, null, 'telegram', '新帳單通知', r.ok, r.error)
   logger.info({ bank: bank.name, ok: r.ok }, 'Telegram notification sent')
 }

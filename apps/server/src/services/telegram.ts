@@ -105,7 +105,7 @@ export async function getUpdates(): Promise<TgUpdate[]> {
   }
 }
 
-export async function sendNewBillAlert(bill: Bill, bank: Bank): Promise<SendOutcome> {
+export async function sendNewBillAlert(bill: Bill, bank: Bank, warning?: string): Promise<SendOutcome> {
   const days = daysUntil(bill.dueDate)
   const usedLlm = bill.parseSource === 'llm'
 
@@ -118,6 +118,11 @@ export async function sendNewBillAlert(bill: Bill, bank: Bank): Promise<SendOutc
   if (bill.minimumPayment) lines.push(`📉 最低應繳：${formatAmount(bill.minimumPayment)}`)
   lines.push(`📅 截止日：${formatYMD(bill.dueDate)}`)
   lines.push(`⏰ 還有 ${days} 天`)
+
+  if (warning) {
+    lines.push('')
+    lines.push(`⚠️ 解析結果異常（${warning}），請核對後再繳費。`)
+  }
 
   if (usedLlm) {
     const baseUrl = await getSetting(KEYS.APP_BASE_URL)

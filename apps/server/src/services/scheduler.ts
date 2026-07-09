@@ -54,9 +54,9 @@ export function startScheduler() {
         logger.info({ user: user.username, scanned: result.scanned, newBills: result.newBills.length }, 'Email scan complete')
 
         const notifyErrors = []
-        for (const { bill, bank } of result.newBills) {
+        for (const { bill, bank, warning } of result.newBills) {
           try {
-            await processNewBill(bill, bank)
+            await processNewBill(bill, bank, warning)
           } catch (e) {
             notifyErrors.push({
               stage: 'notification' as const,
@@ -77,7 +77,7 @@ export function startScheduler() {
       }
     }
     await setSetting(KEYS.LAST_SCAN_AT, new Date().toISOString())
-  })
+  }, { timezone: 'Asia/Taipei' })
 
   // Process reminders every 15 minutes (honors each rule's timeOfDay)
   cron.schedule('*/15 * * * *', async () => {
@@ -89,7 +89,7 @@ export function startScheduler() {
     } catch (err) {
       logger.error(err, 'Reminder processing failed')
     }
-  })
+  }, { timezone: 'Asia/Taipei' })
 
   logger.info('Cron jobs started')
 }

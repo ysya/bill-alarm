@@ -35,9 +35,9 @@ app.post('/email/scan', async (c) => {
 
     // Send notifications for new bills
     const notifyErrors: ScanError[] = []
-    for (const { bill, bank } of result.newBills) {
+    for (const { bill, bank, warning } of result.newBills) {
       try {
-        await processNewBill(bill, bank)
+        await processNewBill(bill, bank, warning)
       } catch (e) {
         notifyErrors.push({
           stage: 'notification',

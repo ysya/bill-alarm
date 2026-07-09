@@ -41,6 +41,7 @@ COPY --from=web-builder /app/apps/web/.output/public /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/http.d/default.conf
 
 ENV NODE_ENV=production
+ENV TZ=Asia/Taipei
 ENV DATA_DIR=/app/data
 ENV DATABASE_URL=file:/app/data/bill-alarm.db
 
