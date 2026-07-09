@@ -236,7 +236,7 @@ app.get('/:id/pdf', async (c) => {
     const encrypted = await fs.readFile(filePath)
     const password = bill.bank.pdfPassword || undefined
     const decrypted = await decryptPdf(encrypted, password)
-    return new Response(decrypted, {
+    return new Response(new Uint8Array(decrypted), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${path.basename(bill.pdfPath)}"`,

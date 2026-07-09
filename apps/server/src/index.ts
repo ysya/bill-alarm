@@ -37,11 +37,33 @@ export const logger = pino({
 
 const app = new Hono()
 
+// hono-pino@0.10.3's onResMessage only ever receives `c` (confirmed against
+// node_modules/hono-pino/dist/index.d.ts + dist/index.js — it calls
+// `opts.http.onResMessage(c)`, no 2nd/3rd arg). The previous 3-arg
+// `(c, _logger, rt)` signature never matched that, so `rt` was always
+// `undefined` and the "NNms" suffix never actually appeared. Track our own
+// start time so the intended "METHOD /path STATUS NNms" format works.
+const requestStartTimes = new WeakMap<Request, number>()
+app.use(async (c, next) => {
+  requestStartTimes.set(c.req.raw, performance.now())
+  await next()
+})
+
 app.use(pinoLogger({
   pino: logger,
   http: {
-    onResMessage: (c, _logger, rt) => `${c.req.method} ${c.req.path} ${c.res.status}${rt != null ? ` ${rt}ms` : ''}`,
-    reqId: () => undefined as unknown as string,
+    onResMessage: (c) => {
+      const start = requestStartTimes.get(c.req.raw)
+      const rt = start != null ? Math.round(performance.now() - start) : null
+      return `${c.req.method} ${c.req.path} ${c.res.status}${rt != null ? ` ${rt}ms` : ''}`
+    },
+    // `reqId` is typed `false | (() => string)` — `false` genuinely disables it.
+    // The old `() => undefined as unknown as string` cast didn't actually suppress
+    // anything at runtime: hono-pino does `reqId?.() ?? autoIncrement()`, so an
+    // `undefined` return still fell through to the auto-incrementing id. It only
+    // ever *looked* suppressed because pino-pretty's `ignore: '...,reqId,...'`
+    // (below) hides the field from output either way.
+    reqId: false,
   },
 }))
 app.use('/api/*', cors())

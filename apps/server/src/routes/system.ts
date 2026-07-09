@@ -167,7 +167,7 @@ app.get('/email/search', async (c) => {
   const me = await currentUser(c)
   const provider = me ? getEmailProviderFor(me) : null
   if (!provider) return c.json({ error: 'Email provider not configured' }, 400)
-  const refs = await provider.search({ query: q, sinceDays: 30, maxResults: max })
+  const refs = await provider.withSession((session) => session.search({ query: q, sinceDays: 30, maxResults: max }))
   return c.json({ query: q, count: refs.length, messageIds: refs.map((r) => r.id) })
 })
 
@@ -176,7 +176,7 @@ app.get('/email/message/:id', async (c) => {
   const me = await currentUser(c)
   const provider = me ? getEmailProviderFor(me) : null
   if (!provider) return c.json({ error: 'Email provider not configured' }, 400)
-  const email = await provider.fetch({ id: c.req.param('id') })
+  const email = await provider.fetchOne(c.req.param('id'))
   if (!email) return c.json({ error: 'Email not found' }, 404)
   return c.json({
     id: email.id,
@@ -199,7 +199,7 @@ app.get('/email/message/:id/parse', async (c) => {
   const me = await currentUser(c)
   const provider = me ? getEmailProviderFor(me) : null
   if (!provider) return c.json({ error: 'Email provider not configured' }, 400)
-  const email = await provider.fetch({ id: c.req.param('id') })
+  const email = await provider.fetchOne(c.req.param('id'))
   if (!email) return c.json({ error: 'Email not found' }, 404)
 
   const pdfBuffers = await getPdfBuffers(email.attachments)

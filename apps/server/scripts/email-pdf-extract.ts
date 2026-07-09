@@ -1,5 +1,5 @@
 /**
- * 開發用腳本：從 Gmail 搜尋帳單信件，擷取 PDF 文字並存檔。
+ * 開發用腳本：從 Gmail (IMAP) 搜尋帳單信件，擷取 PDF 文字並存檔。
  *
  * 用法：
  *   cd apps/server
@@ -16,6 +16,12 @@
  *   # 存檔到指定目錄
  *   npx tsx scripts/email-pdf-extract.ts -q "from:hsbc" -p YOUR_PASSWORD --out ./tmp
  *
+ * `--query` 模式需要 IMAP 帳密（本 app 目前採每使用者存於 DB 的信箱設定，
+ * 這支獨立腳本沒有登入狀態，改用環境變數 —— 可寫在 apps/server/.env）：
+ *   IMAP_HOST（預設 imap.gmail.com）、IMAP_PORT（預設 993）、
+ *   IMAP_USER、IMAP_PASSWORD（Gmail 需使用應用程式密碼）
+ * `--file` 模式完全不需要這些變數。
+ *
  * 輸出：
  *   - 終端印出 PDF 全文
  *   - 如果有 --out，會將 PDF 和文字檔存到該目錄
@@ -24,7 +30,7 @@ import 'dotenv/config'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
-import { getConnectionStatus, searchEmails, getEmailWithAttachments } from '../src/services/gmail.js'
+import { getEmailProviderFor } from '../src/services/email/index.js'
 import { extractPdfText, getPdfBuffers } from '../src/services/pdf-parser.js'
 
 const { values } = parseArgs({
@@ -79,30 +85,50 @@ async function handleLocalFile(filePath: string, password?: string, outDir?: str
 
 // ─── Gmail 搜尋模式 ──────────────────────────────────────────────
 async function handleGmailSearch(query: string, password?: string, outDir?: string, limit = 5) {
-  // 1. 檢查連線
-  const status = await getConnectionStatus()
-  if (!status.connected) {
-    console.error(`Gmail 未連線: ${status.message}`)
-    console.error('\n請先啟動 app 並在設定頁面完成 Google OAuth 授權。')
+  // 0. 讀取 IMAP 帳密（獨立腳本沒有登入狀態，改用環境變數）
+  const imapUser = process.env.IMAP_USER
+  const imapPassword = process.env.IMAP_PASSWORD
+  if (!imapUser || !imapPassword) {
+    console.error('缺少 IMAP_USER / IMAP_PASSWORD 環境變數，請先設定後再執行（可寫在 apps/server/.env）。')
     process.exit(1)
   }
-  console.log(`Gmail 已連線: ${status.message}`)
+  const provider = getEmailProviderFor({
+    imapHost: process.env.IMAP_HOST || 'imap.gmail.com',
+    imapPort: Number(process.env.IMAP_PORT) || 993,
+    imapUser,
+    imapPassword,
+  })
+  if (!provider) {
+    // 理論上不會發生（上面已檢查過 imapUser/imapPassword），但
+    // getEmailProviderFor 的型別是 EmailProvider | null，明確處理而非斷言。
+    console.error('缺少 IMAP_USER / IMAP_PASSWORD 環境變數，請先設定後再執行。')
+    process.exit(1)
+  }
+
+  // 1. 檢查連線
+  const status = await provider.verify()
+  if (!status.ok) {
+    console.error(`Gmail 未連線: ${status.error}`)
+    console.error('\n請確認 IMAP_USER / IMAP_PASSWORD 是否正確（Gmail 需使用應用程式密碼）。')
+    process.exit(1)
+  }
+  console.log(`Gmail 已連線: ${status.email}`)
 
   // 2. 搜尋
   console.log(`\n搜尋: ${query}`)
-  const messageIds = await searchEmails(query, limit)
-  console.log(`找到 ${messageIds.length} 封信件\n`)
+  const refs = await provider.withSession((session) => session.search({ query, sinceDays: 30, maxResults: limit }))
+  console.log(`找到 ${refs.length} 封信件\n`)
 
-  if (messageIds.length === 0) return
+  if (refs.length === 0) return
 
   if (outDir) await fs.mkdir(outDir, { recursive: true })
 
   // 3. 逐封處理
-  for (let i = 0; i < messageIds.length; i++) {
-    const email = await getEmailWithAttachments(messageIds[i])
+  for (let i = 0; i < refs.length; i++) {
+    const email = await provider.fetchOne(refs[i].id)
     if (!email) continue
 
-    console.log(`[${i + 1}/${messageIds.length}] ${email.subject}`)
+    console.log(`[${i + 1}/${refs.length}] ${email.subject}`)
     console.log(`  From: ${email.from}`)
     console.log(`  Date: ${email.date.toISOString()}`)
     console.log(`  Attachments: ${email.attachments.map(a => a.filename).join(', ') || '(none)'}`)
