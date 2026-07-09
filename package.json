@@ -12,18 +12,6 @@
     "release": "release-it"
   },
   "packageManager": "pnpm@10.33.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@parcel/watcher",
-      "@prisma/engines",
-      "better-sqlite3",
-      "esbuild",
-      "prisma",
-      "protobufjs",
-      "unrs-resolver",
-      "vue-demi"
-    ]
-  },
   "devDependencies": {
     "release-it": "^19.2.4",
     "turbo": "^2.9.0"
