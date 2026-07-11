@@ -33,6 +33,7 @@
     "@unocss/reset": "^66.6.7",
     "@vite-pwa/assets-generator": "^1.0.2",
     "@vite-pwa/nuxt": "^1.1.1",
+    "eslint": "^10.6.0",
     "shadcn-nuxt": "^2.4.3",
     "typescript": "^6.0.2",
     "unocss": "^66.6.7",
