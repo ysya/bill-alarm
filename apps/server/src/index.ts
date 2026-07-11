@@ -22,6 +22,7 @@ import authRoutes, { authGuard } from './routes/auth.js'
 import userRoutes from './routes/users.js'
 import { startScheduler } from './services/scheduler.js'
 import { encryptionEnabled } from './services/secrets.js'
+import { getAppVersion } from './version.js'
 
 const isDev = process.env.NODE_ENV !== 'production'
 
@@ -93,7 +94,7 @@ app.use('/api/*', bodyLimit({ maxSize: 25 * 1024 * 1024, onError: (c) => c.json(
 app.use('/api/*', authGuard)
 
 // API routes
-app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }))
+app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString(), version: getAppVersion() }))
 app.route('/api/auth', authRoutes)
 app.route('/api/users', userRoutes)
 app.route('/api/banks', bankRoutes)

@@ -9,9 +9,17 @@
     >
       <!-- Desktop Sidebar -->
       <aside class="hidden md:flex w-60 flex-col border-r border-border min-h-screen p-4 gap-2">
-        <h1 class="text-lg font-bold px-3 py-2 mb-4">
-          Bill Alarm
-        </h1>
+        <div class="px-3 py-2 mb-4">
+          <h1 class="text-lg font-bold">
+            Bill Alarm
+          </h1>
+          <p
+            v-if="version"
+            class="text-xs text-muted-foreground mt-0.5"
+          >
+            v{{ version }}
+          </p>
+        </div>
         <NuxtLink
           v-for="item in navItems"
           :key="item.to"
@@ -68,6 +76,9 @@ watch(bareShell, (bare) => {
 })
 
 const navItems = useNavItems()
+
+const { version, fetchVersion } = useAppVersion()
+onMounted(fetchVersion)
 
 const pageTitle = computed(() => {
   const hit = navItems.value.find(item =>

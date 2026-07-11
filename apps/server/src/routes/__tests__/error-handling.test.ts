@@ -37,6 +37,17 @@ describe('global error handler', () => {
   })
 })
 
+describe('health endpoint', () => {
+  it('is public and reports status + a version string', async () => {
+    const res = await app.request('/api/health')
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.status).toBe('ok')
+    expect(typeof body.version).toBe('string')
+    expect(body.version.length).toBeGreaterThan(0)
+  })
+})
+
 describe('setup race guard', () => {
   it('setup after an admin already exists returns 403 (existing pre-check semantics)', async () => {
     // The module-level `setup` call above already created the one-and-only admin.
