@@ -1,6 +1,6 @@
 import type { ConfigStatus, EmailStatus } from '~/types/settings'
 import type { ScanError, ScanErrorStage, ScanLogDTO } from '@bill-alarm/shared/scan'
-import type { NotificationRuleDTO } from '@bill-alarm/shared/types'
+import type { NotificationPrefsDTO, OnboardingStatusDTO } from '@bill-alarm/shared/types'
 
 export type { ScanError, ScanErrorStage, ScanLogDTO }
 
@@ -12,21 +12,20 @@ export interface EmailConfigPayload {
 }
 
 export function useSettingsApi() {
-  const { get, post, patch, del } = useApi()
+  const { get, post, put, del } = useApi()
 
   return {
-    // Notification rules
-    listRules: () => get<NotificationRuleDTO[]>('/notification-rules'),
-    createRule: (data: {
-      name: string
-      daysBefore: number
-      timeOfDay: string
-      channels: string[]
-      isActive?: boolean
-    }) => post<NotificationRuleDTO>('/notification-rules', data),
-    updateRule: (id: string, data: Record<string, unknown>) =>
-      patch<NotificationRuleDTO>(`/notification-rules/${id}`, data),
-    deleteRule: (id: string) => del<{ success: boolean }>(`/notification-rules/${id}`),
+    // Notification preferences (single per-user panel)
+    getNotificationPrefs: () => get<NotificationPrefsDTO>('/notification-prefs'),
+    updateNotificationPrefs: (data: {
+      remindDays: number[]
+      remindTime: string
+      notifyNewBill: boolean
+      notifyOverdue: boolean
+    }) => put<NotificationPrefsDTO>('/notification-prefs', data),
+
+    // Setup progress (dashboard checklist + settings dependency hints)
+    getOnboardingStatus: () => get<OnboardingStatusDTO>('/onboarding-status'),
 
     // Email scan
     triggerScan: () => post<{ scanLogId?: string, scanned: number, newBills: number, errors: ScanError[] }>('/email/scan'),

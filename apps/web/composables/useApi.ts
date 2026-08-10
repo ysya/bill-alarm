@@ -23,6 +23,10 @@ export function useApi() {
     return apiFetch<T>(`${baseURL}${path}`, { method: 'POST', body })
   }
 
+  async function put<T>(path: string, body?: Record<string, unknown>): Promise<T> {
+    return apiFetch<T>(`${baseURL}${path}`, { method: 'PUT', body })
+  }
+
   async function patch<T>(path: string, body?: Record<string, unknown>): Promise<T> {
     return apiFetch<T>(`${baseURL}${path}`, { method: 'PATCH', body })
   }
@@ -31,5 +35,5 @@ export function useApi() {
     return apiFetch<T>(`${baseURL}${path}`, { method: 'DELETE' })
   }
 
-  return { get, post, patch, del }
+  return { get, post, put, patch, del }
 }

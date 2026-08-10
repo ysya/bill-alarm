@@ -5,8 +5,6 @@ export enum BillStatus {
   NO_PAYMENT = 'no_payment',
 }
 
-export type NotificationChannel = 'telegram' | 'calendar'
-
 export interface ParsedBill {
   amount: number
   minimumPayment?: number
@@ -90,14 +88,29 @@ export interface BankDTO {
   _count?: { bills: number }
 }
 
-/** API 回傳的通知規則 */
-export interface NotificationRuleDTO {
-  id: string
-  name: string
-  daysBefore: number
-  timeOfDay: string
-  channels: string[]
-  isActive: boolean
+/** 使用者名下帳單最近一次通知發送的結果（浮出靜默失敗用） */
+export interface LastDeliveryDTO {
+  sentAt: string
+  success: boolean
+  message: string
+  errorMessage?: string | null
+}
+
+/** GET/PUT /notification-prefs。lastDelivery 只在 GET 回應出現。 */
+export interface NotificationPrefsDTO {
+  remindDays: number[]
+  remindTime: string
+  notifyNewBill: boolean
+  notifyOverdue: boolean
+  lastDelivery?: LastDeliveryDTO | null
+}
+
+/** GET /onboarding-status — 儀表板設定進度卡 */
+export interface OnboardingStatusDTO {
+  emailConfigured: boolean
+  hasActiveBank: boolean
+  botConfigured: boolean
+  telegramBound: boolean
 }
 
 export interface BillBreakdownItem {

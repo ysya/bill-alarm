@@ -3,24 +3,19 @@ import { CalendarCheck, ChevronRight, Clock, KeyRound, LogOut, Mail, Send, Spark
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import type { NotificationRuleDTO, ConfigStatus, EmailStatus } from '~/types/settings'
+import type { NotificationPrefsDTO, OnboardingStatusDTO, ConfigStatus, EmailStatus } from '~/types/settings'
 import { LLM_PROVIDER_LABELS } from '~/types/settings'
 
 const settingsApi = useSettingsApi()
 const { me, isAdmin, logout } = useAuth()
 
-const rules = ref<NotificationRuleDTO[]>([])
+const prefs = ref<NotificationPrefsDTO | null>(null)
+const onboarding = ref<OnboardingStatusDTO | null>(null)
 const emailStatus = ref<EmailStatus | null>(null)
 const calendarFeed = ref<{ token: string, feedUrl: string, feedPath: string } | null>(null)
 const configStatus = ref<ConfigStatus | null>(null)
 const loading = ref(true)
 
-// Rule dialog state
-const dialogOpen = ref(false)
-const editingRule = ref<NotificationRuleDTO | null>(null)
-const deleteDialogOpen = ref(false)
-const deletingRule = ref<NotificationRuleDTO | null>(null)
-const submitting = ref(false)
 const changePwOpen = ref(false)
 
 type CardStatus = 'ok' | 'unset' | 'error'
@@ -48,12 +43,14 @@ const llmStatus = computed<{ status: CardStatus, text: string }>(() => {
 async function fetchSelfData() {
   loading.value = true
   try {
-    const [ruleList, email, calendar] = await Promise.all([
-      settingsApi.listRules(),
+    const [prefsData, onboardingData, email, calendar] = await Promise.all([
+      settingsApi.getNotificationPrefs(),
+      settingsApi.getOnboardingStatus(),
       settingsApi.getEmailStatus(true),
       settingsApi.getCalendarFeed(),
     ])
-    rules.value = ruleList
+    prefs.value = prefsData
+    onboarding.value = onboardingData
     emailStatus.value = email
     calendarFeed.value = calendar
   }
@@ -82,38 +79,6 @@ watch(isAdmin, (admin) => {
     fetchAdminData()
   }
 }, { immediate: true })
-
-function openCreateDialog() {
-  editingRule.value = null
-  dialogOpen.value = true
-}
-
-function openEditDialog(rule: NotificationRuleDTO) {
-  editingRule.value = rule
-  dialogOpen.value = true
-}
-
-function openDeleteDialog(rule: NotificationRuleDTO) {
-  deletingRule.value = rule
-  deleteDialogOpen.value = true
-}
-
-async function handleDelete() {
-  if (!deletingRule.value) return
-  submitting.value = true
-  try {
-    await settingsApi.deleteRule(deletingRule.value.id)
-    toast.success('通知規則已刪除')
-    deleteDialogOpen.value = false
-    await fetchSelfData()
-  }
-  catch (error) {
-    toast.error('刪除失敗', { description: String(error) })
-  }
-  finally {
-    submitting.value = false
-  }
-}
 </script>
 
 <template>
@@ -171,14 +136,20 @@ async function handleDelete() {
       </template>
     </section>
 
-    <!-- 通知規則（全員，自己的） -->
+    <!-- 通知設定（全員，自己的） -->
     <section>
-      <SettingsNotificationRuleList
-        :rules="rules"
-        :loading="loading"
-        @create="openCreateDialog"
-        @edit="openEditDialog"
-        @delete="openDeleteDialog"
+      <div
+        v-if="loading"
+        class="space-y-3"
+      >
+        <div class="h-40 animate-pulse rounded-xl bg-muted" />
+      </div>
+      <SettingsNotificationPrefsCard
+        v-else-if="prefs"
+        :prefs="prefs"
+        :bot-configured="onboarding?.botConfigured ?? false"
+        :telegram-bound="onboarding?.telegramBound ?? false"
+        :is-admin="isAdmin"
         @refresh="fetchSelfData"
       />
     </section>
@@ -289,38 +260,6 @@ async function handleDelete() {
       </Card>
     </section>
 
-    <!-- Dialogs（原內容不動） -->
-    <SettingsNotificationRuleDialog
-      :open="dialogOpen"
-      :editing-rule="editingRule"
-      @update:open="dialogOpen = $event"
-      @saved="fetchSelfData"
-    />
-
     <SettingsChangePasswordDialog v-model:open="changePwOpen" />
-
-    <!-- Delete Confirmation -->
-    <Dialog v-model:open="deleteDialogOpen">
-      <DialogContent class="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>確認刪除</DialogTitle>
-          <DialogDescription>確定要刪除通知規則「{{ deletingRule?.name }}」嗎？此操作無法復原。</DialogDescription>
-        </DialogHeader>
-        <DialogFooter class="gap-2 sm:gap-0">
-          <DialogClose as-child>
-            <Button variant="outline">
-              取消
-            </Button>
-          </DialogClose>
-          <Button
-            variant="destructive"
-            :disabled="submitting"
-            @click="handleDelete"
-          >
-            確認刪除
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   </div>
 </template>

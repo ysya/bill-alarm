@@ -1,4 +1,4 @@
-export type { NotificationRuleDTO } from '@bill-alarm/shared/types'
+export type { NotificationPrefsDTO, LastDeliveryDTO, OnboardingStatusDTO } from '@bill-alarm/shared/types'
 
 export interface ConfigStatus {
   telegram: { isConfigured: boolean, boundCount: number }
@@ -34,10 +34,6 @@ export const SCAN_INTERVAL_OPTIONS = [
   { value: '6', label: '每 6 小時' },
   { value: '12', label: '每 12 小時' },
   { value: '24', label: '每 24 小時' },
-] as const
-
-export const CHANNEL_OPTIONS = [
-  { value: 'telegram', label: 'Telegram' },
 ] as const
 
 export const LLM_PROVIDER_LABELS: Record<'none' | 'gemini' | 'openai' | 'ollama', string> = {
