@@ -10,7 +10,7 @@ import { pinoLogger } from 'hono-pino'
 import bankRoutes from './routes/banks.js'
 import bankAccountRoutes from './routes/bank-accounts.js'
 import billRoutes from './routes/bills.js'
-import notificationRulesRoutes from './routes/notification-rules.js'
+import notificationPrefsRoutes from './routes/notification-prefs.js'
 import scanRoutes from './routes/scan.js'
 import parserLabRoutes from './routes/parser-lab.js'
 import llmRoutes from './routes/llm.js'
@@ -100,7 +100,7 @@ app.route('/api/users', userRoutes)
 app.route('/api/banks', bankRoutes)
 app.route('/api/bank-accounts', bankAccountRoutes)
 app.route('/api/bills', billRoutes)
-app.route('/api/notification-rules', notificationRulesRoutes)
+app.route('/api/notification-prefs', notificationPrefsRoutes)
 app.route('/api', scanRoutes)
 app.route('/api', parserLabRoutes)
 app.route('/api', llmRoutes)

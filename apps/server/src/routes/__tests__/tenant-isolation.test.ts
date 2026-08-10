@@ -68,15 +68,20 @@ describe('tenant isolation — banks / accounts / rules / scan logs', () => {
     expect((await json('DELETE', `/api/bank-accounts/${acc.id}`, kid)).status).toBe(404)
   })
 
-  it('notification rules: scoped CRUD, foreign 404', async () => {
-    const created = await json('POST', '/api/notification-rules', boss, {
-      name: '提前三天', daysBefore: 3, timeOfDay: '09:00', channels: ['telegram'],
+  it('notification prefs: writes are self-scoped and reads do not leak', async () => {
+    const put = await json('PUT', '/api/notification-prefs', boss, {
+      remindDays: [7], remindTime: '21:00', notifyNewBill: false, notifyOverdue: true,
     })
-    expect(created.status).toBe(201)
-    const rule = await created.json()
-    expect(await (await json('GET', '/api/notification-rules', kid)).json()).toHaveLength(0)
-    expect((await json('PATCH', `/api/notification-rules/${rule.id}`, kid, { name: 'x' })).status).toBe(404)
-    expect((await json('DELETE', `/api/notification-rules/${rule.id}`, kid)).status).toBe(404)
+    expect(put.status).toBe(200)
+
+    // kid still sees the shared defaults, not boss's customization
+    const kidBody = await (await json('GET', '/api/notification-prefs', kid)).json()
+    expect(kidBody.remindDays).toEqual([3, 1])
+    expect(kidBody.notifyNewBill).toBe(true)
+
+    const bossBody = await (await json('GET', '/api/notification-prefs', boss)).json()
+    expect(bossBody.remindDays).toEqual([7])
+    expect(bossBody.notifyNewBill).toBe(false)
   })
 
   it('scan logs: each user sees only their own', async () => {

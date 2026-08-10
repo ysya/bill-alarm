@@ -53,7 +53,7 @@ describe('admin-only surface', () => {
   })
 
   it('member is NOT blocked from tenant routes the old allow-list denied', async () => {
-    for (const path of ['/api/notification-rules', '/api/bank-accounts', '/api/banks/presets']) {
+    for (const path of ['/api/notification-prefs', '/api/bank-accounts', '/api/banks/presets']) {
       const res = await app.request(path, { headers: { Cookie: kid } })
       expect(res.status, path).toBe(200)
     }
