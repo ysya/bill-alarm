@@ -68,33 +68,29 @@ model Bill {
   @@map("bills")
 }
 
-model NotificationRule {
-  id         String            @id @default(uuid(7))
-  name       String
-  daysBefore Int
-  timeOfDay  String
-  channels   String
-  isActive   Boolean           @default(true)
-  userId     String
-  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  logs       NotificationLog[]
+model NotificationPreference {
+  id            String   @id @default(uuid(7))
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  remindDays    String   @default("[3,1]") // JSON int array; [] = due-date reminders off
+  remindTime    String   @default("09:00") // HH:mm
+  notifyNewBill Boolean  @default(true)
+  notifyOverdue Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  @@map("notification_rules")
+  @@map("notification_preferences")
 }
 
 model NotificationLog {
-  id           String            @id @default(uuid(7))
+  id           String   @id @default(uuid(7))
   billId       String
-  bill         Bill              @relation(fields: [billId], references: [id], onDelete: Cascade)
-  ruleId       String?
-  rule         NotificationRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  bill         Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
   channel      String
   message      String
   success      Boolean
   errorMessage String?
-  sentAt       DateTime          @default(now())
+  sentAt       DateTime @default(now())
 
   @@map("notification_logs")
 }
@@ -142,7 +138,7 @@ model User {
   sessions          Session[]
   banks             Bank[]
   bankAccounts      BankAccount[]
-  notificationRules NotificationRule[]
+  notificationPreference NotificationPreference?
   scanLogs          ScanLog[]
 
   @@map("users")
