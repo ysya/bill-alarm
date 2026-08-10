@@ -89,14 +89,62 @@ watch(isAdmin, (admin) => {
         設定
       </h1>
       <p class="text-sm text-muted-foreground mt-1">
-        管理服務整合、通知規則與帳號。
+        通知、資料來源與帳號。
       </p>
     </div>
 
-    <!-- 服務整合（全員：自己的信箱與行事曆） -->
-    <section class="space-y-3">
+    <!-- 通知：「我會不會收到提醒？」的所有答案（全員，自己的） -->
+    <section
+      id="notifications"
+      class="scroll-mt-4 space-y-3"
+    >
       <h2 class="text-sm font-medium text-muted-foreground">
-        服務整合
+        通知
+      </h2>
+      <div
+        v-if="loading"
+        class="space-y-3"
+      >
+        <div class="h-40 animate-pulse rounded-xl bg-muted" />
+      </div>
+      <div
+        v-else
+        class="space-y-3"
+      >
+        <SettingsNotificationPrefsCard
+          v-if="prefs"
+          :prefs="prefs"
+          :bot-configured="onboarding?.botConfigured ?? false"
+          :telegram-bound="onboarding?.telegramBound ?? false"
+          :is-admin="isAdmin"
+          @refresh="fetchSelfData"
+        />
+        <SettingsTelegramDeliveryCard
+          :bot-configured="onboarding?.botConfigured ?? false"
+          @refresh="fetchSelfData"
+        />
+        <SettingsCard
+          v-if="calendarFeed"
+          :icon="CalendarCheck"
+          title="行事曆提醒（ICS 訂閱）"
+          status="ok"
+          status-text="已啟用"
+        >
+          <SettingsIntegrationCalendar
+            :calendar="calendarFeed"
+            @refresh="fetchSelfData"
+          />
+        </SettingsCard>
+      </div>
+    </section>
+
+    <!-- 資料來源：「帳單怎麼進來？」（全員，自己的） -->
+    <section
+      id="data-source"
+      class="scroll-mt-4 space-y-3"
+    >
+      <h2 class="text-sm font-medium text-muted-foreground">
+        資料來源
       </h2>
       <div
         v-if="loading"
@@ -112,7 +160,7 @@ watch(isAdmin, (admin) => {
         <SettingsCard
           v-if="emailStatus"
           :icon="Mail"
-          title="信箱（Gmail IMAP）"
+          title="信箱授權（IMAP）"
           :status="emailCardStatus.status"
           :status-text="emailCardStatus.text"
         >
@@ -121,45 +169,11 @@ watch(isAdmin, (admin) => {
             @refresh="fetchSelfData"
           />
         </SettingsCard>
-        <SettingsCard
-          v-if="calendarFeed"
-          :icon="CalendarCheck"
-          title="行事曆訂閱（ICS Feed）"
-          status="ok"
-          status-text="已啟用"
-        >
-          <SettingsIntegrationCalendar
-            :calendar="calendarFeed"
-            @refresh="fetchSelfData"
-          />
-        </SettingsCard>
+        <SettingsScanCard
+          :email-configured="onboarding?.emailConfigured ?? false"
+          :has-active-bank="onboarding?.hasActiveBank ?? false"
+        />
       </template>
-    </section>
-
-    <!-- 通知設定（全員，自己的） -->
-    <section>
-      <div
-        v-if="loading"
-        class="space-y-3"
-      >
-        <div class="h-40 animate-pulse rounded-xl bg-muted" />
-      </div>
-      <div
-        v-else-if="prefs"
-        class="space-y-3"
-      >
-        <SettingsNotificationPrefsCard
-          :prefs="prefs"
-          :bot-configured="onboarding?.botConfigured ?? false"
-          :telegram-bound="onboarding?.telegramBound ?? false"
-          :is-admin="isAdmin"
-          @refresh="fetchSelfData"
-        />
-        <SettingsTelegramDeliveryCard
-          :bot-configured="onboarding?.botConfigured ?? false"
-          @refresh="fetchSelfData"
-        />
-      </div>
     </section>
 
     <!-- 帳號（全員） -->
@@ -206,7 +220,8 @@ watch(isAdmin, (admin) => {
     <!-- 系統管理（admin） -->
     <section
       v-if="isAdmin"
-      class="space-y-3"
+      id="system"
+      class="scroll-mt-4 space-y-3"
     >
       <h2 class="text-sm font-medium text-muted-foreground">
         系統管理

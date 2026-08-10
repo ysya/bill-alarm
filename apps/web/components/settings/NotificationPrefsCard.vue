@@ -104,18 +104,20 @@ const lastDeliveryText = computed(() => {
 
 <template>
   <div class="space-y-4">
-    <div>
-      <h2 class="text-lg font-semibold flex items-center gap-2">
-        <Bell class="h-5 w-5" />
-        通知設定
-      </h2>
-      <p class="text-sm text-muted-foreground mt-0.5">
-        改動會自動儲存。提醒透過 Telegram 發送。
-      </p>
-    </div>
-
     <Card>
       <CardContent class="space-y-5 p-4">
+        <div class="flex items-center gap-2">
+          <Bell class="h-5 w-5 text-muted-foreground" />
+          <div>
+            <p class="text-sm font-medium">
+              提醒與通知
+            </p>
+            <p class="text-xs text-muted-foreground">
+              改動會自動儲存，透過 Telegram 發送。
+            </p>
+          </div>
+        </div>
+
         <!-- 送達狀態列：靜默失敗浮出 -->
         <div
           v-if="lastDeliveryText"

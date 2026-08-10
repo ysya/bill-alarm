@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle, ChevronDown, ExternalLink, HelpCircle, Mail, XCircle } from 'lucide-vue-next'
+import { CheckCircle, ChevronDown, ExternalLink, HelpCircle, XCircle } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import type { EmailStatus } from '~/types/settings'
@@ -21,7 +21,6 @@ const credForm = ref({
 const submitting = ref(false)
 const testing = ref(false)
 const testResult = ref<{ ok: boolean, message: string } | null>(null)
-const scanning = ref(false)
 const showCredentials = ref(false)
 const helpDialogOpen = ref(false)
 
@@ -78,46 +77,6 @@ async function handleSaveCredentials() {
   }
   finally {
     submitting.value = false
-  }
-}
-
-const { state: scanProgress } = useScanEvents()
-
-const scanInProgress = computed(() => scanning.value || scanProgress.value.active)
-const progressPercent = computed(() =>
-  scanProgress.value.total > 0
-    ? Math.round((scanProgress.value.idx / scanProgress.value.total) * 100)
-    : 0,
-)
-
-async function handleScan() {
-  scanning.value = true
-  try {
-    const result = await settingsApi.triggerScan()
-    const errorCount = result.errors?.length ?? 0
-    const firstReason = result.errors?.[0]?.reason
-    const summary = `掃描 ${result.scanned} 封郵件，發現 ${result.newBills} 筆新帳單${errorCount > 0 ? `，${errorCount} 個錯誤` : ''}。`
-    const desc = errorCount > 0 && firstReason ? `${summary}\n首個錯誤：${firstReason}` : summary
-    const action = { label: '查看紀錄', onClick: () => navigateTo('/scan-logs') }
-    if (errorCount > 0) {
-      toast.warning('郵件掃描完成（有錯誤）', { description: desc, action })
-    }
-    else {
-      toast.success('郵件掃描完成', { description: desc, action })
-    }
-  }
-  catch (e) {
-    console.error('[scan] failed:', e)
-    const status = (e as { response?: { status?: number } })?.response?.status
-    const desc = status === 404
-      ? '掃描端點不存在 (HTTP 404) — 請強制重整網頁或確認 server 已更新到最新版本'
-      : status
-        ? `HTTP ${status}：${(e as Error).message}`
-        : String(e)
-    toast.error('掃描失敗', { description: desc })
-  }
-  finally {
-    scanning.value = false
   }
 }
 </script>
@@ -248,82 +207,38 @@ async function handleScan() {
       </Alert>
       <div
         v-else
-        class="flex items-center gap-2 text-sm"
+        class="flex flex-wrap items-center justify-between gap-2"
       >
-        <CheckCircle class="h-4 w-4 text-green-500" />
-        <span>信箱已連線</span>
-        <span
-          v-if="email.user"
-          class="text-muted-foreground"
-        >({{ email.user }})</span>
-      </div>
-
-      <!-- Action buttons -->
-      <div class="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          :disabled="scanInProgress || !email.connected"
-          @click="handleScan"
-        >
-          <Mail class="mr-2 h-4 w-4" />
-          <template v-if="scanProgress.active">
-            掃描中 {{ scanProgress.idx }}/{{ scanProgress.total }}
-            <span
-              v-if="scanProgress.bank"
-              class="ml-1 text-muted-foreground"
-            >
-              · {{ scanProgress.bank }}
-            </span>
-          </template>
-          <template v-else-if="scanning">
-            啟動中...
-          </template>
-          <template v-else>
-            立即掃描郵件
-          </template>
-        </Button>
+        <div class="flex items-center gap-2 text-sm">
+          <CheckCircle class="h-4 w-4 text-green-500" />
+          <span>信箱已連線</span>
+          <span
+            v-if="email.user"
+            class="text-muted-foreground"
+          >({{ email.user }})</span>
+        </div>
         <Button
           size="sm"
           variant="ghost"
           @click="showCredentials = true"
         >
-          修改設定
+          修改授權
           <ChevronDown class="ml-1 h-4 w-4" />
         </Button>
       </div>
-
-      <!-- Live scan progress -->
+      <!-- 連線失敗時也要能進表單修正 -->
       <div
-        v-if="scanProgress.active"
-        class="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3"
+        v-if="!email.connected"
+        class="flex justify-end"
       >
-        <div class="flex items-center justify-between text-xs">
-          <span class="font-medium">
-            {{ scanProgress.trigger === 'cron' ? '自動掃描中' : '手動掃描中' }}
-            · {{ scanProgress.idx }} / {{ scanProgress.total }}
-          </span>
-          <span class="text-muted-foreground">{{ progressPercent }}%</span>
-        </div>
-        <div class="h-1.5 w-full overflow-hidden rounded-full bg-border">
-          <div
-            class="h-full bg-primary transition-all duration-200"
-            :style="{ width: `${progressPercent}%` }"
-          />
-        </div>
-        <p
-          v-if="scanProgress.bank || scanProgress.lastReason"
-          class="truncate text-xs text-muted-foreground"
+        <Button
+          size="sm"
+          variant="ghost"
+          @click="showCredentials = true"
         >
-          <span
-            v-if="scanProgress.bank"
-            class="font-medium"
-          >{{ scanProgress.bank }}</span>
-          <span
-            v-if="scanProgress.lastReason"
-            class="ml-1"
-          >— {{ scanProgress.lastReason }}</span>
-        </p>
+          修改授權
+          <ChevronDown class="ml-1 h-4 w-4" />
+        </Button>
       </div>
     </template>
 
