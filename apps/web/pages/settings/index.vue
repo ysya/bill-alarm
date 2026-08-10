@@ -144,14 +144,22 @@ watch(isAdmin, (admin) => {
       >
         <div class="h-40 animate-pulse rounded-xl bg-muted" />
       </div>
-      <SettingsNotificationPrefsCard
+      <div
         v-else-if="prefs"
-        :prefs="prefs"
-        :bot-configured="onboarding?.botConfigured ?? false"
-        :telegram-bound="onboarding?.telegramBound ?? false"
-        :is-admin="isAdmin"
-        @refresh="fetchSelfData"
-      />
+        class="space-y-3"
+      >
+        <SettingsNotificationPrefsCard
+          :prefs="prefs"
+          :bot-configured="onboarding?.botConfigured ?? false"
+          :telegram-bound="onboarding?.telegramBound ?? false"
+          :is-admin="isAdmin"
+          @refresh="fetchSelfData"
+        />
+        <SettingsTelegramDeliveryCard
+          :bot-configured="onboarding?.botConfigured ?? false"
+          @refresh="fetchSelfData"
+        />
+      </div>
     </section>
 
     <!-- 帳號（全員） -->
@@ -160,7 +168,6 @@ watch(isAdmin, (admin) => {
         <User class="h-4 w-4" />帳號
       </h2>
       <InstallPrompt variant="row" />
-      <SettingsTelegramBindCard />
       <Card class="flex flex-wrap items-center justify-between gap-3 p-4">
         <div class="flex min-w-0 items-center gap-3">
           <User class="h-5 w-5 shrink-0 text-muted-foreground" />

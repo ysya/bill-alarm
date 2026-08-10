@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { CheckCircle, ChevronDown, ChevronUp, Send } from 'lucide-vue-next'
+import { CheckCircle, ChevronDown, ChevronUp } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
-import { apiErrorMessage } from '@/lib/utils'
 
 defineProps<{
   status: { isConfigured: boolean, boundCount: number }
@@ -12,7 +11,6 @@ const emit = defineEmits<{ refresh: [] }>()
 const settingsApi = useSettingsApi()
 const botToken = ref('')
 const submitting = ref(false)
-const testingTelegram = ref(false)
 const showEditForm = ref(false)
 
 async function handleSave() {
@@ -35,21 +33,6 @@ async function handleSave() {
     submitting.value = false
   }
 }
-
-async function handleTest() {
-  testingTelegram.value = true
-  try {
-    const result = await settingsApi.testTelegram()
-    if (result.success) toast.success('測試訊息已發送', { description: '請檢查你的 Telegram。' })
-    else toast.error('測試訊息發送失敗')
-  }
-  catch (e) {
-    toast.error('發送失敗', { description: apiErrorMessage(e) })
-  }
-  finally {
-    testingTelegram.value = false
-  }
-}
 </script>
 
 <template>
@@ -57,7 +40,7 @@ async function handleTest() {
     <!-- Not configured: token form -->
     <template v-if="!status.isConfigured">
       <p class="text-xs text-muted-foreground">
-        透過 @BotFather 建立 Bot 取得 Token。每位使用者在「帳號」區各自綁定接收通知。
+        透過 @BotFather 建立 Bot 取得 Token，全系統只需設定一次。成員各自到「通知」區綁定後才會收到通知。
       </p>
       <form
         class="space-y-3"
@@ -94,18 +77,9 @@ async function handleTest() {
         v-if="status.boundCount === 0"
         class="text-xs text-yellow-500"
       >
-        目前沒有任何使用者綁定，通知不會發送。請到「帳號」區綁定 Telegram。
+        目前沒有任何使用者綁定，通知不會發送。請到「通知」區綁定 Telegram。
       </p>
       <div class="flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          :disabled="testingTelegram"
-          @click="handleTest"
-        >
-          <Send class="mr-2 h-4 w-4" />
-          {{ testingTelegram ? '發送中...' : '發送測試（給自己）' }}
-        </Button>
         <Button
           size="sm"
           variant="ghost"
