@@ -51,8 +51,9 @@ async function handleRotate() {
   <div class="space-y-3">
     <div class="flex items-start justify-between gap-2">
       <p class="text-xs text-muted-foreground">
-        把帳單到期日當作日曆事件單向訂閱，不需 OAuth、不需授權。複製下方網址貼到任何支援
-        iCalendar 的應用程式（Google Calendar、Apple 行事曆、Outlook 等）。
+        另一種提醒方式：把到期日放進你的日曆，事件內建到期前 1 天／1 小時提醒，跟上方的
+        Telegram 提醒互補。不需 OAuth——複製下方網址貼到任何支援 iCalendar
+        的應用程式（Google Calendar、Apple 行事曆、Outlook 等）。
       </p>
       <Button
         type="button"

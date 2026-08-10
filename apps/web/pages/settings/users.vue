@@ -384,7 +384,7 @@ useHead({ title: '使用者管理 - Bill Alarm' })
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>永久刪除</DialogTitle>
-          <DialogDescription>確定要永久刪除「{{ purgeTarget?.username }}」嗎？其帳單、銀行、通知規則與掃描紀錄會一併刪除，此操作無法復原。</DialogDescription>
+          <DialogDescription>確定要永久刪除「{{ purgeTarget?.username }}」嗎？其帳單、銀行、通知設定與掃描紀錄會一併刪除，此操作無法復原。</DialogDescription>
         </DialogHeader>
         <DialogFooter class="gap-2 sm:gap-0">
           <DialogClose as-child>

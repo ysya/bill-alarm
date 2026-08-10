@@ -84,9 +84,9 @@ Docker image 已固定 `ENV TZ=Asia/Taipei`（見 `Dockerfile`），逾期判定
 ## Multi-Tenant 架構
 
 每位使用者各自管理：
-- **信箱帳號** (設定 → 信箱) — 連接 Gmail 或 IMAP 伺服器，掃描帳單郵件
+- **信箱授權** (設定 → 資料來源) — 連接 Gmail 或 IMAP 伺服器，掃描帳單郵件
 - **已啟用銀行** — 選擇支援的銀行清單，用於帳單解析
-- **通知規則** — 個人化的繳費提醒設定及 Telegram 通知
+- **通知偏好** (設定 → 通知) — 到期前提醒天數與時間、新帳單／逾期通知開關；透過各自綁定的 Telegram 發送
 - **個人日曆訂閱（ICS Feed）** — 產生個人化訂閱網址，可訂閱到 Google Calendar、Apple 行事曆、Outlook 等任何支援 iCalendar 的應用程式
 
 管理員（首位建立的帳號）額外可管理：
