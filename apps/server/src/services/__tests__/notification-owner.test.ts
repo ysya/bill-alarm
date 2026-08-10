@@ -8,14 +8,14 @@ process.env.LOG_LEVEL = 'silent'
 const { default: prisma } = await import('@/prisma.js')
 const { setSetting, KEYS } = await import('../settings.js')
 const telegram = await import('../telegram.js')
-const { processReminderRules, processNewBill } = await import('../notification.js')
+const { processReminders, processNewBill } = await import('../notification.js')
 
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
-// processReminderRules gates on now's HH:mm vs the rule's timeOfDay ('09:00'),
-// so a bare call would depend on when the suite runs. Seed data and the
-// injected tick derive from ONE base Date, so these tests pass at any
+// processReminders gates on now's HH:mm vs the user's remindTime (default
+// '09:00'), so a bare call would depend on when the suite runs. Seed data and
+// the injected tick derive from ONE base Date, so these tests pass at any
 // wall-clock time and in any timezone (and can't disagree across midnight).
 const base = new Date()
 
@@ -33,12 +33,14 @@ beforeEach(async () => {
   fetchMock.mockReset()
   await prisma.notificationLog.deleteMany()
   await prisma.bill.deleteMany()
-  await prisma.notificationRule.deleteMany()
+  await prisma.notificationPreference.deleteMany()
   await prisma.bank.deleteMany()
   await prisma.user.deleteMany()
   await prisma.setting.deleteMany()
 })
 
+// No prefs row is seeded: the shared defaults ([3,1] at 09:00) cover the
+// D-3 bill below, which is exactly the zero-config path new users hit.
 async function seedUserWithDueBill(username: string, chatId: string | null, deletedAt: Date | null = null) {
   const user = await prisma.user.create({
     data: { username, passwordHash: 'x:y', role: 'member', telegramChatId: chatId, deletedAt },
@@ -48,9 +50,6 @@ async function seedUserWithDueBill(username: string, chatId: string | null, dele
   })
   const bill = await prisma.bill.create({
     data: { bankId: bank.id, billingPeriod: '2026-07', amount: 100, dueDate: addDaysYMD(todayYMD(base), 3) },
-  })
-  await prisma.notificationRule.create({
-    data: { name: 'r', daysBefore: 3, timeOfDay: '09:00', channels: JSON.stringify(['telegram']), userId: user.id },
   })
   return { user, bank, bill }
 }
@@ -71,7 +70,7 @@ describe('owner-targeted notifications', () => {
     await seedUserWithDueBill('gone', '333', new Date())
     fetchMock.mockResolvedValue(okResponse({ ok: true }))
 
-    await processReminderRules(at(12, 0)) // past the rule's 09:00 fire time
+    await processReminders(at(12, 0)) // past the default 09:00 fire time
 
     const sentChatIds = fetchMock.mock.calls.map(call => JSON.parse(call[1].body).chat_id).sort()
     expect(sentChatIds).toEqual(['111', '222']) // no 333
@@ -83,7 +82,7 @@ describe('owner-targeted notifications', () => {
   it('owner without binding gets a failed log row', async () => {
     await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
     await seedUserWithDueBill('carol', null)
-    await processReminderRules(at(12, 0)) // past the rule's 09:00 fire time
+    await processReminders(at(12, 0)) // past the default 09:00 fire time
     const logs = await prisma.notificationLog.findMany()
     expect(logs).toHaveLength(1)
     expect(logs[0].success).toBe(false)
@@ -93,6 +92,17 @@ describe('owner-targeted notifications', () => {
   it('processNewBill: deactivated owner is silent — no send, no log', async () => {
     await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
     const { bank, bill } = await seedUserWithDueBill('gone-new', '444', new Date())
+
+    await processNewBill(bill, bank)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(await prisma.notificationLog.count({ where: { billId: bill.id } })).toBe(0)
+  })
+
+  it('processNewBill: owner with notifyNewBill=false is skipped — no send, no log', async () => {
+    await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
+    const { user, bank, bill } = await seedUserWithDueBill('optout', '555')
+    await prisma.notificationPreference.create({ data: { userId: user.id, notifyNewBill: false } })
 
     await processNewBill(bill, bank)
 

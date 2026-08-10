@@ -2,7 +2,7 @@ import cron from 'node-cron'
 import { logger } from '@/index.js'
 import prisma from '@/prisma.js'
 import { runScanWithLog, appendScanLogErrors, ScanInProgressError } from './email-parser.js'
-import { processNewBill, processReminderRules, processOverdueBills } from './notification.js'
+import { processNewBill, processReminders, processOverdueBills } from './notification.js'
 import { getSetting, setSetting, KEYS } from './settings.js'
 
 const DEFAULT_SCAN_INTERVAL = 24 // hours
@@ -85,11 +85,11 @@ export function startScheduler() {
     await setSetting(KEYS.LAST_SCAN_AT, new Date().toISOString())
   }, { timezone: 'Asia/Taipei' })
 
-  // Process reminders every 15 minutes (honors each rule's timeOfDay)
+  // Process reminders every 15 minutes (honors each user's remindTime)
   cron.schedule('*/15 * * * *', async () => {
-    logger.debug('Processing reminder rules...')
+    logger.debug('Processing reminders...')
     try {
-      await processReminderRules()
+      await processReminders()
       await processOverdueBills()
       logger.info('Reminder processing complete')
     } catch (err) {

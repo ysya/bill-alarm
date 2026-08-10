@@ -35,6 +35,7 @@ beforeEach(async () => {
   billSeq = 0
   await prisma.notificationLog.deleteMany()
   await prisma.bill.deleteMany()
+  await prisma.notificationPreference.deleteMany()
   await prisma.bank.deleteMany()
   await prisma.user.deleteMany()
 })
@@ -80,7 +81,6 @@ describe('processOverdueBills: mark every tick, notify once after 09:00', () => 
     expect(logs).toHaveLength(1)
     expect(logs[0].message).toBe(OVERDUE_WARNING_MESSAGE)
     expect(logs[0].channel).toBe('telegram')
-    expect(logs[0].ruleId).toBeNull()
     expect(logs[0].success).toBe(true)
   })
 
@@ -134,7 +134,7 @@ describe('processOverdueBills: mark every tick, notify once after 09:00', () => 
     // per-bill implementation) before this code shipped.
     const bill = await seedBill(bank.id, addDaysYMD(todayYMD(base), -5), BillStatus.OVERDUE)
     await prisma.notificationLog.create({
-      data: { billId: bill.id, ruleId: null, channel: 'telegram', message: OVERDUE_WARNING_MESSAGE, success: true },
+      data: { billId: bill.id, channel: 'telegram', message: OVERDUE_WARNING_MESSAGE, success: true },
     })
 
     await processOverdueBills(at(9, 10))
@@ -143,30 +143,16 @@ describe('processOverdueBills: mark every tick, notify once after 09:00', () => 
     expect(await prisma.notificationLog.count()).toBe(1) // unchanged
   })
 
-  it('a reminder rule literally named 逾期警告 does not suppress the real overdue warning (dedup scoped to ruleId null)', async () => {
-    const { user, bank } = await seedUser('alice')
+  it('owner with notifyOverdue=false gets the bill marked but no warning and no log', async () => {
+    const { user, bank } = await seedUser('optout')
+    await prisma.notificationPreference.create({ data: { userId: user.id, notifyOverdue: false } })
     const bill = await seedBill(bank.id, addDaysYMD(todayYMD(base), -1))
-    // A user-created reminder rule happens to be named the same as the
-    // overdue-warning message. Its reminder log must not be mistaken for a
-    // prior overdue warning.
-    const rule = await prisma.notificationRule.create({
-      data: {
-        name: OVERDUE_WARNING_MESSAGE,
-        daysBefore: 3,
-        timeOfDay: '09:00',
-        channels: JSON.stringify(['telegram']),
-        userId: user.id,
-      },
-    })
-    await prisma.notificationLog.create({
-      data: { billId: bill.id, ruleId: rule.id, channel: 'telegram', message: OVERDUE_WARNING_MESSAGE, success: true },
-    })
 
-    await processOverdueBills(at(9, 10))
+    await processOverdueBills(at(9, 30))
 
-    expect(sendOverdueWarning).toHaveBeenCalledTimes(1)
-    const realWarning = await prisma.notificationLog.findFirst({ where: { billId: bill.id, ruleId: null } })
-    expect(realWarning?.message).toBe(OVERDUE_WARNING_MESSAGE)
+    expect((await prisma.bill.findUniqueOrThrow({ where: { id: bill.id } })).status).toBe(BillStatus.OVERDUE)
+    expect(sendOverdueWarning).not.toHaveBeenCalled()
+    expect(await prisma.notificationLog.count()).toBe(0)
   })
 
   it('multiple overdue bills across different owners are all marked and each notified once', async () => {
