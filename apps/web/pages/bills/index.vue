@@ -10,7 +10,7 @@
           variant="outline"
           size="sm"
           :disabled="scanInProgress"
-          @click="handleScan"
+          @click="triggerScan(fetchBills)"
         >
           <RefreshCw
             class="mr-2 h-4 w-4"
@@ -76,25 +76,15 @@
       <TabsList>
         <TabsTrigger value="all">
           全部
-          <Badge
-            v-if="total > 0"
-            variant="secondary"
-            class="ml-1.5"
-          >
-            {{ total }}
-          </Badge>
         </TabsTrigger>
-        <TabsTrigger value="pending">
-          待繳
+        <TabsTrigger value="unpaid">
+          未繳
         </TabsTrigger>
         <TabsTrigger value="paid">
           已繳
         </TabsTrigger>
-        <TabsTrigger value="overdue">
-          逾期
-        </TabsTrigger>
         <TabsTrigger value="no_payment">
-          不需繳費
+          免繳
         </TabsTrigger>
       </TabsList>
 
@@ -130,28 +120,60 @@
         >
           <CardContent class="flex flex-col items-center text-center">
             <Inbox class="h-12 w-12 text-muted-foreground mb-4" />
-            <h4 class="text-lg font-semibold mb-1">
-              沒有帳單
-            </h4>
-            <p class="text-sm text-muted-foreground">
-              目前沒有符合條件的帳單
-            </p>
+            <template v-if="!emailConfigured">
+              <h4 class="text-lg font-semibold mb-1">
+                還沒有帳單
+              </h4>
+              <p class="text-sm text-muted-foreground">
+                先到<NuxtLink
+                  to="/settings#data-source"
+                  class="underline underline-offset-4"
+                >設定</NuxtLink>完成信箱授權，帳單會自動掃進來。
+              </p>
+            </template>
+            <template v-else-if="activeTab === 'unpaid'">
+              <h4 class="text-lg font-semibold mb-1">
+                沒有未繳帳單 🎉
+              </h4>
+              <p class="text-sm text-muted-foreground">
+                所有帳單都處理完了。
+              </p>
+            </template>
+            <template v-else-if="activeTab === 'no_payment'">
+              <h4 class="text-lg font-semibold mb-1">
+                沒有免繳帳單
+              </h4>
+              <p class="text-sm text-muted-foreground">
+                免繳＝本期無需繳款的帳單（如零元帳單）。
+              </p>
+            </template>
+            <template v-else>
+              <h4 class="text-lg font-semibold mb-1">
+                沒有帳單
+              </h4>
+              <p class="text-sm text-muted-foreground">
+                目前沒有符合條件的帳單
+              </p>
+            </template>
           </CardContent>
         </Card>
 
-        <!-- Bill list grouped by billing period -->
+        <!-- Bill list (unpaid: overdue/upcoming sections; others: by period) -->
         <div
           v-else
           class="space-y-6"
         >
           <section
             v-for="group in groupedBills"
-            :key="group.period"
+            :key="group.key"
             class="space-y-3"
           >
             <div class="flex items-center gap-3">
-              <h3 class="text-sm font-semibold text-muted-foreground">
-                {{ formatPeriodLabel(group.period) }}
+              <h3
+                class="text-sm font-semibold"
+                :class="group.labelClass"
+              >
+                {{ group.label }}
               </h3>
               <Separator class="flex-1" />
               <span class="text-xs text-muted-foreground whitespace-nowrap">
@@ -170,6 +192,13 @@
                     <span class="font-semibold truncate">{{ bill.bank?.name }}</span>
                     <Badge :class="statusBadgeClass(bill.status)">
                       {{ statusLabel(bill.status) }}
+                    </Badge>
+                    <Badge
+                      v-if="bill.bank?.autoDebit"
+                      variant="secondary"
+                      class="text-xs"
+                    >
+                      自動扣款
                     </Badge>
                   </div>
                   <div class="flex items-center gap-3 text-sm text-muted-foreground">
@@ -190,23 +219,31 @@
                   <Button
                     v-if="bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE"
                     size="sm"
-                    :disabled="markingPaid.has(bill.id)"
-                    @click.stop="openPayDialog(bill.id)"
+                    :disabled="markingIds.has(bill.id)"
+                    :aria-label="`標記 ${bill.bank?.name} 已繳`"
+                    @click.stop="markPaid(bill, fetchBills)"
                   >
                     <Loader2
-                      v-if="markingPaid.has(bill.id)"
+                      v-if="markingIds.has(bill.id)"
                       class="h-4 w-4 animate-spin"
                     />
                     <CircleCheck
                       v-else
                       class="h-4 w-4"
                     />
-                    {{ markingPaid.has(bill.id) ? '處理中...' : '標記已繳' }}
+                    {{ bill.bank?.autoDebit ? '確認已扣款' : '已繳' }}
                   </Button>
                 </div>
               </div>
             </Card>
           </section>
+
+          <p class="text-xs text-muted-foreground">
+            找不到某張帳單？<NuxtLink
+              to="/scan-logs"
+              class="underline underline-offset-4"
+            >查看掃描紀錄</NuxtLink>
+          </p>
         </div>
 
         <!-- Pagination -->
@@ -240,36 +277,6 @@
         </div>
       </TabsContent>
     </Tabs>
-
-    <!-- Mark as Paid Dialog -->
-    <Dialog v-model:open="payDialogOpen">
-      <DialogContent class="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>標記為已繳</DialogTitle>
-          <DialogDescription>選擇繳費日期，預設為今天。</DialogDescription>
-        </DialogHeader>
-        <div class="flex justify-center py-2">
-          <Calendar v-model="payDate" />
-        </div>
-        <DialogFooter class="gap-2">
-          <DialogClose as-child>
-            <Button variant="outline">
-              取消
-            </Button>
-          </DialogClose>
-          <Button
-            :disabled="markingPaid.size > 0"
-            @click="handleConfirmPaid"
-          >
-            <Loader2
-              v-if="markingPaid.size > 0"
-              class="mr-2 h-4 w-4 animate-spin"
-            />
-            確認已繳
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   </div>
 </template>
 
@@ -284,8 +291,6 @@ import {
   Inbox,
   RefreshCw,
 } from 'lucide-vue-next'
-import { getLocalTimeZone, today } from '@internationalized/date'
-import type { DateValue } from 'reka-ui'
 import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
 import type { BillDTO } from '@bill-alarm/shared/types'
 import { daysRemainingInfo, formatAmount, type DaysRemainingTone } from '@bill-alarm/shared/format'
@@ -317,9 +322,14 @@ function formatPeriodLabel(period: string): string {
 // --- State ---
 
 const PAGE_SIZE = 20
+const VALID_TABS = ['all', 'unpaid', 'paid', 'no_payment'] as const
 
-const { list, markAsPaid } = useBillApi()
-const settingsApi = useSettingsApi()
+const { list } = useBillApi()
+const { markingIds, markPaid } = useMarkPaid()
+const { scanning, triggerScan } = useScanTrigger()
+
+const route = useRoute()
+const router = useRouter()
 
 const { state: scanProgress, onComplete: onScanComplete } = useScanEvents()
 onScanComplete.value = () => {
@@ -336,30 +346,63 @@ const bills = ref<BillDTO[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const loading = ref(true)
-const scanning = ref(false)
-const markingPaid = ref<Set<string>>(new Set())
-const activeTab = ref<string>('all')
 
-// Mark as paid dialog
-const payDialogOpen = ref(false)
-const payingBillId = ref<string | null>(null)
-const payDate = ref(today(getLocalTimeZone())) as Ref<DateValue>
-
-function openPayDialog(id: string) {
-  payingBillId.value = id
-  payDate.value = today(getLocalTimeZone())
-  payDialogOpen.value = true
-}
+// ?tab= deep link（非法值落回 all）
+const initialTab = VALID_TABS.includes(route.query.tab as typeof VALID_TABS[number])
+  ? route.query.tab as string
+  : 'all'
+const activeTab = ref<string>(initialTab)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
-const groupedBills = computed(() => {
-  const groups: { period: string, bills: BillDTO[], total: number }[] = []
-  let current: { period: string, bills: BillDTO[], total: number } | null = null
+interface BillGroup {
+  key: string
+  label: string
+  labelClass: string
+  bills: BillDTO[]
+  total: number
+}
+
+const groupedBills = computed<BillGroup[]>(() => {
+  if (activeTab.value === 'unpaid') {
+    // 行動視圖：先還債、再排即將到期
+    const overdue = bills.value.filter(b => b.status === BillStatus.OVERDUE)
+    const upcoming = bills.value.filter(b => b.status !== BillStatus.OVERDUE)
+    const groups: BillGroup[] = []
+    if (overdue.length > 0) {
+      groups.push({
+        key: 'overdue',
+        label: `已逾期（${overdue.length}）`,
+        labelClass: 'text-red-500',
+        bills: overdue,
+        total: overdue.reduce((s, b) => s + b.amount, 0),
+      })
+    }
+    if (upcoming.length > 0) {
+      groups.push({
+        key: 'upcoming',
+        label: `即將到期（${upcoming.length}）`,
+        labelClass: 'text-muted-foreground',
+        bills: upcoming,
+        total: upcoming.reduce((s, b) => s + b.amount, 0),
+      })
+    }
+    return groups
+  }
+
+  // 帳簿視圖：依帳期分組（伺服器已按帳期降冪排序）
+  const groups: BillGroup[] = []
+  let current: BillGroup | null = null
   for (const bill of bills.value) {
     const period = bill.billingPeriod ?? ''
-    if (!current || current.period !== period) {
-      current = { period, bills: [], total: 0 }
+    if (!current || current.key !== period) {
+      current = {
+        key: period,
+        label: formatPeriodLabel(period),
+        labelClass: 'text-muted-foreground',
+        bills: [],
+        total: 0,
+      }
       groups.push(current)
     }
     current.bills.push(bill)
@@ -390,60 +433,25 @@ function goToPage(page: number) {
   currentPage.value = page
 }
 
-async function handleConfirmPaid() {
-  if (!payingBillId.value) return
-  const id = payingBillId.value
-  markingPaid.value.add(id)
-  try {
-    await markAsPaid(id, payDate.value.toString())
-    toast.success('帳單已標記為已繳')
-    payDialogOpen.value = false
-    await fetchBills()
-  }
-  catch {
-    toast.error('操作失敗', { description: '無法標記帳單，請稍後再試' })
-  }
-  finally {
-    markingPaid.value.delete(id)
-  }
-}
-
-async function handleScan() {
-  scanning.value = true
-  try {
-    const result = await settingsApi.triggerScan()
-    if (result.newBills > 0) {
-      toast.success(`掃描完成，新增 ${result.newBills} 筆帳單`)
-      await fetchBills()
-    }
-    else if (result.scanned === 0) {
-      toast.warning('沒有找到任何信件', { description: '請確認 Gmail 已連線，或信箱中沒有新的帳單通知' })
-    }
-    else {
-      toast.info(`已檢查 ${result.scanned} 封信件，沒有新帳單`)
-    }
-    if (result.errors?.length > 0) {
-      const detail = result.errors.map(e => `${e.bank ?? '未知'}: ${e.reason}`).join('\n')
-      toast.warning(`部分信件處理失敗（${result.errors.length}）`, { description: detail })
-    }
-  }
-  catch {
-    toast.error('掃描失敗', { description: '請確認 Gmail 已連線' })
-  }
-  finally {
-    scanning.value = false
-  }
-}
-
-// 切換 tab 時回到第一頁
-watch(activeTab, () => {
+// 切換 tab：回第一頁、寫回 URL（replace，不進 history）
+watch(activeTab, (tab) => {
   currentPage.value = 1
+  router.replace({ query: { ...route.query, tab: tab === 'all' ? undefined : tab } })
   fetchBills()
 })
 
 watch(currentPage, () => fetchBills())
 
-onMounted(() => fetchBills())
+const emailConfigured = ref(true) // 防閃：抓到狀態前先當 true
+onMounted(async () => {
+  fetchBills()
+  try {
+    emailConfigured.value = (await useSettingsApi().getOnboardingStatus()).emailConfigured
+  }
+  catch {
+    // leave true — empty-state guidance is a nicety
+  }
+})
 
 useHead({ title: '帳單管理 - Bill Alarm' })
 </script>
