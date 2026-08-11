@@ -27,6 +27,22 @@
 - 銀行頁內建/自訂 section 的結構改動（只動銀行帳戶區）。
 - scan-logs 頁面內容改版（只調整入口）。
 
+## 0. Codex 審查後修訂（2026-08-11）
+
+外部審查（Codex）提出 18 項建議，逐條驗證後採納如下（未採納者附理由於 §10）：
+
+- **繳費日可見化**：一鍵已繳的 toast 明示「繳費日：今天」，description 註明可至詳情頁修改；`markAsPaid` 只寫 `paidAt`、絕不動 `dueDate`（現行為，明文化）。
+- **autoDebit 按鈕語意**：autoDebit 帳單的按鈕文字改「確認已扣款」（一般帳單「已繳」），不新增中間狀態。
+- **Undo 時窗**：已繳 toast `duration: 8000`；sonner 為 app 層級、跨頁保留；toast 消失後的永久復原路徑＝詳情頁「恢復為待繳」（本已存在，明文化）。多筆連續標記時 sonner 自然堆疊、各自帶復原（實作時驗證）。
+- **未繳分段**：未繳 tab 與總覽待辦流都分「已逾期（N）」／「即將到期（N）」兩段（未繳 tab 以此取代帳期分組；其他 tab 維持帳期分組）。逾期列顯示「逾期 N 天」紅字（DaysRemaining 已有此行為）。
+- **待辦流收斂**：總覽顯示全部逾期＋最近到期前 5 筆，其餘收成「查看另外 N 筆未繳 →」連到 `/bills?tab=unpaid`。
+- **summary 卡導覽語意**：卡片加 ChevronRight 與 hover/focus 樣式；文案「目前待繳（含 N 筆逾期）」「本月已繳」「逾期」。已繳 tab 排序改繳費日新→舊，登陸頁最近繳的在最上。
+- **總覽空狀態分層**：`emailConfigured === false` 時不顯示 🎉 慶祝空狀態（上方進度卡已是 CTA），改中性文案「完成設定後帳單會自動出現」；已設定且真的零未繳才慶祝。
+- **各 tab 排序明文化**：未繳＝dueDate 升冪；已繳＝paidAt 降冪；免繳與全部＝dueDate 降冪（新帳單在前）。
+- **「不需繳費」正名與救回路徑**：tab 改名「免繳」，空狀態附定義「本期無需繳款的帳單（如零元帳單）」；`NO_PAYMENT` 帳單的詳情頁提供「改為待繳」按鈕（單一轉換動作，不重開狀態下拉）。
+- **掃描漏件出口**：總覽待辦流底部與帳單頁空狀態加「找不到某張帳單？查看掃描紀錄」連結（`/scan-logs`）。
+- **一鍵按鈕 a11y**：「已繳」按鈕 `aria-label` 含銀行名；列點擊與按鈕維持獨立目標（`@click.stop` 現行模式）。
+
 ## 1. 總覽（單一待辦流）
 
 由上而下：
@@ -91,8 +107,17 @@
 - Server：`status=unpaid` 過濾與排序、summary 語意（不分月待繳/逾期、當月已繳、timeline 移除）、`PATCH paidAt` 驗證（合法日期、非 paid 狀態拒絕）。既有 bills 測試同步更新。
 - Web：typecheck＋lint＋build；煙霧測試（總覽三卡跳轉、一鍵已繳＋復原、掃描後自動刷新、?tab= 還原）。
 
-## 9. 影響檔案（定位用）
+## 9. Codex 建議未採納項目與理由
 
-- Server：`routes/bills.ts`（list unpaid、summary、PATCH paidAt）＋ `routes/__tests__/`。
+- **本月已繳卡連結帶月份篩選**：不做月份 query 機制；已繳 tab 改 paidAt 降冪後當月自然置頂，登陸誤差可接受（部分採納）。
+- **帳單頁預設 tab 改未繳**：角色分工明確化——總覽＝行動中心、帳單＝完整帳簿，預設「全部」合理，維持。
+- **手動新增帳單／占位提醒**：維持非目標；以掃描紀錄出口＋重掃補救。資料來源單一是本產品的定位。
+- **多幣別**：資料模型單一幣別（TWD 整數、解析器僅台灣銀行），加總無幣別歧義；於本節明文假設，不改 UI。
+- **時區設定**：伺服器已固定 `TZ=Asia/Taipei`（Dockerfile），dueDate 為日曆日字串；客戶端「今天」採裝置時區，目標族群（台灣）下誤差可忽略，不新增時區設定。
+- **更細的時間分組（今天/7天內/稍後）**：已逾期／即將到期兩段已足，資料量小再細分是噪音。
+
+## 10. 影響檔案（定位用）
+
+- Server：`routes/bills.ts`（list unpaid、summary、PATCH paidAt、各 tab 排序）＋ `routes/__tests__/`。
 - Web：`pages/index.vue`（重寫主體）、`pages/bills/index.vue`（tabs/badge/query/空狀態/掃描按鈕）、`pages/bills/[id].vue`（編輯模式、useMarkPaid、channel label）、`composables/useMarkPaid.ts`（新）、`composables/useScanTrigger.ts`（新）、`composables/useScanEvents.ts`（onComplete 多訂閱）、`components/settings/ScanCard.vue`（改用 useScanTrigger）、`components/banks/BankAccountSection.vue`＋`pages/banks/index.vue`（收合降級）、`composables/useNavItems.ts`（移除紀錄）、`components/DaysRemaining.vue`（沿用）。
 - shared：`MonthlySummaryDTO`（timeline 移除）。
