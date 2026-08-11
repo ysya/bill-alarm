@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { Pencil, Plus, Trash2 } from 'lucide-vue-next'
+import { ChevronDown, Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { BankAccountDTO } from '@bill-alarm/shared/types'
 
 defineProps<{
   accounts: BankAccountDTO[]
 }>()
+
+// 進階功能，預設收起——多數使用者用不到自動扣款來源歸類
+const open = ref(false)
 
 const emit = defineEmits<{
   changed: []
@@ -47,77 +51,88 @@ async function handleDeleteAccount() {
 </script>
 
 <template>
-  <section class="space-y-4">
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="text-lg font-semibold">
-          銀行帳戶
-        </h2>
-        <p class="text-sm text-muted-foreground mt-1">
-          設定自動扣款來源帳戶
-        </p>
-      </div>
-      <Button
-        size="sm"
-        @click="openAccountDialog()"
-      >
-        <Plus class="mr-2 h-4 w-4" />
-        新增
-      </Button>
-    </div>
-
-    <Card v-if="accounts.length === 0">
-      <CardContent class="py-8 text-center text-sm text-muted-foreground">
-        尚未設定銀行帳戶。新增帳戶後可在銀行設定中選擇自動扣款來源。
-      </CardContent>
-    </Card>
-
-    <div
-      v-else
-      class="space-y-2"
+  <section>
+    <Collapsible
+      v-model:open="open"
+      class="space-y-4"
     >
-      <Card
-        v-for="acc in accounts"
-        :key="acc.id"
-      >
-        <CardContent class="p-4">
-          <div class="flex items-center justify-between">
-            <div class="min-w-0">
-              <p class="font-medium text-sm">
-                {{ acc.name }}
-              </p>
-              <p class="text-xs text-muted-foreground">
-                {{ acc.bankName }}
-              </p>
-              <p
-                v-if="acc.note"
-                class="text-xs text-muted-foreground mt-0.5"
-              >
-                {{ acc.note }}
-              </p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                class="h-7 w-7"
-                @click="openAccountDialog(acc)"
-              >
-                <Pencil class="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                class="h-7 w-7 text-destructive"
-                @click="deletingAccount = acc; deleteAccountDialogOpen = true"
-              >
-                <Trash2 class="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+      <CollapsibleTrigger class="flex w-full items-center gap-2 text-left">
+        <h2 class="text-lg font-semibold">
+          進階：銀行帳戶
+        </h2>
+        <ChevronDown
+          class="h-4 w-4 shrink-0 text-muted-foreground transition-transform"
+          :class="{ 'rotate-180': open }"
+        />
+      </CollapsibleTrigger>
+      <p class="text-sm text-muted-foreground !mt-1">
+        把多家銀行歸到同一個實體帳戶，並可在銀行設定中選為自動扣款來源。
+      </p>
+      <CollapsibleContent class="space-y-4">
+        <div class="flex justify-end">
+          <Button
+            size="sm"
+            @click="openAccountDialog()"
+          >
+            <Plus class="mr-2 h-4 w-4" />
+            新增
+          </Button>
+        </div>
+
+        <Card v-if="accounts.length === 0">
+          <CardContent class="py-8 text-center text-sm text-muted-foreground">
+            尚未設定銀行帳戶。新增帳戶後可在銀行設定中選擇自動扣款來源。
+          </CardContent>
+        </Card>
+
+        <div
+          v-else
+          class="space-y-2"
+        >
+          <Card
+            v-for="acc in accounts"
+            :key="acc.id"
+          >
+            <CardContent class="p-4">
+              <div class="flex items-center justify-between">
+                <div class="min-w-0">
+                  <p class="font-medium text-sm">
+                    {{ acc.name }}
+                  </p>
+                  <p class="text-xs text-muted-foreground">
+                    {{ acc.bankName }}
+                  </p>
+                  <p
+                    v-if="acc.note"
+                    class="text-xs text-muted-foreground mt-0.5"
+                  >
+                    {{ acc.note }}
+                  </p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-7 w-7"
+                    @click="openAccountDialog(acc)"
+                  >
+                    <Pencil class="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-7 w-7 text-destructive"
+                    @click="deletingAccount = acc; deleteAccountDialogOpen = true"
+                  >
+                    <Trash2 class="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
 
     <BanksBankAccountDialog
       v-model:open="accountDialogOpen"
