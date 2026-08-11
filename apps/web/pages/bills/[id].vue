@@ -222,25 +222,13 @@
                 />
               </div>
 
-              <div v-if="editing">
-                <Label class="text-muted-foreground text-xs uppercase tracking-wide">狀態</Label>
-                <Select
-                  v-model="editForm.status"
+              <div v-if="editing && bill.status === BillStatus.PAID">
+                <Label class="text-muted-foreground text-xs uppercase tracking-wide">繳費日</Label>
+                <Input
+                  v-model="editForm.paidDate"
+                  type="date"
                   class="mt-1"
-                >
-                  <SelectTrigger class="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem
-                      v-for="s in statusOptions"
-                      :key="s"
-                      :value="s"
-                    >
-                      {{ statusLabel(s) }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                />
               </div>
 
               <div v-if="bill.createdAt">
@@ -256,11 +244,28 @@
           <CardFooter class="flex flex-wrap gap-2">
             <Button
               v-if="bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE"
-              :disabled="actionLoading || editing"
-              @click="payDialogOpen = true; payDate = today(getLocalTimeZone())"
+              :disabled="markingIds.has(bill.id) || editing"
+              :aria-label="`標記 ${bill.bank?.name} 已繳`"
+              @click="markPaid(bill, fetchBill)"
             >
-              <CircleCheck class="h-4 w-4" />
-              標記已繳
+              <Loader2
+                v-if="markingIds.has(bill.id)"
+                class="h-4 w-4 animate-spin"
+              />
+              <CircleCheck
+                v-else
+                class="h-4 w-4"
+              />
+              {{ bill.bank?.autoDebit ? '確認已扣款' : '標記已繳' }}
+            </Button>
+            <Button
+              v-else-if="bill.status === BillStatus.NO_PAYMENT"
+              variant="outline"
+              :disabled="actionLoading || editing"
+              @click="handleMarkPending"
+            >
+              <Undo2 class="h-4 w-4" />
+              改為待繳
             </Button>
             <Button
               v-else-if="bill.status === BillStatus.PAID"
@@ -397,7 +402,7 @@
                 </div>
                 <div class="flex-1 min-w-0 space-y-1">
                   <div class="flex items-center justify-between gap-2">
-                    <span class="text-sm font-medium truncate">{{ notification.channel }}</span>
+                    <span class="text-sm font-medium truncate">{{ notification.channel === 'telegram' ? 'Telegram' : notification.channel }}</span>
                     <span class="text-xs text-muted-foreground whitespace-nowrap">
                       {{ formatDate(notification.sentAt) }}
                     </span>
@@ -415,36 +420,6 @@
         </Card>
       </div><!-- end space-y-4 wrapper -->
     </template>
-
-    <!-- Mark as Paid Dialog -->
-    <Dialog v-model:open="payDialogOpen">
-      <DialogContent class="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>標記為已繳</DialogTitle>
-          <DialogDescription>選擇繳費日期，預設為今天。</DialogDescription>
-        </DialogHeader>
-        <div class="flex justify-center py-2">
-          <Calendar v-model="payDate" />
-        </div>
-        <DialogFooter class="gap-2">
-          <DialogClose as-child>
-            <Button variant="outline">
-              取消
-            </Button>
-          </DialogClose>
-          <Button
-            :disabled="actionLoading"
-            @click="handleConfirmPaid"
-          >
-            <Loader2
-              v-if="actionLoading"
-              class="mr-2 h-4 w-4 animate-spin"
-            />
-            確認已繳
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
 
     <!-- Delete Confirm Dialog -->
     <Dialog v-model:open="deleteDialogOpen">
@@ -494,8 +469,6 @@ import {
   Sparkles,
   ExternalLink,
 } from 'lucide-vue-next'
-import { getLocalTimeZone, today } from '@internationalized/date'
-import type { DateValue } from 'reka-ui'
 import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
 import type { BillDetailDTO, NotificationDTO } from '@bill-alarm/shared/types'
 import { daysRemainingInfo, formatAmount, type DaysRemainingTone } from '@bill-alarm/shared/format'
@@ -528,6 +501,7 @@ const route = useRoute()
 const billId = computed(() => route.params.id as string)
 
 const { getById, markAsPaid, update, reparse, remove, unpay } = useBillApi()
+const { markingIds, markPaid } = useMarkPaid()
 
 const bill = ref<BillDetailDTO | null>(null)
 const loading = ref(true)
@@ -536,31 +510,27 @@ const actionLoading = ref(false)
 const reparsing = ref(false)
 const emailExpanded = ref(false)
 const deleteDialogOpen = ref(false)
-const payDialogOpen = ref(false)
-const payDate = ref(today(getLocalTimeZone())) as Ref<DateValue>
 
-// Edit mode
+// Edit mode（狀態不在編輯範圍——狀態變更只走「標記已繳／恢復待繳」按鈕）
 const editing = ref(false)
 const editForm = ref<{
   amount: number
   minimumPayment: number | undefined
   dueDate: string
   billingPeriod: string
-  status: BillStatus
+  paidDate: string // 'YYYY-MM-DD'；僅已繳狀態顯示，用於回填非今日繳費日
 }>({
   amount: 0,
   minimumPayment: undefined,
   dueDate: '',
   billingPeriod: '',
-  status: BillStatus.PENDING,
+  paidDate: '',
 })
 
-const statusOptions: BillStatus[] = [
-  BillStatus.PENDING,
-  BillStatus.PAID,
-  BillStatus.OVERDUE,
-  BillStatus.NO_PAYMENT,
-]
+function toLocalYMD(value: string | Date): string {
+  const d = new Date(value)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 function startEdit() {
   if (!bill.value) return
@@ -569,7 +539,7 @@ function startEdit() {
     minimumPayment: bill.value.minimumPayment ?? undefined,
     dueDate: bill.value.dueDate,
     billingPeriod: bill.value.billingPeriod ?? '',
-    status: bill.value.status,
+    paidDate: bill.value.paidAt ? toLocalYMD(bill.value.paidAt) : '',
   }
   editing.value = true
 }
@@ -595,10 +565,15 @@ async function handleSaveEdit() {
     if (/^\d{4}-\d{2}$/.test(editForm.value.billingPeriod)) {
       payload.billingPeriod = editForm.value.billingPeriod
     }
-    if (editForm.value.status !== bill.value.status) {
-      payload.status = editForm.value.status
-    }
     await update(bill.value.id, payload)
+    // 已繳帳單的繳費日回填：/pay 對已繳帳單重寫日期是其文件化行為
+    if (
+      bill.value.status === BillStatus.PAID
+      && /^\d{4}-\d{2}-\d{2}$/.test(editForm.value.paidDate)
+      && editForm.value.paidDate !== (bill.value.paidAt ? toLocalYMD(bill.value.paidAt) : '')
+    ) {
+      await markAsPaid(bill.value.id, editForm.value.paidDate)
+    }
     toast.success('帳單已更新')
     editing.value = false
     await fetchBill()
@@ -673,16 +648,16 @@ async function fetchBill() {
   }
 }
 
-async function handleConfirmPaid() {
+/** NO_PAYMENT 的救回路徑：解析誤判「免繳」時，一鍵改回待繳。 */
+async function handleMarkPending() {
   actionLoading.value = true
   try {
-    await markAsPaid(billId.value, payDate.value.toString())
-    toast.success('帳單已標記為已繳')
-    payDialogOpen.value = false
+    await update(billId.value, { status: BillStatus.PENDING })
+    toast.success('已改為待繳')
     await fetchBill()
   }
-  catch {
-    toast.error('操作失敗', { description: '無法標記帳單，請稍後再試' })
+  catch (e) {
+    toast.error('操作失敗', { description: apiErrorMessage(e) })
   }
   finally {
     actionLoading.value = false
