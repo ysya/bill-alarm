@@ -98,14 +98,22 @@ app.get('/', async (c) => {
   const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize')) || 20))
 
   const where: Record<string, unknown> = { bank: { userId: getAuthUser(c).id } }
-  if (status) where.status = status
+  // 'unpaid' is a virtual filter: everything still owed (pending + overdue).
+  if (status === 'unpaid') where.status = { in: [BillStatus.PENDING, BillStatus.OVERDUE] }
+  else if (status) where.status = status
   if (bankId) where.bankId = bankId
+
+  // Unpaid is an action list — soonest deadline first (overdue dates sort
+  // naturally to the top). Everything else stays a ledger, newest first.
+  const orderBy = status === 'unpaid'
+    ? [{ dueDate: 'asc' as const }]
+    : [{ billingPeriod: 'desc' as const }, { dueDate: 'desc' as const }]
 
   const [bills, total] = await Promise.all([
     prisma.bill.findMany({
       where,
       include: { bank: { select: { id: true, name: true, code: true, autoDebit: true, isActive: true } } },
-      orderBy: [{ billingPeriod: 'desc' }, { dueDate: 'desc' }],
+      orderBy,
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
