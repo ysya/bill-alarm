@@ -2,114 +2,226 @@
   <div class="space-y-6">
     <InstallPrompt variant="banner" />
     <OnboardingProgressCard />
+
     <!-- Page Header -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h2 class="text-2xl font-bold tracking-tight">
-          總覽
-        </h2>
-        <p class="text-muted-foreground">
-          信用卡帳單繳費狀態一覽
-        </p>
-      </div>
-      <div class="w-full sm:w-auto">
-        <Select v-model="selectedMonth">
-          <SelectTrigger class="w-full sm:w-44">
-            <SelectValue placeholder="選擇月份" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem
-              v-for="month in monthOptions"
-              :key="month.value"
-              :value="month.value"
+    <div>
+      <h2 class="text-2xl font-bold tracking-tight">
+        總覽
+      </h2>
+      <p class="text-muted-foreground">
+        信用卡帳單繳費狀態一覽
+      </p>
+    </div>
+
+    <!-- Summary Cards（可點，跳帳單頁對應篩選） -->
+    <div class="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <NuxtLink to="/bills?tab=unpaid">
+        <Card class="h-full transition-colors hover:border-primary/50">
+          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle class="text-sm font-medium">
+              目前待繳
+            </CardTitle>
+            <div class="flex items-center gap-1 text-muted-foreground">
+              <DollarSign class="h-4 w-4" />
+              <ChevronRight class="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div class="text-2xl font-bold">
+              {{ formatAmount(summary?.totalPending ?? 0) }}
+            </div>
+            <p class="text-xs text-muted-foreground">
+              {{ summary?.pendingCount ?? 0 }} 筆{{ (summary?.overdueCount ?? 0) > 0 ? `，含 ${summary?.overdueCount} 筆逾期` : '' }}
+            </p>
+          </CardContent>
+        </Card>
+      </NuxtLink>
+
+      <NuxtLink to="/bills?tab=paid">
+        <Card class="h-full transition-colors hover:border-primary/50">
+          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle class="text-sm font-medium">
+              本月已繳
+            </CardTitle>
+            <div class="flex items-center gap-1 text-muted-foreground">
+              <CircleCheck class="h-4 w-4" />
+              <ChevronRight class="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div class="text-2xl font-bold">
+              {{ summary?.paidCount ?? 0 }}
+            </div>
+            <p class="text-xs text-muted-foreground">
+              筆帳單已繳清
+            </p>
+          </CardContent>
+        </Card>
+      </NuxtLink>
+
+      <NuxtLink to="/bills?tab=unpaid">
+        <Card class="h-full transition-colors hover:border-primary/50">
+          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle class="text-sm font-medium">
+              逾期帳單
+            </CardTitle>
+            <div class="flex items-center gap-1 text-muted-foreground">
+              <AlertTriangle
+                class="h-4 w-4"
+                :class="{ 'text-destructive': (summary?.overdueCount ?? 0) > 0 }"
+              />
+              <ChevronRight class="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div
+              class="text-2xl font-bold"
+              :class="{ 'text-destructive': (summary?.overdueCount ?? 0) > 0 }"
             >
-              {{ month.label }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+              {{ summary?.overdueCount ?? 0 }}
+            </div>
+            <p class="text-xs text-muted-foreground">
+              筆帳單已逾期
+            </p>
+          </CardContent>
+        </Card>
+      </NuxtLink>
     </div>
 
-    <!-- Summary Cards -->
-    <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-      <Card>
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle class="text-sm font-medium">
-            待繳總金額
-          </CardTitle>
-          <DollarSign class="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div class="text-2xl font-bold">
-            {{ formatAmount(summary?.totalPending ?? 0) }}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle class="text-sm font-medium">
-            待繳帳單
-          </CardTitle>
-          <Clock class="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div class="text-2xl font-bold">
-            {{ summary?.pendingCount ?? 0 }}
-          </div>
-          <p class="text-xs text-muted-foreground">
-            筆帳單待繳
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle class="text-sm font-medium">
-            本月已繳
-          </CardTitle>
-          <CircleCheck class="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div class="text-2xl font-bold">
-            {{ summary?.paidCount ?? 0 }}
-          </div>
-          <p class="text-xs text-muted-foreground">
-            筆帳單已繳清
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle class="text-sm font-medium">
-            逾期帳單
-          </CardTitle>
-          <AlertTriangle class="h-4 w-4 text-destructive" />
-        </CardHeader>
-        <CardContent>
-          <div
-            class="text-2xl font-bold"
-            :class="{ 'text-destructive': (summary?.overdueCount ?? 0) > 0 }"
-          >
-            {{ summary?.overdueCount ?? 0 }}
-          </div>
-          <p class="text-xs text-muted-foreground">
-            筆帳單已逾期
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-
-    <!-- Monthly Breakdown -->
-    <div
-      v-if="summary?.breakdown?.length"
-      class="space-y-4"
-    >
+    <!-- 接下來要繳（單一待辦流） -->
+    <div class="space-y-4">
       <h3 class="text-lg font-semibold">
-        月度明細
+        接下來要繳
       </h3>
-      <Card>
+
+      <!-- Loading -->
+      <div
+        v-if="loading"
+        class="space-y-2"
+      >
+        <Card
+          v-for="n in 3"
+          :key="n"
+          class="animate-pulse"
+        >
+          <CardContent class="flex items-center justify-between p-4">
+            <div class="h-4 w-32 rounded bg-muted" />
+            <div class="h-6 w-24 rounded bg-muted" />
+          </CardContent>
+        </Card>
+      </div>
+
+      <!-- 未授權信箱：中性引導，不慶祝 -->
+      <Card
+        v-else-if="!emailConfigured && unpaidBills.length === 0"
+        class="py-8"
+      >
+        <CardContent class="text-center text-sm text-muted-foreground">
+          完成上方設定後，帳單會自動出現在這裡。
+        </CardContent>
+      </Card>
+
+      <!-- 真正零未繳 -->
+      <Card
+        v-else-if="unpaidBills.length === 0"
+        class="flex flex-col items-center justify-center py-10"
+      >
+        <CardContent class="flex flex-col items-center text-center">
+          <CircleCheck class="h-12 w-12 text-muted-foreground mb-3" />
+          <h4 class="text-lg font-semibold mb-1">
+            目前沒有未繳帳單 🎉
+          </h4>
+          <p class="text-sm text-muted-foreground">
+            所有帳單都處理完了。
+          </p>
+        </CardContent>
+      </Card>
+
+      <template v-else>
+        <!-- 已逾期 -->
+        <section
+          v-if="overdueBills.length > 0"
+          class="space-y-2"
+        >
+          <div class="flex items-center gap-3">
+            <h4 class="text-sm font-semibold text-red-500">
+              已逾期（{{ overdueBills.length }}）
+            </h4>
+            <Separator class="flex-1" />
+          </div>
+          <DashboardBillRow
+            v-for="bill in overdueBills"
+            :key="bill.id"
+            :bill="bill"
+            :marking="markingIds.has(bill.id)"
+            @pay="markPaid(bill, fetchData)"
+          />
+        </section>
+
+        <!-- 即將到期 -->
+        <section
+          v-if="upcomingShown.length > 0"
+          class="space-y-2"
+        >
+          <div class="flex items-center gap-3">
+            <h4 class="text-sm font-semibold text-muted-foreground">
+              即將到期（{{ upcomingAll.length }}）
+            </h4>
+            <Separator class="flex-1" />
+          </div>
+          <DashboardBillRow
+            v-for="bill in upcomingShown"
+            :key="bill.id"
+            :bill="bill"
+            :marking="markingIds.has(bill.id)"
+            @pay="markPaid(bill, fetchData)"
+          />
+          <div
+            v-if="upcomingHiddenCount > 0"
+            class="pt-1"
+          >
+            <NuxtLink
+              to="/bills?tab=unpaid"
+              class="text-sm text-muted-foreground underline-offset-4 hover:underline"
+            >
+              查看另外 {{ upcomingHiddenCount }} 筆未繳 →
+            </NuxtLink>
+          </div>
+        </section>
+      </template>
+
+      <p class="text-xs text-muted-foreground">
+        找不到某張帳單？<NuxtLink
+          to="/scan-logs"
+          class="underline underline-offset-4"
+        >查看掃描紀錄</NuxtLink>
+      </p>
+    </div>
+
+    <!-- 月度明細（月份選擇器只作用於此區） -->
+    <div class="space-y-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h3 class="text-lg font-semibold">
+          {{ monthTitle }}明細
+        </h3>
+        <div class="w-full sm:w-auto">
+          <Select v-model="selectedMonth">
+            <SelectTrigger class="w-full sm:w-44">
+              <SelectValue placeholder="選擇月份" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="month in monthOptions"
+                :key="month.value"
+                :value="month.value"
+              >
+                {{ month.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <Card v-if="summary?.breakdown?.length">
         <CardContent class="p-0">
           <div class="divide-y">
             <div
@@ -135,160 +247,12 @@
           </div>
         </CardContent>
       </Card>
-    </div>
-
-    <!-- Due Date Timeline -->
-    <div
-      v-if="summary?.timeline?.length"
-      class="space-y-4"
-    >
-      <h3 class="text-lg font-semibold">
-        繳費時程
-      </h3>
-      <div class="space-y-2">
-        <Card
-          v-for="item in summary.timeline"
-          :key="item.id"
-          class="cursor-pointer transition-colors hover:border-primary/50"
-          @click="navigateTo(`/bills/${item.id}`)"
-        >
-          <CardContent class="flex items-center justify-between p-4">
-            <div class="flex items-center gap-3">
-              <div class="flex flex-col">
-                <span class="font-medium text-sm">{{ item.bankName }}</span>
-                <span class="text-xs text-muted-foreground">截止 {{ formatYMD(item.dueDate) }}</span>
-              </div>
-              <Badge
-                v-if="item.autoDebit"
-                variant="secondary"
-                class="text-xs"
-              >
-                自動扣款
-              </Badge>
-            </div>
-            <div class="flex items-center gap-3">
-              <span class="font-bold">{{ formatAmount(item.amount) }}</span>
-              <Badge :class="statusBadgeClass(item.status)">
-                {{ statusLabel(item.status) }}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-
-    <!-- Pending Bills List -->
-    <div class="space-y-4">
-      <div class="flex items-center justify-between">
-        <h3 class="text-lg font-semibold">
-          待繳帳單
-        </h3>
-        <NuxtLink to="/bills">
-          <Button
-            variant="ghost"
-            size="sm"
-          >
-            查看全部
-            <ArrowRight class="ml-1 h-4 w-4" />
-          </Button>
-        </NuxtLink>
-      </div>
-
-      <!-- Loading State -->
-      <div
-        v-if="loading"
-        class="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
-      >
-        <Card
-          v-for="n in 3"
-          :key="n"
-          class="animate-pulse"
-        >
-          <CardHeader>
-            <div class="h-4 w-24 rounded bg-muted" />
-            <div class="h-3 w-32 rounded bg-muted" />
-          </CardHeader>
-          <CardContent>
-            <div class="h-6 w-28 rounded bg-muted" />
-          </CardContent>
-        </Card>
-      </div>
-
-      <!-- Empty State -->
-      <Card
-        v-else-if="pendingBills.length === 0"
-        class="flex flex-col items-center justify-center py-12"
-      >
-        <CardContent class="flex flex-col items-center text-center">
-          <CircleCheck class="h-12 w-12 text-muted-foreground mb-4" />
-          <h4 class="text-lg font-semibold mb-1">
-            沒有待繳帳單
-          </h4>
-          <p class="text-sm text-muted-foreground">
-            本月所有帳單皆已繳清，做得好！
-          </p>
-        </CardContent>
-      </Card>
-
-      <!-- Bill Cards -->
-      <div
+      <p
         v-else
-        class="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+        class="text-sm text-muted-foreground"
       >
-        <Card
-          v-for="bill in pendingBills"
-          :key="bill.id"
-          class="transition-colors hover:border-primary/50 cursor-pointer"
-          @click="navigateTo(`/bills/${bill.id}`)"
-        >
-          <CardHeader class="pb-3">
-            <div class="flex items-start justify-between">
-              <div>
-                <CardTitle class="text-base">
-                  {{ bill.bank?.name }}
-                </CardTitle>
-              </div>
-              <Badge :class="statusBadgeClass(bill.status)">
-                {{ statusLabel(bill.status) }}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent class="space-y-3">
-            <div class="text-2xl font-bold">
-              {{ formatAmount(bill.amount) }}
-            </div>
-            <Separator />
-            <div class="flex items-center justify-between text-sm">
-              <div class="flex items-center gap-1.5 text-muted-foreground">
-                <Calendar class="h-3.5 w-3.5" />
-                <span>截止日 {{ formatYMD(bill.dueDate) }}</span>
-              </div>
-              <DaysRemaining
-                :due-date="bill.dueDate"
-                :status="bill.status"
-              />
-            </div>
-          </CardContent>
-          <CardFooter class="pt-0">
-            <Button
-              class="w-full"
-              size="sm"
-              :disabled="markingPaid.has(bill.id)"
-              @click.stop="handleMarkAsPaid(bill.id)"
-            >
-              <Loader2
-                v-if="markingPaid.has(bill.id)"
-                class="h-4 w-4 animate-spin"
-              />
-              <CircleCheck
-                v-else
-                class="h-4 w-4"
-              />
-              {{ markingPaid.has(bill.id) ? '處理中...' : '標記已繳' }}
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
+        這個月沒有帳單。
+      </p>
     </div>
   </div>
 </template>
@@ -297,19 +261,15 @@
 import { toast } from 'vue-sonner'
 import {
   DollarSign,
-  Clock,
   CircleCheck,
   AlertTriangle,
-  ArrowRight,
-  Calendar,
-  Loader2,
+  ChevronRight,
 } from 'lucide-vue-next'
-import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
+import { BillStatus } from '@bill-alarm/shared/types'
 import type { BillDTO, MonthlySummaryDTO } from '@bill-alarm/shared/types'
 import { formatAmount } from '@bill-alarm/shared/format'
-import { formatYMD } from '@bill-alarm/shared/date'
 
-// --- Month Filter ---
+// --- Month Filter（只作用於月度明細區） ---
 
 function getCurrentMonth(): string {
   const now = new Date()
@@ -331,24 +291,36 @@ function generateMonthOptions(): Array<{ value: string, label: string }> {
 const selectedMonth = ref<string>(getCurrentMonth())
 const monthOptions = generateMonthOptions()
 
-// --- Data Fetching ---
+const monthTitle = computed(() => {
+  const match = selectedMonth.value.match(/^(\d{4})-(\d{2})$/)
+  return match ? `${match[1]} 年 ${Number(match[2])} 月` : ''
+})
 
-const { getSummary, list, markAsPaid } = useBillApi()
+// --- Data ---
+
+const { getSummary, list } = useBillApi()
+const { markingIds, markPaid } = useMarkPaid()
 
 const summary = ref<MonthlySummaryDTO | null>(null)
-const pendingBills = ref<BillDTO[]>([])
+const unpaidBills = ref<BillDTO[]>([])
 const loading = ref(true)
-const markingPaid = ref<Set<string>>(new Set())
+
+const UPCOMING_LIMIT = 5
+
+const overdueBills = computed(() => unpaidBills.value.filter(b => b.status === BillStatus.OVERDUE))
+const upcomingAll = computed(() => unpaidBills.value.filter(b => b.status !== BillStatus.OVERDUE))
+const upcomingShown = computed(() => upcomingAll.value.slice(0, UPCOMING_LIMIT))
+const upcomingHiddenCount = computed(() => Math.max(0, upcomingAll.value.length - UPCOMING_LIMIT))
 
 async function fetchData() {
   loading.value = true
   try {
-    const [summaryData, billsData] = await Promise.all([
+    const [summaryData, unpaidData] = await Promise.all([
       getSummary(selectedMonth.value),
-      list({ status: BillStatus.PENDING }),
+      list({ status: 'unpaid', pageSize: 100 }),
     ])
     summary.value = summaryData
-    pendingBills.value = billsData.data
+    unpaidBills.value = unpaidData.data
   }
   catch {
     toast.error('載入資料失敗', { description: '請稍後再試' })
@@ -358,24 +330,32 @@ async function fetchData() {
   }
 }
 
-async function handleMarkAsPaid(id: string) {
-  markingPaid.value.add(id)
+// 月份切換只需要新的 breakdown——未繳列表與上方卡片是「當下事實」，不動。
+watch(selectedMonth, async () => {
   try {
-    await markAsPaid(id)
-    toast.success('帳單已標記為已繳')
-    await fetchData()
+    summary.value = await getSummary(selectedMonth.value)
   }
   catch {
-    toast.error('操作失敗', { description: '無法標記帳單，請稍後再試' })
+    toast.error('載入資料失敗', { description: '請稍後再試' })
   }
-  finally {
-    markingPaid.value.delete(id)
-  }
+})
+
+// 掃描完成（不論從哪一頁觸發）自動刷新總覽。
+const { onComplete } = useScanEvents()
+onComplete.value = () => {
+  fetchData()
 }
 
-watch(selectedMonth, () => fetchData())
-
-onMounted(() => fetchData())
+const emailConfigured = ref(true) // 防閃：抓到狀態前先當 true，避免誤現引導文案
+onMounted(async () => {
+  fetchData()
+  try {
+    emailConfigured.value = (await useSettingsApi().getOnboardingStatus()).emailConfigured
+  }
+  catch {
+    // leave true — never block the overview on this hint
+  }
+})
 
 useHead({ title: '總覽 - Bill Alarm' })
 </script>

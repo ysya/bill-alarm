@@ -6,8 +6,8 @@ export function useBillApi() {
   return {
     getSummary: (month?: string) => {
       const qs = month ? `?month=${month}` : ''
-      // breakdown/timeline are only populated when `month` is passed, but both
-      // fields are optional on MonthlySummaryDTO so this type fits either call.
+      // breakdown is only populated when `month` is passed, but the field is
+      // optional on MonthlySummaryDTO so this type fits either call.
       return get<MonthlySummaryDTO>(`/bills/summary${qs}`)
     },
 

@@ -121,18 +121,8 @@ export interface BillBreakdownItem {
   autoDebit: boolean
 }
 
-export interface BillTimelineItem {
-  id: string
-  bankName: string
-  amount: number
-  dueDate: string
-  status: BillStatus
-  autoDebit: boolean
-}
-
 export interface MonthlySummaryDTO extends BillSummaryDTO {
   breakdown?: BillBreakdownItem[]
-  timeline?: BillTimelineItem[]
 }
 
 // --- Shared helpers ---
