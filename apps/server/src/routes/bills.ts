@@ -34,22 +34,24 @@ app.get('/summary', async (c) => {
   const currentMonth = today.slice(0, 7)
   const userId = getAuthUser(c).id
 
-  const [pending, paid, overdue] = await Promise.all([
-    prisma.bill.findMany({ where: { status: BillStatus.PENDING, bank: { userId } } }),
+  // "Pending" figures cover everything still owed — pending AND overdue —
+  // so the dashboard's headline number matches what the user must pay.
+  const [unpaid, paid] = await Promise.all([
+    prisma.bill.findMany({ where: { status: { in: [BillStatus.PENDING, BillStatus.OVERDUE] }, bank: { userId } } }),
     prisma.bill.count({ where: { status: BillStatus.PAID, billingPeriod: currentMonth, bank: { userId } } }),
-    prisma.bill.count({ where: { status: BillStatus.OVERDUE, bank: { userId } } }),
   ])
 
-  const totalPending = pending.reduce((sum, b) => sum + b.amount, 0)
-  const upcomingBills = pending
+  const totalPending = unpaid.reduce((sum, b) => sum + b.amount, 0)
+  const overdueCount = unpaid.filter((b) => b.status === BillStatus.OVERDUE).length
+  const upcomingBills = unpaid
     .filter((b) => b.dueDate >= today)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
 
   const result: Record<string, unknown> = {
     totalPending,
-    pendingCount: pending.length,
+    pendingCount: unpaid.length,
     paidCount: paid,
-    overdueCount: overdue,
+    overdueCount,
     nextDueDate: upcomingBills[0]?.dueDate ?? null,
   }
 
@@ -78,14 +80,6 @@ app.get('/summary', async (c) => {
     }
 
     result.breakdown = Array.from(breakdownMap.values())
-    result.timeline = monthBills.map((b) => ({
-      id: b.id,
-      bankName: b.bank.name,
-      amount: b.amount,
-      dueDate: b.dueDate,
-      status: b.status,
-      autoDebit: b.bank.autoDebit,
-    }))
   }
 
   return c.json(result)
