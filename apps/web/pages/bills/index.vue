@@ -120,7 +120,9 @@
         >
           <CardContent class="flex flex-col items-center text-center">
             <Inbox class="h-12 w-12 text-muted-foreground mb-4" />
-            <template v-if="!emailConfigured">
+            <!-- 信箱引導只在「全部」tab（真的一筆帳單都沒有）出現；
+                 其他 tab 空了不代表沒帳單，別誤導使用者去重設信箱。 -->
+            <template v-if="!emailConfigured && activeTab === 'all'">
               <h4 class="text-lg font-semibold mb-1">
                 還沒有帳單
               </h4>
@@ -133,10 +135,10 @@
             </template>
             <template v-else-if="activeTab === 'unpaid'">
               <h4 class="text-lg font-semibold mb-1">
-                沒有未繳帳單 🎉
+                沒有未繳帳單{{ emailConfigured ? ' 🎉' : '' }}
               </h4>
               <p class="text-sm text-muted-foreground">
-                所有帳單都處理完了。
+                {{ emailConfigured ? '所有帳單都處理完了。' : '完成信箱授權後，新帳單會自動掃進來。' }}
               </p>
             </template>
             <template v-else-if="activeTab === 'no_payment'">
