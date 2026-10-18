@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setupTestDb } from './helpers/test-db.js'
 import type { SearchCriteria } from '../email/types.js'
 
-const { searchMock, imapFlowConstructorSpy } = vi.hoisted(() => ({
+const { searchMock, imapFlowConstructorSpy, listMock, mailboxLockMock, fetchOneMock, releaseMock, logoutMock } = vi.hoisted(() => ({
   // Typed via the generic param (not a named-arg implementation) so the mock
   // records `client.search(query, options)` calls without unused-param lint noise.
   searchMock: vi.fn<(query: any, options?: any) => Promise<number[] | false>>(),
@@ -11,6 +11,11 @@ const { searchMock, imapFlowConstructorSpy } = vi.hoisted(() => ({
   // way to prove getEmailProviderFor decrypted the password rather than
   // merely "didn't crash".
   imapFlowConstructorSpy: vi.fn<(options: unknown) => void>(),
+  listMock: vi.fn(async () => [{ path: '[Gmail]/所有郵件', specialUse: '\\All' }]),
+  mailboxLockMock: vi.fn<(path: string, options?: unknown) => void>(),
+  fetchOneMock: vi.fn(),
+  releaseMock: vi.fn(),
+  logoutMock: vi.fn(async () => {}),
 }))
 
 vi.mock('imapflow', () => ({
@@ -20,10 +25,14 @@ vi.mock('imapflow', () => ({
       imapFlowConstructorSpy(options)
     }
     connect = vi.fn(async () => {})
-    logout = vi.fn(async () => {})
-    getMailboxLock = vi.fn(async () => ({ release: vi.fn(), path: 'INBOX' }))
+    logout = logoutMock
+    list = listMock
+    getMailboxLock = vi.fn(async (path: string, options?: unknown) => {
+      mailboxLockMock(path, options)
+      return { release: releaseMock, path }
+    })
     search = searchMock
-    fetchOne = vi.fn(async () => null)
+    fetchOne = fetchOneMock
   },
 }))
 
@@ -177,6 +186,102 @@ describe('GmailImapProvider.search: structured criteria dispatch by host', () =>
     await provider.withSession(async (session) => {
       expect(session.searchRaw).toBeUndefined()
     })
+  })
+})
+
+describe('Gmail archived mail', () => {
+  const config = { host: 'imap.gmail.com', port: 993, user: 'me@gmail.com', password: 'pw' }
+  const criteria: SearchCriteria = { senders: ['cards@estatements.hsbc.com.tw'], sinceDays: 30, hasAttachment: true }
+  const source = Buffer.from('From: cards@estatements.hsbc.com.tw\r\nSubject: October statement\r\n\r\nArchived bill')
+
+  beforeEach(() => {
+    searchMock.mockReset().mockResolvedValue([7])
+    listMock.mockReset().mockResolvedValue([
+      { path: 'INBOX', specialUse: '\\Inbox' },
+      { path: '[Gmail]/所有郵件', specialUse: '\\All' },
+    ])
+    mailboxLockMock.mockClear()
+    fetchOneMock.mockReset().mockResolvedValue({ uid: 7, seq: 1, source })
+    releaseMock.mockClear()
+    logoutMock.mockClear()
+  })
+
+  it('finds and fetches an archived statement from the localized All Mail folder', async () => {
+    // Reverting to INBOX must make the archived statement disappear.
+    searchMock.mockImplementation(async () => (
+      mailboxLockMock.mock.lastCall?.[0] === '[Gmail]/所有郵件' ? [7] : []
+    ))
+    const provider = new GmailImapProvider(config)
+    await provider.withSession(async (session) => {
+      const refs = await session.search(criteria)
+      expect(refs).toEqual([{ id: 'gmail-all:7' }])
+      expect((await session.fetch(refs[0]))?.subject).toBe('October statement')
+    })
+    expect(mailboxLockMock).toHaveBeenCalledWith('[Gmail]/所有郵件', { readOnly: true })
+    expect(fetchOneMock).toHaveBeenCalledWith('7', { source: true }, { uid: true })
+    expect(releaseMock).toHaveBeenCalledOnce()
+    expect(logoutMock).toHaveBeenCalledOnce()
+  })
+
+  it('uses the same scoped IDs for raw debug search and one-off attachment lookups', async () => {
+    const provider = new GmailImapProvider(config)
+    const refs = await provider.withSession((session) => session.searchRaw!('from:hsbc newer_than:30d'))
+    expect(refs).toEqual([{ id: 'gmail-all:7' }])
+    const email = await provider.fetchOne(refs[0].id)
+    expect(email?.id).toBe('gmail-all:7')
+    expect(email?.subject).toBe('October statement')
+    expect(mailboxLockMock.mock.calls.map(([path]) => path)).toEqual(['[Gmail]/所有郵件', '[Gmail]/所有郵件'])
+  })
+
+  it('does not confuse an All Mail UID with an old INBOX bill having the same UID', async () => {
+    const { emailAlreadyProcessed, duplicateBillExists } = await import('../email-parser.js')
+    const user = await prisma.user.create({ data: { username: 'archive-owner', passwordHash: 'x:y' } })
+    const bank = await prisma.bank.create({
+      data: { name: 'HSBC', emailSenderPattern: criteria.senders[0], emailSubjectPattern: 'statement', userId: user.id },
+    })
+    await prisma.bill.create({
+      data: { bankId: bank.id, billingPeriod: '2026-09', amount: 1604, dueDate: '2026-09-21', sourceEmailId: '7' },
+    })
+
+    const refs = await new GmailImapProvider(config).withSession((session) => session.search(criteria))
+    expect(await emailAlreadyProcessed(refs[0].id, user.id)).toBe(false)
+    // Existing statement-level dedup still protects bills re-found in All Mail.
+    expect(await duplicateBillExists(bank.id, 1604, '2026-09-21')).toBe(true)
+  })
+
+  it('keeps legacy unprefixed Gmail lookups in INBOX', async () => {
+    fetchOneMock.mockImplementation(async () => ({
+      uid: 7,
+      seq: 1,
+      source: Buffer.from(`Subject: ${mailboxLockMock.mock.lastCall?.[0] === 'INBOX' ? 'September' : 'October'} statement\r\n\r\nBill`),
+    }))
+    const email = await new GmailImapProvider(config).fetchOne('7')
+    expect(email?.id).toBe('7')
+    expect(email?.subject).toBe('September statement')
+    expect(mailboxLockMock).toHaveBeenCalledWith('INBOX', { readOnly: true })
+    expect(listMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps non-Gmail searches and IDs in INBOX', async () => {
+    const provider = new GmailImapProvider({ ...config, host: 'imap.fastmail.com' })
+    const refs = await provider.withSession((session) => session.search(criteria))
+    expect(refs).toEqual([{ id: '7' }])
+    expect(mailboxLockMock).toHaveBeenCalledWith('INBOX', { readOnly: true })
+    expect(listMock).not.toHaveBeenCalled()
+  })
+
+  it('returns no refs when IMAP search returns false', async () => {
+    searchMock.mockResolvedValue(false)
+    const refs = await new GmailImapProvider(config).withSession((session) => session.search(criteria))
+    expect(refs).toEqual([])
+  })
+
+  it('reports unavailable All Mail instead of silently missing archived bills, and logs out', async () => {
+    listMock.mockResolvedValue([{ path: 'INBOX', specialUse: '\\Inbox' }])
+    await expect(new GmailImapProvider(config).withSession((session) => session.search(criteria)))
+      .rejects.toThrow('Gmail All Mail')
+    expect(searchMock).not.toHaveBeenCalled()
+    expect(logoutMock).toHaveBeenCalledOnce()
   })
 })
 

@@ -1,4 +1,5 @@
 export interface MessageRef {
+  /** Opaque provider ID; may include a mailbox scope rather than just a UID. */
   id: string
 }
 

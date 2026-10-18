@@ -1,4 +1,4 @@
-import { ImapFlow, type ImapFlowOptions, type SearchObject } from 'imapflow'
+import { ImapFlow, type ImapFlowOptions, type MailboxLockObject, type SearchObject } from 'imapflow'
 import { simpleParser } from 'mailparser'
 import { logger } from '@/index.js'
 import { getSetting, KEYS } from '@/services/settings.js'
@@ -25,6 +25,10 @@ function isGmailHost(host: string): boolean {
   const h = host.toLowerCase()
   return h === 'imap.gmail.com' || h.endsWith('.gmail.com')
 }
+
+// IMAP UIDs are scoped to a folder. Keep All Mail IDs distinct from legacy
+// unprefixed INBOX UIDs so unrelated emails cannot collide in scan dedup.
+const ALL_MAIL_ID_PREFIX = 'gmail-all:'
 
 export class GmailImapProvider implements EmailProvider {
   readonly name = 'gmail-imap'
@@ -84,13 +88,33 @@ export class GmailImapProvider implements EmailProvider {
   }
 
   async withSession<T>(fn: (session: EmailSession) => Promise<T>): Promise<T> {
+    return this.withMailboxSession(fn, 'scan')
+  }
+
+  private async withMailboxSession<T>(
+    fn: (session: EmailSession) => Promise<T>,
+    scope: 'scan' | 'legacy-inbox',
+  ): Promise<T> {
     const client = new ImapFlow(this.buildOptions())
     await client.connect()
-    const lock = await client.getMailboxLock('INBOX')
     const gmail = isGmailHost(this.config.host)
+    const allMail = gmail && scope === 'scan'
+    let lock: MailboxLockObject | undefined
     try {
+      let mailboxPath = 'INBOX'
+      if (allMail) {
+        // Gmail localizes folder names; discover All Mail by its special-use
+        // flag instead of hardcoding "[Gmail]/All Mail". This includes archives.
+        const mailboxes = await client.list()
+        const mailbox = mailboxes.find((entry) => entry.specialUse === '\\All')
+        if (!mailbox) {
+          throw new Error('找不到 Gmail All Mail（所有郵件）資料夾，請檢查 Gmail 的 IMAP 資料夾設定')
+        }
+        mailboxPath = mailbox.path
+      }
+      lock = await client.getMailboxLock(mailboxPath, { readOnly: true })
       const toRefs = (uids: number[] | false): MessageRef[] =>
-        uids === false ? [] : uids.map((u) => ({ id: String(u) }))
+        uids === false ? [] : uids.map((u) => ({ id: `${allMail ? ALL_MAIL_ID_PREFIX : ''}${u}` }))
 
       const session: EmailSession = {
         search: async (criteria: SearchCriteria) => {
@@ -107,7 +131,8 @@ export class GmailImapProvider implements EmailProvider {
           },
         } : {}),
         fetch: async (ref: MessageRef) => {
-          const msg = await client.fetchOne(ref.id, { source: true }, { uid: true })
+          const uid = allMail ? ref.id.slice(ALL_MAIL_ID_PREFIX.length) : ref.id
+          const msg = await client.fetchOne(uid, { source: true }, { uid: true })
           if (!msg || !msg.source) return null
 
           const parsed = await simpleParser(msg.source)
@@ -133,12 +158,15 @@ export class GmailImapProvider implements EmailProvider {
       }
       return await fn(session)
     } finally {
-      lock.release()
+      lock?.release()
       try { await client.logout() } catch { /* ignore */ }
     }
   }
 
   async fetchOne(id: string): Promise<EmailMessage | null> {
-    return this.withSession((s) => s.fetch({ id }))
+    // Existing saved/debug IDs still refer to INBOX, while new Gmail IDs carry
+    // their All Mail scope across separate sessions (e.g. Parser Lab lookups).
+    const scope = id.startsWith(ALL_MAIL_ID_PREFIX) ? 'scan' : 'legacy-inbox'
+    return this.withMailboxSession((s) => s.fetch({ id }), scope)
   }
 }

@@ -4,6 +4,8 @@ Self-hosted credit card bill tracker with automatic email parsing and payment re
 
 Scans each user's mailbox via IMAP for credit card statements, extracts bill amounts and due dates from PDF attachments, and sends reminders via Telegram and a personal ICS calendar feed.
 
+Gmail scans cover both inbox and archived messages through the All Mail folder, using the configured date range and bank sender filters. Other IMAP hosts scan INBOX.
+
 ## Features
 
 - **Automatic email scanning** - Periodically fetches credit card statement emails via per-user IMAP (Gmail App Password or any IMAP host)
