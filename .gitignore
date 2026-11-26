@@ -39,3 +39,7 @@ generated/
 # Turbo
 .turbo
 .playwright-mcp/
+
+# Local planning and operator notes
+/prompts/
+/operator-notes/

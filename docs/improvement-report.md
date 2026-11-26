@@ -4,7 +4,7 @@
 > 範圍：apps/server、apps/web、packages/shared、部署設定（Dockerfile / docker-compose / nginx / CI）
 > 方法：逐檔閱讀全部原始碼（約 8–10k 行，排除 generated code 與 shadcn-vue components），每項發現皆附檔案位置；未經驗證的推測會明確標註。
 
-> **更新（v0.4，2026-07）：** 本報告的多數發現已在兩輪 refactor 中處理完畢，詳見 [`docs/superpowers/plans/2026-07-09-health-fixes-plan-a.md`](superpowers/plans/2026-07-09-health-fixes-plan-a.md) 與 [`plan-b.md`](superpowers/plans/2026-07-09-health-fixes-plan-b.md)。以下各節標題後已標註目前狀態（逐項對照程式碼與 git log 驗證後標註）：✅ 已於 v0.4 處理・🟡 部分已處理・➡️ 追蹤中（尚未處理或刻意延後）。
+> **更新（v0.4，2026-07）：** 本報告的多數發現已在兩輪 refactor 中處理完畢。以下各節標題後已標註目前狀態（逐項對照程式碼與 git log 驗證後標註）：✅ 已於 v0.4 處理・🟡 部分已處理・➡️ 追蹤中（尚未處理或刻意延後）。
 
 ---
 
