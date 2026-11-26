@@ -84,6 +84,22 @@ describe('processOverdueBills: mark every tick, notify once after 09:00', () => 
     expect(logs[0].success).toBe(true)
   })
 
+  it('keeps a transferred bill unsettled without sending a standard overdue warning', async () => {
+    const { bank } = await seedUser('alice')
+    await prisma.bank.update({ where: { id: bank.id }, data: { autoDebit: true } })
+    const bill = await seedBill(bank.id, addDaysYMD(todayYMD(base), -1))
+    await prisma.bill.update({ where: { id: bill.id }, data: { transferredAt: base } })
+
+    await processOverdueBills(at(9, 10))
+
+    expect(await prisma.bill.findUniqueOrThrow({ where: { id: bill.id } })).toMatchObject({
+      status: BillStatus.OVERDUE,
+      paidAt: null,
+      transferredAt: base,
+    })
+    expect(sendOverdueWarning).not.toHaveBeenCalled()
+  })
+
   it('a bill marked overdue on an earlier tick is notified on the first tick at/after 09:00', async () => {
     const { bank } = await seedUser('alice')
     const bill = await seedBill(bank.id, addDaysYMD(todayYMD(base), -1))

@@ -119,6 +119,7 @@ export async function processOverdueBills(now: Date = new Date()): Promise<void>
   const unnotified = await prisma.bill.findMany({
     where: {
       status: BillStatus.OVERDUE,
+      transferredAt: null,
       notifications: { none: { message: OVERDUE_WARNING_MESSAGE, success: true } },
     },
     include: { bank: { include: { user: { select: { deletedAt: true } } } } },

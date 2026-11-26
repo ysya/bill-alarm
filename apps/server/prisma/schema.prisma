@@ -55,6 +55,8 @@ model Bill {
   status           String            @default("pending")
   parseSource      String?           // 'template' | 'hardcoded' | 'llm' ('generic' exists on legacy rows)
   paidAt           DateTime?
+  transferredAt    DateTime?
+  paidByAutoDebit   Boolean           @default(false)
   sourceEmailId    String?
   rawEmailSnippet  String?
   pdfPath          String?

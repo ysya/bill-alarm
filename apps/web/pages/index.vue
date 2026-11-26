@@ -33,6 +33,13 @@
             <p class="text-xs text-muted-foreground">
               {{ summary?.pendingCount ?? 0 }} 筆{{ (summary?.overdueCount ?? 0) > 0 ? `，含 ${summary?.overdueCount} 筆逾期` : '' }}
             </p>
+            <div
+              v-if="summary && summary.totalTransferred > 0"
+              class="mt-2 text-xs text-muted-foreground"
+            >
+              <p>已轉帳待扣繳 {{ formatAmount(summary.totalTransferred) }}</p>
+              <p>尚待繳款或備款 {{ formatAmount(summary.totalPending - summary.totalTransferred) }}</p>
+            </div>
           </CardContent>
         </Card>
       </NuxtLink>
@@ -91,7 +98,7 @@
     <!-- 接下來要繳（單一待辦流） -->
     <div class="space-y-4">
       <h3 class="text-lg font-semibold">
-        接下來要繳
+        帳單待辦
       </h3>
 
       <!-- Loading -->
@@ -153,8 +160,7 @@
             v-for="bill in overdueBills"
             :key="bill.id"
             :bill="bill"
-            :marking="markingIds.has(bill.id)"
-            @pay="markPaid(bill, fetchData)"
+            :refresh="fetchData"
           />
         </section>
 
@@ -173,8 +179,7 @@
             v-for="bill in upcomingShown"
             :key="bill.id"
             :bill="bill"
-            :marking="markingIds.has(bill.id)"
-            @pay="markPaid(bill, fetchData)"
+            :refresh="fetchData"
           />
           <div
             v-if="upcomingHiddenCount > 0"
@@ -187,6 +192,24 @@
               查看另外 {{ upcomingHiddenCount }} 筆未繳 →
             </NuxtLink>
           </div>
+        </section>
+
+        <section
+          v-if="awaitingDebitBills.length > 0"
+          class="space-y-2"
+        >
+          <div class="flex items-center gap-3">
+            <h4 class="text-sm font-semibold text-muted-foreground">
+              待確認扣繳（{{ awaitingDebitBills.length }}）
+            </h4>
+            <Separator class="flex-1" />
+          </div>
+          <DashboardBillRow
+            v-for="bill in awaitingDebitBills"
+            :key="bill.id"
+            :bill="bill"
+            :refresh="fetchData"
+          />
         </section>
       </template>
 
@@ -265,7 +288,7 @@ import {
   AlertTriangle,
   ChevronRight,
 } from 'lucide-vue-next'
-import { BillStatus } from '@bill-alarm/shared/types'
+import { BillStatus, isAwaitingDebit } from '@bill-alarm/shared/types'
 import type { BillDTO, MonthlySummaryDTO } from '@bill-alarm/shared/types'
 import { formatAmount } from '@bill-alarm/shared/format'
 
@@ -299,7 +322,6 @@ const monthTitle = computed(() => {
 // --- Data ---
 
 const { getSummary, list } = useBillApi()
-const { markingIds, markPaid } = useMarkPaid()
 
 const summary = ref<MonthlySummaryDTO | null>(null)
 const unpaidBills = ref<BillDTO[]>([])
@@ -307,8 +329,9 @@ const loading = ref(true)
 
 const UPCOMING_LIMIT = 5
 
-const overdueBills = computed(() => unpaidBills.value.filter(b => b.status === BillStatus.OVERDUE))
-const upcomingAll = computed(() => unpaidBills.value.filter(b => b.status !== BillStatus.OVERDUE))
+const awaitingDebitBills = computed(() => unpaidBills.value.filter(isAwaitingDebit))
+const overdueBills = computed(() => unpaidBills.value.filter(b => b.status === BillStatus.OVERDUE && !isAwaitingDebit(b)))
+const upcomingAll = computed(() => unpaidBills.value.filter(b => b.status !== BillStatus.OVERDUE && !isAwaitingDebit(b)))
 const upcomingShown = computed(() => upcomingAll.value.slice(0, UPCOMING_LIMIT))
 const upcomingHiddenCount = computed(() => Math.max(0, upcomingAll.value.length - UPCOMING_LIMIT))
 

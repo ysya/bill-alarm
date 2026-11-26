@@ -13,6 +13,7 @@ import { todayYMD, isValidYMD } from '@bill-alarm/shared/date'
 import { getAuthUser } from './auth.js'
 
 const app = new Hono()
+const unpaidStatuses = [BillStatus.PENDING, BillStatus.OVERDUE]
 
 /** Load a bill only if it belongs to the caller (via bank ownership). */
 async function ownBill(c: Parameters<typeof getAuthUser>[0], id: string) {
@@ -37,18 +38,20 @@ app.get('/summary', async (c) => {
   // "Pending" figures cover everything still owed — pending AND overdue —
   // so the dashboard's headline number matches what the user must pay.
   const [unpaid, paid] = await Promise.all([
-    prisma.bill.findMany({ where: { status: { in: [BillStatus.PENDING, BillStatus.OVERDUE] }, bank: { userId } } }),
+    prisma.bill.findMany({ where: { status: { in: unpaidStatuses }, bank: { userId } } }),
     prisma.bill.count({ where: { status: BillStatus.PAID, billingPeriod: currentMonth, bank: { userId } } }),
   ])
 
   const totalPending = unpaid.reduce((sum, b) => sum + b.amount, 0)
-  const overdueCount = unpaid.filter((b) => b.status === BillStatus.OVERDUE).length
+  const totalTransferred = unpaid.reduce((sum, b) => sum + (b.transferredAt ? b.amount : 0), 0)
+  const overdueCount = unpaid.filter((b) => b.status === BillStatus.OVERDUE && !b.transferredAt).length
   const upcomingBills = unpaid
     .filter((b) => b.dueDate >= today)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
 
   const result: Record<string, unknown> = {
     totalPending,
+    totalTransferred,
     pendingCount: unpaid.length,
     paidCount: paid,
     overdueCount,
@@ -93,7 +96,7 @@ app.get('/', async (c) => {
 
   const where: Record<string, unknown> = { bank: { userId: getAuthUser(c).id } }
   // 'unpaid' is a virtual filter: everything still owed (pending + overdue).
-  if (status === 'unpaid') where.status = { in: [BillStatus.PENDING, BillStatus.OVERDUE] }
+  if (status === 'unpaid') where.status = { in: unpaidStatuses }
   else if (status) where.status = status
   if (bankId) where.bankId = bankId
 
@@ -167,9 +170,36 @@ app.patch('/:id', zValidator('json', updateBillSchema), async (c) => {
 
   const bill = await prisma.bill.update({
     where: { id: own.id },
-    data: { ...data, ...paidAtForStatusChange(data.status, own.paidAt) },
+    data: {
+      ...data,
+      ...paidAtForStatusChange(data.status, own.paidAt),
+      ...(data.status && data.status !== BillStatus.PAID ? { paidByAutoDebit: false } : {}),
+      ...(data.status === BillStatus.NO_PAYMENT ? { transferredAt: null } : {}),
+    },
   })
   return c.json(bill)
+})
+
+app.patch('/:id/transfer', zValidator('json', z.object({ transferred: z.boolean() })), async (c) => {
+  const id = c.req.param('id')
+  const { transferred } = c.req.valid('json')
+  const [updated] = await prisma.bill.updateManyAndReturn({
+    where: {
+      id,
+      bank: { userId: getAuthUser(c).id, ...(transferred ? { autoDebit: true } : {}) },
+      status: { in: unpaidStatuses },
+      transferredAt: transferred ? null : { not: null },
+    },
+    data: { transferredAt: transferred ? new Date() : null },
+  })
+  if (updated) return c.json(updated)
+
+  const own = await ownBill(c, id)
+  if (!own) return c.json({ error: 'Bill not found' }, 404)
+  if (unpaidStatuses.some(status => status === own.status) && Boolean(own.transferredAt) === transferred) {
+    return c.json(own)
+  }
+  return c.json({ error: '只有未結清的自動扣款帳單可以標記已轉帳' }, 409)
 })
 
 // Mark as paid
@@ -180,9 +210,14 @@ app.patch('/:id/pay', zValidator('json', z.object({
   if (!own) return c.json({ error: 'Bill not found' }, 404)
   const body = c.req.valid('json')
   const paidAt = body?.paidAt ? new Date(body.paidAt) : new Date()
+  let paidByAutoDebit = own.paidByAutoDebit
+  if (own.status !== BillStatus.PAID) {
+    const bank = await prisma.bank.findUnique({ where: { id: own.bankId }, select: { autoDebit: true } })
+    paidByAutoDebit = Boolean(own.transferredAt || bank?.autoDebit)
+  }
   const bill = await prisma.bill.update({
     where: { id: own.id },
-    data: { status: BillStatus.PAID, paidAt },
+    data: { status: BillStatus.PAID, paidAt, paidByAutoDebit },
   })
   return c.json(bill)
 })
@@ -193,7 +228,7 @@ app.post('/:id/unpay', async (c) => {
   if (!own) return c.json({ error: 'Bill not found' }, 404)
   const bill = await prisma.bill.update({
     where: { id: own.id },
-    data: { status: BillStatus.PENDING, paidAt: null },
+    data: { status: BillStatus.PENDING, paidAt: null, paidByAutoDebit: false },
   })
   return c.json(bill)
 })

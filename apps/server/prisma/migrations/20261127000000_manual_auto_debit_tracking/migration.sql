@@ -1,0 +1,2 @@
+ALTER TABLE "bills" ADD COLUMN "transferredAt" DATETIME;
+ALTER TABLE "bills" ADD COLUMN "paidByAutoDebit" BOOLEAN NOT NULL DEFAULT false;

@@ -29,6 +29,8 @@ export function useBillApi() {
 
     markAsPaid: (id: string, paidAt?: string) => patch<BillDTO>(`/bills/${id}/pay`, paidAt ? { paidAt } : {}),
 
+    setTransferred: (id: string, transferred: boolean) => patch<BillDTO>(`/bills/${id}/transfer`, { transferred }),
+
     unpay: (id: string) => post<BillDTO>(`/bills/${id}/unpay`),
 
     reparse: (id: string) => post<BillDTO>(`/bills/${id}/reparse`),

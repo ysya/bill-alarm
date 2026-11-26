@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { BillStatus } from '@bill-alarm/shared/types'
+import { addDaysYMD, todayYMD } from '@bill-alarm/shared/date'
 import { setupTestDb } from '../../services/__tests__/helpers/test-db.js'
 
 setupTestDb()
@@ -56,6 +57,81 @@ describe('bills: dueDate validity', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.dueDate).toBe('2026-02-28')
+  })
+})
+
+describe('bills: manual auto-debit tracking', () => {
+  async function createBill(autoDebit: boolean, status = BillStatus.PENDING) {
+    const user = await prisma.user.findUniqueOrThrow({ where: { username: 'boss' } })
+    const bank = await prisma.bank.create({
+      data: { name: 'Funding test bank', emailSenderPattern: 'funding@bank', emailSubjectPattern: 'bill', userId: user.id, autoDebit },
+    })
+    return prisma.bill.create({
+      data: { bankId: bank.id, billingPeriod: todayYMD().slice(0, 7), amount: 400, dueDate: addDaysYMD(todayYMD(), -1), status },
+    })
+  }
+
+  function request(path: string, method = 'GET', data?: Record<string, unknown>) {
+    return app.request(`/api/bills${path}`, {
+      method,
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: data === undefined ? undefined : JSON.stringify(data),
+    })
+  }
+
+  it('tracks the transfer independently of settlement and restores it when settlement is undone', async () => {
+    const bill = await createBill(true, BillStatus.OVERDUE)
+    const before = await (await request('/summary')).json()
+    const transfer = await request(`/${bill.id}/transfer`, 'PATCH', { transferred: true })
+    expect(transfer.status).toBe(200)
+    const recorded = await transfer.json()
+    expect(recorded.status).toBe(BillStatus.OVERDUE)
+    expect(recorded.paidAt).toBeNull()
+    expect(recorded.transferredAt).toEqual(expect.any(String))
+    expect(await (await request(`/${bill.id}/transfer`, 'PATCH', { transferred: true })).json())
+      .toMatchObject({ transferredAt: recorded.transferredAt })
+    expect(await (await request('/summary')).json()).toMatchObject({
+      totalPending: before.totalPending,
+      totalTransferred: 400,
+      overdueCount: before.overdueCount - 1,
+      paidCount: before.paidCount,
+    })
+    expect((await (await request('?status=unpaid')).json()).data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: bill.id }),
+    ]))
+
+    expect(await (await request(`/${bill.id}/pay`, 'PATCH', {})).json()).toMatchObject({
+      status: BillStatus.PAID,
+      paidAt: expect.any(String),
+      paidByAutoDebit: true,
+      transferredAt: recorded.transferredAt,
+    })
+    expect(await (await request('/summary')).json()).toMatchObject({ totalTransferred: 0, paidCount: before.paidCount + 1 })
+    expect((await request(`/${bill.id}/transfer`, 'PATCH', { transferred: false })).status).toBe(409)
+
+    expect(await (await request(`/${bill.id}/unpay`, 'POST')).json()).toMatchObject({
+      status: BillStatus.PENDING, paidAt: null, paidByAutoDebit: false, transferredAt: recorded.transferredAt,
+    })
+    expect(await (await request(`/${bill.id}/transfer`, 'PATCH', { transferred: false })).json())
+      .toMatchObject({ transferredAt: null })
+  })
+
+  it('allows direct debit confirmation and preserves it when editing the payment date', async () => {
+    const bill = await createBill(true)
+    const pay = await request(`/${bill.id}/pay`, 'PATCH', {})
+    expect(await pay.json()).toMatchObject({ status: BillStatus.PAID, paidByAutoDebit: true, transferredAt: null })
+
+    await prisma.bank.update({ where: { id: bill.bankId }, data: { autoDebit: false } })
+    const paidAt = '2026-07-01T00:00:00.000Z'
+    const edit = await request(`/${bill.id}/pay`, 'PATCH', { paidAt })
+    expect(await edit.json()).toMatchObject({ paidAt, paidByAutoDebit: true })
+  })
+
+  it('rejects transfer marking for a manual-payment bank and for a bill with no payment due', async () => {
+    const manual = await createBill(false)
+    const noPayment = await createBill(true, BillStatus.NO_PAYMENT)
+    expect((await request(`/${manual.id}/transfer`, 'PATCH', { transferred: true })).status).toBe(409)
+    expect((await request(`/${noPayment.id}/transfer`, 'PATCH', { transferred: true })).status).toBe(409)
   })
 })
 

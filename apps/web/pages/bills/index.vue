@@ -192,9 +192,7 @@
                 <div class="flex-1 min-w-0 space-y-1">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-semibold truncate">{{ bill.bank?.name }}</span>
-                    <Badge :class="statusBadgeClass(bill.status)">
-                      {{ statusLabel(bill.status) }}
-                    </Badge>
+                    <BillStatusBadge :bill="bill" />
                     <Badge
                       v-if="bill.bank?.autoDebit"
                       variant="secondary"
@@ -208,33 +206,20 @@
                       <CalendarIcon class="h-3.5 w-3.5" />
                       {{ formatYMD(bill.dueDate) }}
                     </span>
-                    <span
-                      v-if="bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE"
-                      :class="`text-xs font-medium ${daysRemainingText(bill.dueDate).className}`"
-                    >
-                      {{ daysRemainingText(bill.dueDate).text }}
-                    </span>
+                    <DaysRemaining
+                      :bill="bill"
+                      plain
+                    />
                   </div>
                 </div>
-                <div class="flex items-center gap-3 sm:gap-4">
+                <div class="flex flex-wrap items-center gap-3 sm:gap-4">
                   <span class="text-lg font-bold whitespace-nowrap">{{ formatAmount(bill.amount) }}</span>
-                  <Button
+                  <BillPaymentActions
                     v-if="bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE"
-                    size="sm"
-                    :disabled="markingIds.has(bill.id)"
-                    :aria-label="`標記 ${bill.bank?.name} 已繳`"
-                    @click.stop="markPaid(bill, fetchBills)"
-                  >
-                    <Loader2
-                      v-if="markingIds.has(bill.id)"
-                      class="h-4 w-4 animate-spin"
-                    />
-                    <CircleCheck
-                      v-else
-                      class="h-4 w-4"
-                    />
-                    {{ bill.bank?.autoDebit ? '確認已扣款' : '已繳' }}
-                  </Button>
+                    :bill="bill"
+                    :refresh="fetchBills"
+                    compact
+                  />
                 </div>
               </div>
             </Card>
@@ -288,32 +273,15 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
-  CircleCheck,
-  Loader2,
   Inbox,
   RefreshCw,
 } from 'lucide-vue-next'
-import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
+import { BillStatus, isAwaitingDebit } from '@bill-alarm/shared/types'
 import type { BillDTO } from '@bill-alarm/shared/types'
-import { daysRemainingInfo, formatAmount, type DaysRemainingTone } from '@bill-alarm/shared/format'
+import { formatAmount } from '@bill-alarm/shared/format'
 import { formatYMD } from '@bill-alarm/shared/date'
 
 // --- Helpers ---
-
-// bills/index and bills/[id] render days-remaining as plain colored text (no
-// badge pill), unlike <DaysRemaining>'s bg-tinted badge — so the tone->class
-// map here intentionally omits the bg-* classes to keep the existing look.
-const DAYS_REMAINING_TEXT_CLASS: Record<DaysRemainingTone, string> = {
-  overdue: 'text-red-500',
-  today: 'text-red-500',
-  soon: 'text-yellow-500',
-  normal: 'text-muted-foreground',
-}
-
-function daysRemainingText(dueDate: string): { text: string, className: string } {
-  const { text, tone } = daysRemainingInfo(dueDate)
-  return { text, className: DAYS_REMAINING_TEXT_CLASS[tone] }
-}
 
 function formatPeriodLabel(period: string): string {
   const match = period.match(/^(\d{4})-(\d{2})$/)
@@ -327,7 +295,6 @@ const PAGE_SIZE = 20
 const VALID_TABS = ['all', 'unpaid', 'paid', 'no_payment'] as const
 
 const { list } = useBillApi()
-const { markingIds, markPaid } = useMarkPaid()
 const { scanning, triggerScan } = useScanTrigger()
 
 const route = useRoute()
@@ -367,9 +334,9 @@ interface BillGroup {
 
 const groupedBills = computed<BillGroup[]>(() => {
   if (activeTab.value === 'unpaid') {
-    // 行動視圖：先還債、再排即將到期
-    const overdue = bills.value.filter(b => b.status === BillStatus.OVERDUE)
-    const upcoming = bills.value.filter(b => b.status !== BillStatus.OVERDUE)
+    const overdue = bills.value.filter(b => b.status === BillStatus.OVERDUE && !isAwaitingDebit(b))
+    const upcoming = bills.value.filter(b => b.status !== BillStatus.OVERDUE && !isAwaitingDebit(b))
+    const awaitingDebit = bills.value.filter(isAwaitingDebit)
     const groups: BillGroup[] = []
     if (overdue.length > 0) {
       groups.push({
@@ -387,6 +354,15 @@ const groupedBills = computed<BillGroup[]>(() => {
         labelClass: 'text-muted-foreground',
         bills: upcoming,
         total: upcoming.reduce((s, b) => s + b.amount, 0),
+      })
+    }
+    if (awaitingDebit.length > 0) {
+      groups.push({
+        key: 'awaiting-debit',
+        label: `待確認扣繳（${awaitingDebit.length}）`,
+        labelClass: 'text-muted-foreground',
+        bills: awaitingDebit,
+        total: awaitingDebit.reduce((sum, bill) => sum + bill.amount, 0),
       })
     }
     return groups

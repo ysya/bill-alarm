@@ -100,7 +100,7 @@ describe('tenant isolation — bills', () => {
   it('setup: a bill under boss\'s bank', async () => {
     const bossUser = await prisma.user.findUnique({ where: { username: 'boss' } })
     const bank = await prisma.bank.create({
-      data: { name: 'B-Bank', emailSenderPattern: 'b@b', emailSubjectPattern: 'bill', userId: bossUser!.id },
+      data: { name: 'B-Bank', emailSenderPattern: 'b@b', emailSubjectPattern: 'bill', userId: bossUser!.id, autoDebit: true },
     })
     const bill = await prisma.bill.create({
       data: { bankId: bank.id, billingPeriod: '2026-07', amount: 1234, dueDate: todayYMD() },
@@ -124,6 +124,7 @@ describe('tenant isolation — bills', () => {
       ['GET', `/api/bills/${bossBillId}/pdf`],
       ['PATCH', `/api/bills/${bossBillId}`, { amount: 1 }],
       ['PATCH', `/api/bills/${bossBillId}/pay`, {}],
+      ['PATCH', `/api/bills/${bossBillId}/transfer`, { transferred: true }],
       ['POST', `/api/bills/${bossBillId}/unpay`],
       ['POST', `/api/bills/${bossBillId}/reparse`],
       ['DELETE', `/api/bills/${bossBillId}`],

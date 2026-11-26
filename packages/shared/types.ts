@@ -27,6 +27,8 @@ export interface BillDTO {
   billingPeriod: string
   pdfPath?: string | null
   paidAt?: string | null
+  transferredAt?: string | null
+  paidByAutoDebit?: boolean
   // 'generic': legacy rows only — the generic fallback parser was removed in 0.4;
   // new bills only ever write 'template' | 'hardcoded' | 'llm'.
   parseSource?: 'template' | 'hardcoded' | 'generic' | 'llm' | null
@@ -58,6 +60,7 @@ export interface NotificationDTO {
 /** Dashboard 摘要 */
 export interface BillSummaryDTO {
   totalPending: number
+  totalTransferred: number
   pendingCount: number
   paidCount: number
   overdueCount: number
@@ -126,6 +129,10 @@ export interface MonthlySummaryDTO extends BillSummaryDTO {
 }
 
 // --- Shared helpers ---
+
+export function isAwaitingDebit(bill: Pick<BillDTO, 'status' | 'transferredAt'>): boolean {
+  return Boolean(bill.transferredAt) && (bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE)
+}
 
 export const BILL_STATUS_LABELS: Record<BillStatus, string> = {
   [BillStatus.PENDING]: '待繳',

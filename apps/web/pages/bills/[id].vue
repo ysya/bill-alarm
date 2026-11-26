@@ -60,12 +60,10 @@
                   {{ bill.bank?.name }}
                 </CardTitle>
                 <div class="flex flex-wrap gap-2 items-center">
-                  <Badge
-                    :class="statusBadgeClass(bill.status)"
+                  <BillStatusBadge
+                    :bill="bill"
                     class="text-xs px-2 py-0.5"
-                  >
-                    {{ statusLabel(bill.status) }}
-                  </Badge>
+                  />
                   <span
                     v-if="bill.parseSource"
                     class="inline-flex items-center gap-1 text-xs"
@@ -172,7 +170,9 @@
               v-if="bill.status === BillStatus.PAID && bill.paidAt"
               class="rounded-md bg-green-500/10 border border-green-500/30 p-3"
             >
-              <Label class="text-xs text-green-700 dark:text-green-400 uppercase tracking-wide">繳費時間</Label>
+              <Label class="text-xs text-green-700 dark:text-green-400 uppercase tracking-wide">
+                {{ bill.paidByAutoDebit ? '扣繳日' : '繳費時間' }}
+              </Label>
               <div class="flex items-center gap-2 mt-1">
                 <CircleCheck class="h-4 w-4 text-green-500" />
                 <span class="font-medium">{{ formatDate(bill.paidAt) }}</span>
@@ -189,13 +189,10 @@
                 >
                   <CalendarIcon class="h-4 w-4 text-muted-foreground shrink-0" />
                   <span class="font-medium whitespace-nowrap">{{ formatYMD(bill.dueDate) }}</span>
-                  <span
-                    v-if="dueDateRemaining.text"
-                    :class="dueDateRemaining.className"
-                    class="text-xs font-medium whitespace-nowrap"
-                  >
-                    {{ dueDateRemaining.text }}
-                  </span>
+                  <DaysRemaining
+                    :bill="bill"
+                    plain
+                  />
                 </div>
                 <Input
                   v-else
@@ -222,8 +219,17 @@
                 />
               </div>
 
+              <div v-if="bill.transferredAt">
+                <Label class="text-muted-foreground text-xs uppercase tracking-wide">標記轉帳日</Label>
+                <p class="mt-1 text-sm">
+                  {{ formatDate(bill.transferredAt) }}
+                </p>
+              </div>
+
               <div v-if="editing && bill.status === BillStatus.PAID">
-                <Label class="text-muted-foreground text-xs uppercase tracking-wide">繳費日</Label>
+                <Label class="text-muted-foreground text-xs uppercase tracking-wide">
+                  {{ bill.paidByAutoDebit ? '扣繳日' : '繳費日' }}
+                </Label>
                 <Input
                   v-model="editForm.paidDate"
                   type="date"
@@ -242,22 +248,12 @@
           </CardContent>
 
           <CardFooter class="flex flex-wrap gap-2">
-            <Button
+            <BillPaymentActions
               v-if="bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE"
-              :disabled="markingIds.has(bill.id) || editing"
-              :aria-label="`標記 ${bill.bank?.name} 已繳`"
-              @click="markPaid(bill, fetchBill)"
-            >
-              <Loader2
-                v-if="markingIds.has(bill.id)"
-                class="h-4 w-4 animate-spin"
-              />
-              <CircleCheck
-                v-else
-                class="h-4 w-4"
-              />
-              {{ bill.bank?.autoDebit ? '確認已扣款' : '標記已繳' }}
-            </Button>
+              :bill="bill"
+              :refresh="fetchBill"
+              :disabled="actionLoading || editing"
+            />
             <Button
               v-else-if="bill.status === BillStatus.NO_PAYMENT"
               variant="outline"
@@ -281,7 +277,7 @@
                 v-else
                 class="h-4 w-4"
               />
-              恢復為待繳
+              {{ bill.transferredAt ? '恢復為待扣繳' : '恢復為待繳' }}
             </Button>
             <Button
               v-if="bill.pdfPath"
@@ -469,9 +465,9 @@ import {
   Sparkles,
   ExternalLink,
 } from 'lucide-vue-next'
-import { BillStatus, statusLabel, statusBadgeClass } from '@bill-alarm/shared/types'
+import { BillStatus } from '@bill-alarm/shared/types'
 import type { BillDetailDTO, NotificationDTO } from '@bill-alarm/shared/types'
-import { daysRemainingInfo, formatAmount, type DaysRemainingTone } from '@bill-alarm/shared/format'
+import { formatAmount } from '@bill-alarm/shared/format'
 import { formatYMD } from '@bill-alarm/shared/date'
 import { apiErrorMessage } from '@/lib/utils'
 
@@ -485,23 +481,12 @@ function formatDate(date: string | Date): string {
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
 }
 
-// bills/[id] renders days-remaining as plain colored text (no badge pill),
-// unlike <DaysRemaining>'s bg-tinted badge — so the tone->class map here
-// intentionally omits the bg-* classes to keep the existing look.
-const DAYS_REMAINING_TEXT_CLASS: Record<DaysRemainingTone, string> = {
-  overdue: 'text-red-500',
-  today: 'text-red-500',
-  soon: 'text-yellow-500',
-  normal: 'text-muted-foreground',
-}
-
 // --- Route & API ---
 
 const route = useRoute()
 const billId = computed(() => route.params.id as string)
 
 const { getById, markAsPaid, update, reparse, remove, unpay } = useBillApi()
-const { markingIds, markPaid } = useMarkPaid()
 
 const bill = ref<BillDetailDTO | null>(null)
 const loading = ref(true)
@@ -626,13 +611,6 @@ function parseSourceClass(src: string | null | undefined): string {
 
 const notifications = computed<NotificationDTO[]>(() => bill.value?.notifications ?? [])
 
-const dueDateRemaining = computed(() => {
-  if (!bill.value) return { text: '', className: '' }
-  if (bill.value.status === BillStatus.PAID || bill.value.status === BillStatus.NO_PAYMENT) return { text: '', className: '' }
-  const { text, tone } = daysRemainingInfo(bill.value.dueDate)
-  return { text, className: DAYS_REMAINING_TEXT_CLASS[tone] }
-})
-
 async function fetchBill() {
   loading.value = true
   error.value = false
@@ -667,8 +645,8 @@ async function handleMarkPending() {
 async function handleRevertToPending() {
   actionLoading.value = true
   try {
-    await unpay(billId.value)
-    toast.success('帳單已恢復為待繳')
+    const restored = await unpay(billId.value)
+    toast.success(restored.transferredAt ? '帳單已恢復為待扣繳' : '帳單已恢復為待繳')
     await fetchBill()
   }
   catch {

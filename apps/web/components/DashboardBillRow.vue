@@ -1,21 +1,12 @@
 <script setup lang="ts">
-import { CircleCheck, Loader2 } from 'lucide-vue-next'
+import { isAwaitingDebit } from '@bill-alarm/shared/types'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { BillDTO } from '@bill-alarm/shared/types'
 import { formatAmount } from '@bill-alarm/shared/format'
 import { formatYMD } from '@bill-alarm/shared/date'
 
-const props = defineProps<{
-  bill: BillDTO
-  marking: boolean
-}>()
-
-const emit = defineEmits<{ pay: [] }>()
-
-// autoDebit 只是「預定扣款」，按鈕語意是請使用者確認銀行真的扣了
-const payLabel = computed(() => props.bill.bank?.autoDebit ? '確認已扣款' : '已繳')
+defineProps<{ bill: BillDTO, refresh: () => void }>()
 </script>
 
 <template>
@@ -28,8 +19,12 @@ const payLabel = computed(() => props.bill.bank?.autoDebit ? '確認已扣款' :
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
             <span class="truncate text-sm font-medium">{{ bill.bank?.name }}</span>
+            <BillStatusBadge
+              v-if="isAwaitingDebit(bill)"
+              :bill="bill"
+            />
             <Badge
-              v-if="bill.bank?.autoDebit"
+              v-else-if="bill.bank?.autoDebit"
               variant="secondary"
               class="text-xs"
             >
@@ -41,28 +36,14 @@ const payLabel = computed(() => props.bill.bank?.autoDebit ? '確認已扣款' :
           </p>
         </div>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3">
         <span class="font-bold whitespace-nowrap">{{ formatAmount(bill.amount) }}</span>
-        <DaysRemaining
-          :due-date="bill.dueDate"
-          :status="bill.status"
+        <DaysRemaining :bill="bill" />
+        <BillPaymentActions
+          :bill="bill"
+          :refresh="refresh"
+          compact
         />
-        <Button
-          size="sm"
-          :disabled="marking"
-          :aria-label="`標記 ${bill.bank?.name} 已繳`"
-          @click.stop="emit('pay')"
-        >
-          <Loader2
-            v-if="marking"
-            class="h-4 w-4 animate-spin"
-          />
-          <CircleCheck
-            v-else
-            class="h-4 w-4"
-          />
-          {{ payLabel }}
-        </Button>
       </div>
     </CardContent>
   </Card>
