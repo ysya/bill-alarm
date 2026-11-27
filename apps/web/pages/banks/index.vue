@@ -5,6 +5,7 @@ import type { BankAccountDTO, BankDTO } from '@bill-alarm/shared/types'
 
 const bankApi = useBankApi()
 const bankAccountApi = useBankAccountApi()
+const route = useRoute()
 
 const presets = ref<BankPreset[]>([])
 const enabledBanks = ref<BankDTO[]>([])
@@ -22,6 +23,7 @@ const showPassword = ref(false)
 // its open/target state lives here; the dialog owns the rest of its form.
 const editDialogOpen = ref(false)
 const editingBank = ref<BankDTO | null>(null)
+const focusPassword = ref(false)
 
 async function fetchData() {
   loading.value = true
@@ -40,11 +42,32 @@ async function fetchData() {
 }
 
 function openEdit(bank: BankDTO) {
+  focusPassword.value = false
   editingBank.value = bank
   editDialogOpen.value = true
 }
 
-onMounted(fetchData)
+onMounted(async () => {
+  await fetchData()
+  const target = route.query.editBank
+  if (typeof target !== 'string') return
+  const bank = enabledBanks.value.find(b => b.id === target)
+  if (bank) {
+    openEdit(bank)
+    focusPassword.value = true
+  }
+  else {
+    toast.error('找不到此銀行設定')
+  }
+})
+
+async function onBankUpdated() {
+  if (focusPassword.value && typeof route.query.log === 'string') {
+    await navigateTo({ path: '/scan-logs', query: { log: route.query.log } })
+    return
+  }
+  await fetchData()
+}
 </script>
 
 <template>
@@ -89,9 +112,10 @@ onMounted(fetchData)
       v-model:open="editDialogOpen"
       v-model:show-password="showPassword"
       :editing-bank="editingBank"
+      :focus-password="focusPassword"
       :presets="presets"
       :bank-accounts="bankAccounts"
-      @changed="fetchData"
+      @changed="onBankUpdated"
     />
   </div>
 </template>

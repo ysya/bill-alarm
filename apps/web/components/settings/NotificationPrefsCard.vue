@@ -24,6 +24,7 @@ const form = ref({
   remindTime: props.prefs.remindTime,
   notifyNewBill: props.prefs.notifyNewBill,
   notifyOverdue: props.prefs.notifyOverdue,
+  notifyDebitConfirmation: props.prefs.notifyDebitConfirmation,
 })
 const customDay = ref<number | null>(null)
 
@@ -36,6 +37,7 @@ watch(() => props.prefs, (p) => {
     remindTime: p.remindTime,
     notifyNewBill: p.notifyNewBill,
     notifyOverdue: p.notifyOverdue,
+    notifyDebitConfirmation: p.notifyDebitConfirmation,
   }
   nextTick(() => {
     applyingProps = false
@@ -43,30 +45,33 @@ watch(() => props.prefs, (p) => {
 })
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+let pendingSave = Promise.resolve()
 watch(form, () => {
   if (applyingProps) return
   if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(save, SAVE_DEBOUNCE_MS)
+  saveTimer = setTimeout(queueSave, SAVE_DEBOUNCE_MS)
 }, { deep: true })
 
 onUnmounted(() => {
-  if (saveTimer) clearTimeout(saveTimer)
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    queueSave()
+  }
 })
 
-async function save() {
-  try {
-    await settingsApi.updateNotificationPrefs({
-      remindDays: form.value.remindDays,
-      remindTime: form.value.remindTime,
-      notifyNewBill: form.value.notifyNewBill,
-      notifyOverdue: form.value.notifyOverdue,
-    })
-    toast.success('通知設定已更新')
-  }
-  catch (e) {
-    toast.error('儲存失敗', { description: String(e) })
-    emit('refresh') // re-sync local state with what the server actually has
-  }
+function queueSave() {
+  saveTimer = null
+  const prefs = { ...form.value, remindDays: [...form.value.remindDays] }
+  pendingSave = pendingSave.then(async () => {
+    try {
+      await settingsApi.updateNotificationPrefs(prefs)
+      toast.success('通知設定已更新')
+    }
+    catch (e) {
+      toast.error('儲存失敗', { description: String(e) })
+      emit('refresh')
+    }
+  })
 }
 
 const sortedDays = computed(() => [...form.value.remindDays].sort((a, b) => b - a))
@@ -113,7 +118,7 @@ const lastDeliveryText = computed(() => {
               提醒與通知
             </p>
             <p class="text-xs text-muted-foreground">
-              改動會自動儲存，透過 Telegram 發送。
+              通知設定會自動儲存。
             </p>
           </div>
         </div>
@@ -278,6 +283,22 @@ const lastDeliveryText = computed(() => {
               id="notifyOverdue"
               :model-value="form.notifyOverdue"
               @update:model-value="form.notifyOverdue = $event"
+            />
+          </div>
+          <div class="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+            <div class="space-y-0.5">
+              <Label
+                for="notifyDebitConfirmation"
+                class="cursor-pointer"
+              >提醒我確認自動扣款</Label>
+              <p class="text-xs text-muted-foreground">
+                已備足款項的帳單，於截止日隔天上午 9 點提醒一次。核對銀行紀錄後，請到帳單明細確認扣款。此設定也適用於行事曆提醒。
+              </p>
+            </div>
+            <Switch
+              id="notifyDebitConfirmation"
+              :model-value="form.notifyDebitConfirmation"
+              @update:model-value="form.notifyDebitConfirmation = $event"
             />
           </div>
         </div>

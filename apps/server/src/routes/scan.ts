@@ -1,23 +1,25 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { scanEvents, eventVisibleTo, type ScanEvent } from '@/services/scan-events.js'
 import prisma from '@/prisma.js'
-import { runScanWithLog, appendScanLogErrors, ScanInProgressError, type ScanError } from '@/services/email-parser.js'
+import {
+  runScanWithLog, appendScanLogErrors, publicScanError, retryTargetFor, ScanInProgressError,
+  type ScanError, type LoggedScanError, type RetryTarget,
+} from '@/services/email-parser.js'
 import { processNewBill } from '@/services/notification.js'
 import { getAuthUser } from './auth.js'
 
 const app = new Hono()
 
-async function currentUser(c: Parameters<typeof getAuthUser>[0]) {
+async function currentUser(c: Context) {
   return prisma.user.findUnique({ where: { id: getAuthUser(c).id } })
 }
 
-// Manual email scan trigger
-app.post('/email/scan', async (c) => {
+async function manualScan(c: Context, target?: RetryTarget) {
   const me = await currentUser(c)
   if (!me) return c.json({ error: 'unauthorized' }, 401)
   try {
-    const { result, scanLogId } = await runScanWithLog('manual', me)
+    const { result, scanLogId } = await runScanWithLog(target ?? 'manual', me)
 
     // Send notifications for new bills
     const notifyErrors: ScanError[] = []
@@ -40,7 +42,8 @@ app.post('/email/scan', async (c) => {
       scanLogId,
       scanned: result.scanned,
       newBills: result.newBills.length,
-      errors: [...result.errors, ...notifyErrors],
+      errors: [...result.errors, ...notifyErrors].map(publicScanError),
+      skipReason: result.skipReason,
     })
   } catch (e) {
     if (e instanceof ScanInProgressError) {
@@ -53,6 +56,23 @@ app.post('/email/scan', async (c) => {
       errors: [{ stage: 'unexpected', reason: (e as Error).message }],
     }, 500)
   }
+}
+
+app.post('/email/scan', (c) => manualScan(c))
+
+app.post('/scan-logs/:id/errors/:index/retry', async (c) => {
+  const index = c.req.param('index')
+  if (!/^(0|[1-9]\d*)$/.test(index)) return c.json({ error: '無效的錯誤紀錄' }, 400)
+  const log = await prisma.scanLog.findFirst({
+    where: { id: c.req.param('id'), userId: getAuthUser(c).id },
+    select: { errors: true },
+  })
+  const errors: LoggedScanError[] = log?.errors ? JSON.parse(log.errors) : []
+  const error = errors[Number(index)]
+  if (!error) return c.json({ error: '找不到錯誤紀錄' }, 404)
+  const target = retryTargetFor(error)
+  if (!target) return c.json({ error: '此紀錄無法單封重試' }, 422)
+  return manualScan(c, target)
 })
 
 // Live scan progress via Server-Sent Events.
@@ -113,13 +133,24 @@ app.get('/scan-events', (c) => {
 // Recent scan logs (most recent first)
 app.get('/scan-logs', async (c) => {
   const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '20'), 1), 100)
+  const userId = getAuthUser(c).id
   const logs = await prisma.scanLog.findMany({
-    where: { userId: getAuthUser(c).id },
+    where: { userId },
     orderBy: { startedAt: 'desc' },
     take: limit,
   })
+  const rows = logs.map(log => ({ ...log, errors: log.errors ? JSON.parse(log.errors) as LoggedScanError[] : [] }))
+  const legacyNames = rows.flatMap(log => log.errors.flatMap(error =>
+    error.stage === 'pdf_password' && !error.bankId && error.bank ? [error.bank] : [],
+  ))
+  const candidates = legacyNames.length
+    ? await prisma.bank.findMany({
+        where: { userId, name: { in: [...new Set(legacyNames)] } },
+        select: { id: true, name: true, createdAt: true },
+      })
+    : []
   return c.json({
-    logs: logs.map((l) => ({
+    logs: rows.map((l) => ({
       id: l.id,
       trigger: l.trigger,
       startedAt: l.startedAt.toISOString(),
@@ -127,7 +158,14 @@ app.get('/scan-logs', async (c) => {
       scanned: l.scanned,
       newBillsCount: l.newBillsCount,
       errorCount: l.errorCount,
-      errors: l.errors ? JSON.parse(l.errors) as ScanError[] : [],
+      errors: l.errors.map(error => {
+        const dto = publicScanError(error)
+        if (dto.stage === 'pdf_password' && !dto.bankId && dto.bank) {
+          const matches = candidates.filter(bank => bank.name === dto.bank && bank.createdAt <= l.startedAt)
+          if (matches.length === 1) dto.bankId = matches[0].id
+        }
+        return dto
+      }),
       fatalError: l.fatalError,
     })),
   })

@@ -7,6 +7,8 @@ const awaitingDebit = computed(() => isAwaitingDebit(props.bill))
 const label = computed(() => {
   if (awaitingDebit.value) return '已轉帳・待扣繳'
   if (props.bill.status === BillStatus.PAID && props.bill.paidByAutoDebit) return '已扣繳'
+  if (props.bill.transferredAt && props.bill.status === BillStatus.OVERDUE) return '逾期・待補足'
+  if (props.bill.transferredAt && props.bill.status === BillStatus.PENDING) return '待補足'
   if (props.bill.status === BillStatus.PENDING && props.bill.bank?.autoDebit) return '待備款'
   return statusLabel(props.bill.status)
 })

@@ -11,6 +11,8 @@ export default defineNuxtRouteMiddleware(async (to) => {
   catch {
     const status = await $fetch<{ initialized: boolean }>('/api/auth/status')
       .catch(() => ({ initialized: true }))
-    return navigateTo(status.initialized ? '/login' : '/setup')
+    if (!status.initialized) return navigateTo('/setup')
+    const bill = to.name === 'bills-id' ? to.params.id : undefined
+    return navigateTo(typeof bill === 'string' ? { path: '/login', query: { bill } } : '/login')
   }
 })

@@ -35,7 +35,7 @@ describe('getEffectivePrefs', () => {
       data: { userId: user.id, remindDays: '[1,7,3]', remindTime: '21:30', notifyNewBill: false, notifyOverdue: true },
     })
     const prefs = await getEffectivePrefs(user.id)
-    expect(prefs).toEqual({ remindDays: [7, 3, 1], remindTime: '21:30', notifyNewBill: false, notifyOverdue: true })
+    expect(prefs).toEqual({ remindDays: [7, 3, 1], remindTime: '21:30', notifyNewBill: false, notifyOverdue: true, notifyDebitConfirmation: false })
   })
 
   it('empty remindDays means reminders off, not defaults', async () => {

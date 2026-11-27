@@ -12,6 +12,7 @@ const prefsSchema = z.object({
   remindTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   notifyNewBill: z.boolean(),
   notifyOverdue: z.boolean(),
+  notifyDebitConfirmation: z.boolean().optional(),
 })
 
 /** Latest delivery attempt for any bill the user owns — surfaces silent failures. */
@@ -46,9 +47,10 @@ app.put('/', zValidator('json', prefsSchema), async (c) => {
     remindTime: data.remindTime,
     notifyNewBill: data.notifyNewBill,
     notifyOverdue: data.notifyOverdue,
+    notifyDebitConfirmation: data.notifyDebitConfirmation,
   }
-  await prisma.notificationPreference.upsert({ where: { userId }, create: { userId, ...fields }, update: fields })
-  return c.json({ remindDays, remindTime: data.remindTime, notifyNewBill: data.notifyNewBill, notifyOverdue: data.notifyOverdue })
+  const row = await prisma.notificationPreference.upsert({ where: { userId }, create: { userId, ...fields }, update: fields })
+  return c.json({ ...data, remindDays, notifyDebitConfirmation: row.notifyDebitConfirmation })
 })
 
 export default app

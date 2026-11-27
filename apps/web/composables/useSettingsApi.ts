@@ -17,18 +17,15 @@ export function useSettingsApi() {
   return {
     // Notification preferences (single per-user panel)
     getNotificationPrefs: () => get<NotificationPrefsDTO>('/notification-prefs'),
-    updateNotificationPrefs: (data: {
-      remindDays: number[]
-      remindTime: string
-      notifyNewBill: boolean
-      notifyOverdue: boolean
-    }) => put<NotificationPrefsDTO>('/notification-prefs', data),
+    updateNotificationPrefs: (data: Omit<NotificationPrefsDTO, 'lastDelivery'>) => put<NotificationPrefsDTO>('/notification-prefs', data),
 
     // Setup progress (dashboard checklist + settings dependency hints)
     getOnboardingStatus: () => get<OnboardingStatusDTO>('/onboarding-status'),
 
     // Email scan
     triggerScan: () => post<{ scanLogId?: string, scanned: number, newBills: number, errors: ScanError[] }>('/email/scan'),
+    retryScanError: (id: string, index: number) =>
+      post<{ scanLogId: string, newBills: number, skipReason?: string, errors: ScanError[] }>(`/scan-logs/${id}/errors/${index}/retry`),
 
     listScanLogs: (limit = 20) =>
       get<{ logs: ScanLogDTO[] }>(`/scan-logs?limit=${limit}`),

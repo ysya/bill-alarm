@@ -50,6 +50,7 @@ import { Label } from '@/components/ui/label'
 const username = ref('')
 const password = ref('')
 const loading = ref(false)
+const route = useRoute()
 
 async function submit() {
   loading.value = true
@@ -59,7 +60,8 @@ async function submit() {
       body: { username: username.value, password: password.value },
     })
     useAuthed().value = true
-    await navigateTo('/')
+    const bill = route.query.bill
+    await navigateTo(typeof bill === 'string' && /^[a-z0-9-]+$/i.test(bill) ? `/bills/${bill}` : '/')
   }
   catch (e) {
     const err = e as { response?: { status: number }, data?: { error?: string } }

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setupTestDb } from './helpers/test-db.js'
 import { todayYMD, addDaysYMD } from '@bill-alarm/shared/date'
+import { formatAmount } from '@bill-alarm/shared/format'
 
 setupTestDb()
 process.env.LOG_LEVEL = 'silent'
@@ -8,7 +9,7 @@ process.env.LOG_LEVEL = 'silent'
 const { default: prisma } = await import('@/prisma.js')
 const { setSetting, KEYS } = await import('../settings.js')
 const telegram = await import('../telegram.js')
-const { processReminders, processNewBill } = await import('../notification.js')
+const { processReminders, processNewBill, processOverdueBills } = await import('../notification.js')
 
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
@@ -59,7 +60,7 @@ describe('owner-targeted notifications', () => {
     await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
     const u = await prisma.user.create({ data: { username: 'nobind', passwordHash: 'x:y', role: 'member' } })
     const r = await telegram.sendToUser(u.id, 'hi')
-    expect(r).toEqual({ ok: false, error: '使用者未綁定 Telegram' })
+    expect(r).toEqual({ ok: false, unavailable: true, error: '使用者未綁定 Telegram' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -87,6 +88,62 @@ describe('owner-targeted notifications', () => {
     expect(logs).toHaveLength(1)
     expect(logs[0].success).toBe(false)
     expect(logs[0].errorMessage).toContain('使用者未綁定 Telegram')
+  })
+
+  it('links the bound owner to the exact bill for manual debit confirmation', async () => {
+    await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
+    vi.stubEnv('APP_BASE_URL', 'https://bills.example.org/')
+    try {
+      const { user, bill } = await seedUserWithDueBill('debit', '333')
+      await prisma.bill.update({ where: { id: bill.id }, data: {
+        dueDate: addDaysYMD(todayYMD(base), -1), transferredAt: base, transferredAmount: bill.amount,
+      } })
+      await prisma.notificationPreference.create({ data: { userId: user.id, notifyDebitConfirmation: true } })
+      fetchMock.mockResolvedValue(okResponse({ ok: true }))
+      await processOverdueBills(at(9, 15))
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const payload = JSON.parse(fetchMock.mock.calls[0][1].body)
+      expect(payload.chat_id).toBe('333')
+      expect(payload.text).toContain(`<a href="https://bills.example.org/bills/${bill.id}">開啟帳單明細</a>`)
+      expect(payload.text).toContain('核對銀行紀錄')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('pre-deadline reminders for a partially funded bill show the remaining amount', async () => {
+    await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
+    const { bank, bill } = await seedUserWithDueBill('shortfall', '555')
+    await prisma.bank.update({ where: { id: bank.id }, data: { autoDebit: true } })
+    await prisma.bill.update({ where: { id: bill.id }, data: { transferredAt: base, transferredAmount: 60 } })
+    fetchMock.mockResolvedValue(okResponse({ ok: true }))
+    await processReminders(at(9, 15))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).text).toContain(`尚需備款 ${formatAmount(40)}`)
+  })
+
+  it('skips Telegram without a bot or bound owner while retaining eligibility once both are available', async () => {
+    const { user, bill } = await seedUserWithDueBill('calendar-only', null)
+    await prisma.bill.update({ where: { id: bill.id }, data: {
+      dueDate: addDaysYMD(todayYMD(base), -1), transferredAt: base, transferredAmount: bill.amount,
+    } })
+    await prisma.notificationPreference.create({ data: { userId: user.id, notifyDebitConfirmation: true } })
+    vi.stubEnv('TELEGRAM_BOT_TOKEN', '')
+    try {
+      await processOverdueBills(at(9, 0))
+      await setSetting(KEYS.TELEGRAM_BOT_TOKEN, 'tok')
+      await processOverdueBills(at(9, 15))
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(await prisma.notificationLog.count()).toBe(0)
+
+      await prisma.user.update({ where: { id: user.id }, data: { telegramChatId: '222' } })
+      fetchMock.mockResolvedValue(okResponse({ ok: true }))
+      await processOverdueBills(at(9, 30))
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(await prisma.notificationLog.count()).toBe(1)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('processNewBill: deactivated owner is silent — no send, no log', async () => {

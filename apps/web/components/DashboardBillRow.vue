@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { isAwaitingDebit } from '@bill-alarm/shared/types'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import type { BillDTO } from '@bill-alarm/shared/types'
@@ -18,9 +17,13 @@ defineProps<{ bill: BillDTO, refresh: () => void }>()
       <div class="flex min-w-0 items-center gap-2">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="truncate text-sm font-medium">{{ bill.bank?.name }}</span>
+            <NuxtLink
+              :to="`/bills/${bill.id}`"
+              class="truncate text-sm font-medium hover:underline"
+              @click.stop
+            >{{ bill.bank?.name }}</NuxtLink>
             <BillStatusBadge
-              v-if="isAwaitingDebit(bill)"
+              v-if="bill.transferredAt"
               :bill="bill"
             />
             <Badge
@@ -34,6 +37,7 @@ defineProps<{ bill: BillDTO, refresh: () => void }>()
           <p class="text-xs text-muted-foreground">
             截止 {{ formatYMD(bill.dueDate) }}
           </p>
+          <BillFundingNote :bill="bill" />
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-3">

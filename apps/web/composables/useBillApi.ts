@@ -11,10 +11,12 @@ export function useBillApi() {
       return get<MonthlySummaryDTO>(`/bills/summary${qs}`)
     },
 
-    list: (params?: { status?: string, bankId?: string, page?: number, pageSize?: number }) => {
+    list: (params?: { status?: string, bankId?: string, view?: string, billingPeriod?: string, page?: number, pageSize?: number }) => {
       const query = new URLSearchParams()
       if (params?.status) query.set('status', params.status)
       if (params?.bankId) query.set('bankId', params.bankId)
+      if (params?.view) query.set('view', params.view)
+      if (params?.billingPeriod) query.set('billingPeriod', params.billingPeriod)
       if (params?.page) query.set('page', String(params.page))
       if (params?.pageSize) query.set('pageSize', String(params.pageSize))
       const qs = query.toString()
@@ -29,7 +31,8 @@ export function useBillApi() {
 
     markAsPaid: (id: string, paidAt?: string) => patch<BillDTO>(`/bills/${id}/pay`, paidAt ? { paidAt } : {}),
 
-    setTransferred: (id: string, transferred: boolean) => patch<BillDTO>(`/bills/${id}/transfer`, { transferred }),
+    setTransferred: (id: string, transferred: boolean, bankAccountId: string | null, amount?: number) =>
+      patch<BillDTO>(`/bills/${id}/transfer`, { transferred, amount, bankAccountId }),
 
     unpay: (id: string) => post<BillDTO>(`/bills/${id}/unpay`),
 

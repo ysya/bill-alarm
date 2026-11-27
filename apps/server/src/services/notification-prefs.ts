@@ -1,11 +1,9 @@
 import prisma from '@/prisma.js'
+import type { NotificationPrefsDTO } from '@bill-alarm/shared/types'
 
-export interface EffectivePrefs {
-  remindDays: number[]
-  remindTime: string
-  notifyNewBill: boolean
-  notifyOverdue: boolean
-}
+type EffectivePrefs = Omit<NotificationPrefsDTO, 'lastDelivery'>
+
+export const POST_DUE_NOTIFY_HOUR = 9
 
 /** The ONLY place defaults live. Absent row ⇒ these values, for every reader. */
 export const DEFAULT_PREFS: EffectivePrefs = {
@@ -13,6 +11,7 @@ export const DEFAULT_PREFS: EffectivePrefs = {
   remindTime: '09:00',
   notifyNewBill: true,
   notifyOverdue: true,
+  notifyDebitConfirmation: false,
 }
 
 /** Canonical order for storage and responses: dedupe + sort descending. */
@@ -29,5 +28,6 @@ export async function getEffectivePrefs(userId: string): Promise<EffectivePrefs>
     remindTime: row.remindTime,
     notifyNewBill: row.notifyNewBill,
     notifyOverdue: row.notifyOverdue,
+    notifyDebitConfirmation: row.notifyDebitConfirmation,
   }
 }

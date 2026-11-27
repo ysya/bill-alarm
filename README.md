@@ -9,8 +9,10 @@ Gmail scans cover both inbox and archived messages through the All Mail folder, 
 ## Features
 
 - **Automatic email scanning** - Periodically fetches credit card statement emails via per-user IMAP (Gmail App Password or any IMAP host)
+- **Scan recovery** - Open the relevant mailbox or bank PDF password settings from a scan error, then retry the individual message when its mailbox identity is available.
 - **PDF bill parsing** - Extracts amount, due date from password-protected PDF statements
-- **Payment reminders** - Telegram notifications and a personal ICS calendar feed (subscribe from Google Calendar, Apple Calendar, Outlook, etc.) before due dates
+- **Manual auto-debit tracking** - Mark a transfer when you fund the debit account and confirm settlement after checking your bank. The dashboard totals what each account still needs, including any increase since the transfer.
+- **Payment reminders** - Telegram notifications and a personal ICS calendar feed cover upcoming due dates. Enable debit confirmation reminders to get a prompt after a funded bill's due date. Set `APP_BASE_URL` to your public app URL for bill links in reminders.
 - **Multi-bank support** - Plugin-based parser system, easy to add new banks
 - **LLM fallback** - Supports Gemini, OpenAI, or Ollama (configurable) to parse bills when regex patterns fail
 
@@ -88,7 +90,7 @@ Docker image 已固定 `ENV TZ=Asia/Taipei`（見 `Dockerfile`），逾期判定
 每位使用者各自管理：
 - **信箱授權** (設定 → 資料來源) — 連接 Gmail 或 IMAP 伺服器，掃描帳單郵件
 - **已啟用銀行** — 選擇支援的銀行清單，用於帳單解析
-- **通知偏好** (設定 → 通知) — 到期前提醒天數與時間、新帳單／逾期通知開關；透過各自綁定的 Telegram 發送
+- **通知偏好**（設定 → 通知）可調整到期提醒、新帳單及逾期通知。開啟「提醒我確認自動扣款」後，已備足的帳單會在截止日隔天上午 9 點起，透過已綁定的 Telegram 或訂閱的行事曆提醒一次。
 - **個人日曆訂閱（ICS Feed）** — 產生個人化訂閱網址，可訂閱到 Google Calendar、Apple 行事曆、Outlook 等任何支援 iCalendar 的應用程式
 
 管理員（首位建立的帳號）額外可管理：

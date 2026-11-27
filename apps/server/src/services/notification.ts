@@ -1,9 +1,9 @@
 import prisma from '@/prisma.js'
 import { logger } from '@/index.js'
-import { sendNewBillAlert, sendBillReminder, sendOverdueWarning } from './telegram.js'
-import { getEffectivePrefs } from './notification-prefs.js'
+import { sendNewBillAlert, sendBillReminder, sendOverdueWarning, sendDebitConfirmationReminder } from './telegram.js'
+import { getEffectivePrefs, POST_DUE_NOTIFY_HOUR } from './notification-prefs.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
-import { BillStatus } from '@bill-alarm/shared/types'
+import { BillStatus, isAwaitingDebit } from '@bill-alarm/shared/types'
 import { todayYMD, addDaysYMD } from '@bill-alarm/shared/date'
 
 async function logNotification(
@@ -73,7 +73,7 @@ export async function processReminders(now: Date = new Date()): Promise<void> {
       })
 
       for (const bill of bills) {
-        if (bill.bank.autoDebit) continue
+        if (isAwaitingDebit(bill) || (bill.bank.autoDebit && !bill.transferredAt)) continue
 
         // A bill matches exactly one D-value per day, so billId+day+message
         // is a sufficient dedup key.
@@ -95,7 +95,7 @@ export async function processReminders(now: Date = new Date()): Promise<void> {
 }
 
 export const OVERDUE_WARNING_MESSAGE = '逾期警告'
-const OVERDUE_NOTIFY_HOUR = 9 // don't page people at midnight
+export const DEBIT_CONFIRMATION_MESSAGE = '扣款確認提醒'
 
 /** Runs on the same 15-minute tick as processReminders. Marking and warning
  *  are split: status is kept accurate within 15 minutes of midnight, while
@@ -113,23 +113,36 @@ export async function processOverdueBills(now: Date = new Date()): Promise<void>
   })
   if (marked.count > 0) logger.warn({ count: marked.count }, 'Bills marked overdue')
 
-  if (now.getHours() < OVERDUE_NOTIFY_HOUR) return
+  if (now.getHours() < POST_DUE_NOTIFY_HOUR) return
 
-  // Warn exactly once per bill, at the first tick at/after 09:00.
-  const unnotified = await prisma.bill.findMany({
+  const bills = await prisma.bill.findMany({
     where: {
       status: BillStatus.OVERDUE,
-      transferredAt: null,
-      notifications: { none: { message: OVERDUE_WARNING_MESSAGE, success: true } },
+      dueDate: { lt: today },
+      bank: { user: { deletedAt: null } },
     },
-    include: { bank: { include: { user: { select: { deletedAt: true } } } } },
+    include: {
+      bank: true,
+      notifications: {
+        where: { channel: 'telegram', success: true, message: { in: [OVERDUE_WARNING_MESSAGE, DEBIT_CONFIRMATION_MESSAGE] } },
+        select: { message: true },
+      },
+    },
   })
 
-  for (const bill of unnotified) {
-    if (bill.bank.user?.deletedAt) continue // deactivated owner: status is fact, noise is not
+  for (const bill of bills) {
+    const awaitingDebit = isAwaitingDebit(bill)
+    const message = awaitingDebit ? DEBIT_CONFIRMATION_MESSAGE : OVERDUE_WARNING_MESSAGE
+    if (bill.notifications.some(log => log.message === message)) continue
+
     const prefs = await getEffectivePrefs(bill.bank.userId)
-    if (!prefs.notifyOverdue) continue // opted out: no send, no log (re-enabling warns once later)
-    const r = await sendOverdueWarning(bill, bill.bank)
-    await logNotification(bill.id, 'telegram', OVERDUE_WARNING_MESSAGE, r.ok, r.error)
+    const enabled = awaitingDebit ? prefs.notifyDebitConfirmation : prefs.notifyOverdue
+    if (!enabled) continue
+
+    const send = awaitingDebit ? sendDebitConfirmationReminder : sendOverdueWarning
+    const r = await send(bill, bill.bank)
+    // The same preference enables ICS alarms for users without a Telegram target.
+    if (awaitingDebit && r.unavailable) continue
+    await logNotification(bill.id, 'telegram', message, r.ok, r.error)
   }
 }

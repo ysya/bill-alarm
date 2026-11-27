@@ -220,10 +220,14 @@
               </div>
 
               <div v-if="bill.transferredAt">
-                <Label class="text-muted-foreground text-xs uppercase tracking-wide">標記轉帳日</Label>
+                <Label class="text-muted-foreground text-xs uppercase tracking-wide">首次標記轉帳日</Label>
                 <p class="mt-1 text-sm">
                   {{ formatDate(bill.transferredAt) }}
                 </p>
+                <BillFundingNote
+                  :bill="bill"
+                  show-when-equal
+                />
               </div>
 
               <div v-if="editing && bill.status === BillStatus.PAID">
@@ -277,7 +281,7 @@
                 v-else
                 class="h-4 w-4"
               />
-              {{ bill.transferredAt ? '恢復為待扣繳' : '恢復為待繳' }}
+              {{ bill.transferredAt && bill.transferredAccountId === bill.bank?.bankAccountId && fundingRemaining(bill) === 0 ? '恢復為待扣繳' : '恢復為待繳' }}
             </Button>
             <Button
               v-if="bill.pdfPath"
@@ -465,7 +469,7 @@ import {
   Sparkles,
   ExternalLink,
 } from 'lucide-vue-next'
-import { BillStatus } from '@bill-alarm/shared/types'
+import { BillStatus, fundingRemaining, isAwaitingDebit } from '@bill-alarm/shared/types'
 import type { BillDetailDTO, NotificationDTO } from '@bill-alarm/shared/types'
 import { formatAmount } from '@bill-alarm/shared/format'
 import { formatYMD } from '@bill-alarm/shared/date'
@@ -646,7 +650,7 @@ async function handleRevertToPending() {
   actionLoading.value = true
   try {
     const restored = await unpay(billId.value)
-    toast.success(restored.transferredAt ? '帳單已恢復為待扣繳' : '帳單已恢復為待繳')
+    toast.success(isAwaitingDebit(restored) ? '帳單已恢復為待扣繳' : '帳單已恢復為待繳')
     await fetchBill()
   }
   catch {

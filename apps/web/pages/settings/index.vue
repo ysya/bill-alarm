@@ -7,6 +7,8 @@ import type { NotificationPrefsDTO, OnboardingStatusDTO, ConfigStatus, EmailStat
 import { LLM_PROVIDER_LABELS } from '~/types/settings'
 
 const settingsApi = useSettingsApi()
+const route = useRoute()
+const editingEmail = ref(route.query.edit === 'email')
 const { me, isAdmin, logout } = useAuth()
 
 const prefs = ref<NotificationPrefsDTO | null>(null)
@@ -23,6 +25,7 @@ type CardStatus = 'ok' | 'unset' | 'error'
 const emailCardStatus = computed<{ status: CardStatus, text: string }>(() => {
   const e = emailStatus.value
   if (!e?.hasCredentials) return { status: 'unset', text: '未設定' }
+  if (e.connected === undefined) return { status: 'unset', text: '尚未測試' }
   return e.connected ? { status: 'ok', text: '已連線' } : { status: 'error', text: '連線失敗' }
 })
 
@@ -46,7 +49,7 @@ async function fetchSelfData() {
     const [prefsData, onboardingData, email, calendar] = await Promise.all([
       settingsApi.getNotificationPrefs(),
       settingsApi.getOnboardingStatus(),
-      settingsApi.getEmailStatus(true),
+      settingsApi.getEmailStatus(!editingEmail.value),
       settingsApi.getCalendarFeed(),
     ])
     prefs.value = prefsData
@@ -161,12 +164,14 @@ watch(isAdmin, (admin) => {
           v-if="emailStatus"
           :icon="Mail"
           title="信箱授權（IMAP）"
+          :default-open="editingEmail"
           :status="emailCardStatus.status"
           :status-text="emailCardStatus.text"
         >
           <SettingsIntegrationEmail
             :email="emailStatus"
-            @refresh="fetchSelfData"
+            :edit-credentials="editingEmail"
+            @refresh="editingEmail = false; fetchSelfData()"
           />
         </SettingsCard>
         <SettingsScanCard

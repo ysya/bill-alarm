@@ -1,7 +1,8 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { describe, it, expect, afterAll, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, afterAll, beforeEach, afterEach, vi } from 'vitest'
+import { fundingRemaining, isAwaitingDebit } from '@bill-alarm/shared/types'
 import { setupTestDb } from '../../services/__tests__/helpers/test-db.js'
 
 // Point DATA_DIR at an isolated temp dir BEFORE importing '@/index.js' (which
@@ -61,13 +62,13 @@ const kidLogin = await app.request('/api/auth/login', {
 })
 const kid = cookieOf(kidLogin)
 
-describe('bills: GET /:id/pdf ownership gate (discriminating, real encrypted PDF fixture)', () => {
-  afterAll(() => {
-    fs.rmSync(dataDir, { recursive: true, force: true })
-    if (previousDataDir === undefined) delete process.env.DATA_DIR
-    else process.env.DATA_DIR = previousDataDir
-  })
+afterAll(() => {
+  fs.rmSync(dataDir, { recursive: true, force: true })
+  if (previousDataDir === undefined) delete process.env.DATA_DIR
+  else process.env.DATA_DIR = previousDataDir
+})
 
+describe('bills: GET /:id/pdf ownership gate (discriminating, real encrypted PDF fixture)', () => {
   it('owner decrypts the real file; a foreign user is 404d before the file would ever be readable to them', async () => {
     const bossUser = await prisma.user.findUnique({ where: { username: 'boss' } })
     const bank = await prisma.bank.create({
@@ -109,6 +110,40 @@ describe('bills: GET /:id/pdf ownership gate (discriminating, real encrypted PDF
     const foreignRes = await app.request(`/api/bills/${bill.id}/pdf`, { headers: { Cookie: kid } })
     expect(foreignRes.status).toBe(404)
   })
+})
+
+it('preserves actual funding when re-parsing a bill changes the amount owed', async () => {
+  const user = await prisma.user.findUniqueOrThrow({ where: { username: 'boss' } })
+  const bank = await prisma.bank.create({
+    data: {
+      name: 'Reparse Bank', emailSenderPattern: 'reparse@bank', emailSubjectPattern: 'bill',
+      autoDebit: true, pdfPassword: PDF_PASSWORD, userId: user.id,
+    },
+  })
+  fs.mkdirSync(PDF_DIR, { recursive: true })
+  const filename = `${bank.id}.pdf`
+  fs.writeFileSync(path.join(PDF_DIR, filename), await buildEncryptedPdfFixture(PDF_PASSWORD))
+  const bill = await prisma.bill.create({
+    data: {
+      bankId: bank.id, billingPeriod: '2026-06', dueDate: '2026-07-20', amount: 4200,
+      transferredAt: new Date(), transferredAmount: 4200, pdfPath: `pdfs/${filename}`,
+    },
+  })
+  const llm = await import('@/services/llm-parser.js')
+  vi.spyOn(llm, 'getLlmProvider').mockResolvedValueOnce(llm.LlmProvider.Gemini)
+  vi.spyOn(llm, 'parseBillWithLLM').mockResolvedValueOnce({
+    amount: 5200, dueDate: bill.dueDate, billingPeriod: bill.billingPeriod,
+  })
+  try {
+    const res = await app.request(`/api/bills/${bill.id}/reparse`, { method: 'POST', headers: { Cookie: boss } })
+    expect(res.status).toBe(200)
+    const updated = await res.json()
+    expect(updated).toMatchObject({ amount: 5200, transferredAmount: 4200 })
+    expect(fundingRemaining(updated)).toBe(1000)
+    expect(isAwaitingDebit(updated)).toBe(false)
+  } finally {
+    vi.restoreAllMocks()
+  }
 })
 
 describe('bills: GET /:id/pdf decrypts an at-rest-encrypted bank.pdfPassword (secrets choke point)', () => {

@@ -75,6 +75,15 @@ export async function deleteSetting(key: string): Promise<void> {
   await prisma.setting.deleteMany({ where: { key } })
 }
 
+export function billDetailUrl(baseUrl: string | null, id: string): string | undefined {
+  const url = baseUrl ? URL.parse(baseUrl) : null
+  if (!url || !['http:', 'https:'].includes(url.protocol) || url.username || url.password) return
+  url.pathname = `${url.pathname.replace(/\/$/, '')}/bills/${encodeURIComponent(id)}`
+  url.search = ''
+  url.hash = ''
+  return url.href
+}
+
 export async function getMultiple(keys: string[]): Promise<Record<string, string | null>> {
   const result: Record<string, string | null> = {}
   for (const key of keys) {

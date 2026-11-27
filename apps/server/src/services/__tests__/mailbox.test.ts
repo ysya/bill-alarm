@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setupTestDb } from './helpers/test-db.js'
 import type { SearchCriteria } from '../email/types.js'
 
-const { searchMock, imapFlowConstructorSpy, listMock, mailboxLockMock, fetchOneMock, releaseMock, logoutMock } = vi.hoisted(() => ({
+const { searchMock, imapFlowConstructorSpy, listMock, mailboxLockMock, fetchOneMock, releaseMock, logoutMock, mailbox } = vi.hoisted(() => ({
   // Typed via the generic param (not a named-arg implementation) so the mock
   // records `client.search(query, options)` calls without unused-param lint noise.
   searchMock: vi.fn<(query: any, options?: any) => Promise<number[] | false>>(),
@@ -16,11 +16,13 @@ const { searchMock, imapFlowConstructorSpy, listMock, mailboxLockMock, fetchOneM
   fetchOneMock: vi.fn(),
   releaseMock: vi.fn(),
   logoutMock: vi.fn(async () => {}),
+  mailbox: { uidValidity: 77n },
 }))
 
 vi.mock('imapflow', () => ({
   // Must be a real class (not an arrow fn) — gmail-imap.ts calls `new ImapFlow(...)`.
   ImapFlow: class {
+    mailbox = mailbox
     constructor(public options: unknown) {
       imapFlowConstructorSpy(options)
     }
@@ -195,6 +197,7 @@ describe('Gmail archived mail', () => {
   const source = Buffer.from('From: cards@estatements.hsbc.com.tw\r\nSubject: October statement\r\n\r\nArchived bill')
 
   beforeEach(() => {
+    mailbox.uidValidity = 77n
     searchMock.mockReset().mockResolvedValue([7])
     listMock.mockReset().mockResolvedValue([
       { path: 'INBOX', specialUse: '\\Inbox' },
@@ -204,6 +207,21 @@ describe('Gmail archived mail', () => {
     fetchOneMock.mockReset().mockResolvedValue({ uid: 7, seq: 1, source })
     releaseMock.mockClear()
     logoutMock.mockClear()
+  })
+
+  it('binds retry identifiers to the same account, folder and UIDVALIDITY, even after a password change', async () => {
+    const key = (overrides: Partial<typeof config> = {}) => new GmailImapProvider({ ...config, ...overrides })
+      .withSession(async session => session.mailboxKey)
+    const original = await key()
+    expect(original).toMatch(/^[0-9a-f]{64}$/)
+    expect(await key({ password: 'new-password' })).toBe(original)
+    expect(await key({ user: 'other@gmail.com' })).not.toBe(original)
+    expect(await key({ host: 'imap.fastmail.com' })).not.toBe(original)
+    mailbox.uidValidity = 78n
+    expect(await key()).not.toBe(original)
+    mailbox.uidValidity = 77n
+    listMock.mockResolvedValue([{ path: 'Different All Mail', specialUse: '\\All' }])
+    expect(await key()).not.toBe(original)
   })
 
   it('finds and fetches an archived statement from the localized All Mail folder', async () => {
@@ -260,6 +278,17 @@ describe('Gmail archived mail', () => {
     expect(email?.subject).toBe('September statement')
     expect(mailboxLockMock).toHaveBeenCalledWith('INBOX', { readOnly: true })
     expect(listMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses a UID from a different folder, a UID set or a mismatched fetch response', async () => {
+    const provider = new GmailImapProvider(config)
+    await provider.withSession(async (session) => {
+      expect(await session.fetch({ id: '7' })).toBeNull()
+      expect(await session.fetch({ id: 'gmail-all:1:*' })).toBeNull()
+      expect(fetchOneMock).not.toHaveBeenCalled()
+      fetchOneMock.mockResolvedValueOnce({ uid: 8, source })
+      expect(await session.fetch({ id: 'gmail-all:7' })).toBeNull()
+    })
   })
 
   it('keeps non-Gmail searches and IDs in INBOX', async () => {

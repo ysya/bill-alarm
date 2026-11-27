@@ -19,7 +19,7 @@ export interface ParsedBill {
  */
 export interface BillDTO {
   id: string
-  bank?: { id: string, name: string, code: string | null, autoDebit: boolean, isActive: boolean }
+  bank?: { id: string, name: string, code: string | null, autoDebit: boolean, isActive: boolean, bankAccountId: string | null }
   amount: number
   minimumPayment?: number
   dueDate: string
@@ -28,6 +28,8 @@ export interface BillDTO {
   pdfPath?: string | null
   paidAt?: string | null
   transferredAt?: string | null
+  transferredAmount?: number | null
+  transferredAccountId?: string | null
   paidByAutoDebit?: boolean
   // 'generic': legacy rows only — the generic fallback parser was removed in 0.4;
   // new bills only ever write 'template' | 'hardcoded' | 'llm'.
@@ -61,10 +63,29 @@ export interface NotificationDTO {
 export interface BillSummaryDTO {
   totalPending: number
   totalTransferred: number
+  totalToFund: number
+  paidBillingPeriod: string
+  fundingAccounts: FundingAccountSummary[]
+  tasks: {
+    overdue: BillDTO[]
+    upcoming: BillDTO[]
+    awaiting: BillDTO[]
+    upcomingCount: number
+    awaitingCount: number
+  }
   pendingCount: number
   paidCount: number
   overdueCount: number
   nextDueDate: string | null
+}
+
+export interface FundingAccountSummary {
+  id: string | null
+  name: string
+  bankName: string | null
+  remaining: number
+  nextDueDate: string
+  bills: { id: string, name: string, period: string, dueDate: string, remaining: number }[]
 }
 
 export interface BankAccountDTO {
@@ -105,6 +126,7 @@ export interface NotificationPrefsDTO {
   remindTime: string
   notifyNewBill: boolean
   notifyOverdue: boolean
+  notifyDebitConfirmation: boolean
   lastDelivery?: LastDeliveryDTO | null
 }
 
@@ -130,8 +152,15 @@ export interface MonthlySummaryDTO extends BillSummaryDTO {
 
 // --- Shared helpers ---
 
-export function isAwaitingDebit(bill: Pick<BillDTO, 'status' | 'transferredAt'>): boolean {
-  return Boolean(bill.transferredAt) && (bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE)
+type BillFunding = Pick<BillDTO, 'amount' | 'transferredAmount'>
+
+export function fundingRemaining(bill: BillFunding): number {
+  return Math.max(0, bill.amount - Math.max(0, bill.transferredAmount ?? 0))
+}
+
+export function isAwaitingDebit(bill: BillFunding & { status: string, transferredAt?: string | Date | null }): boolean {
+  return (bill.status === BillStatus.PENDING || bill.status === BillStatus.OVERDUE)
+    && Boolean(bill.transferredAt) && bill.transferredAmount != null && fundingRemaining(bill) === 0
 }
 
 export const BILL_STATUS_LABELS: Record<BillStatus, string> = {

@@ -3,6 +3,7 @@ import { FileClock, Mail } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import type { ScanLogDTO } from '@bill-alarm/shared/scan'
+import { scanTriggerLabel } from '~/composables/useScanEvents'
 
 defineProps<{
   emailConfigured: boolean
@@ -46,7 +47,7 @@ const lastLogText = computed(() => {
   const when = new Date(l.startedAt).toLocaleString('zh-TW', {
     month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
   })
-  const base = `上次掃描：${when} ・掃描 ${l.scanned} 封・新帳單 ${l.newBillsCount} 筆`
+  const base = `上次${scanTriggerLabel(l.trigger)}：${when} ・掃描 ${l.scanned} 封・新帳單 ${l.newBillsCount} 筆`
   return l.errorCount > 0 ? `${base}・${l.errorCount} 個錯誤` : base
 })
 </script>
@@ -91,7 +92,7 @@ const lastLogText = computed(() => {
       >
         <Mail class="mr-2 h-4 w-4" />
         <template v-if="scanProgress.active">
-          掃描中 {{ scanProgress.idx }}/{{ scanProgress.total }}
+          {{ scanTriggerLabel(scanProgress.trigger) }}中 {{ scanProgress.idx }}/{{ scanProgress.total }}
           <span
             v-if="scanProgress.bank"
             class="ml-1 text-muted-foreground"
@@ -125,7 +126,7 @@ const lastLogText = computed(() => {
     >
       <div class="flex items-center justify-between text-xs">
         <span class="font-medium">
-          {{ scanProgress.trigger === 'cron' ? '自動掃描中' : '手動掃描中' }}
+          {{ scanTriggerLabel(scanProgress.trigger) }}中
           · {{ scanProgress.idx }} / {{ scanProgress.total }}
         </span>
         <span class="text-muted-foreground">{{ progressPercent }}%</span>

@@ -12,16 +12,38 @@ import { scanEvents } from './scan-events.js'
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import { BillStatus, type ParsedBill } from '@bill-alarm/shared/types'
 import { daysUntil } from '@bill-alarm/shared/date'
-import type { ScanError, ScanItemStatus } from '@bill-alarm/shared/scan'
+import type { ScanError, ScanErrorStage, ScanItemStatus } from '@bill-alarm/shared/scan'
 
 export type { ScanError }
 
 export type ScanUser = { id: string } & MailboxOwner
 
+export interface LoggedScanError extends ScanError {
+  mailboxKey?: string
+}
+
+export interface RetryTarget {
+  msgId: string
+  mailboxKey: string
+  bankId?: string
+}
+
+export function retryTargetFor(error: LoggedScanError): RetryTarget | undefined {
+  if (!error.msgId || !/^(?:gmail-all:)?[1-9]\d{0,9}$/.test(error.msgId) || !error.mailboxKey) return
+  if (!['email_fetch', 'pdf_password', 'pdf_extract', 'parse_failed', 'unexpected'].includes(error.stage)) return
+  return { msgId: error.msgId, mailboxKey: error.mailboxKey, bankId: error.bankId }
+}
+
+export function publicScanError(error: LoggedScanError): ScanError {
+  const { stage, reason, bank, bankId, msgId } = error
+  return { stage, reason, bank, bankId, msgId, canRetry: !!retryTargetFor(error) }
+}
+
 export interface ScanResult {
   scanned: number
   newBills: Array<{ bill: Bill; bank: Bank; warning?: string }>
-  errors: ScanError[]
+  errors: LoggedScanError[]
+  skipReason?: string
 }
 
 export interface ScanCallbacks {
@@ -58,7 +80,7 @@ export async function duplicateBillExists(bankId: string, amount: number, dueDat
   return (await prisma.bill.count({ where: { bankId, amount, dueDate } })) > 0
 }
 
-export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallbacks): Promise<ScanResult> {
+export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallbacks, retry?: RetryTarget): Promise<ScanResult> {
   const result: ScanResult = { scanned: 0, newBills: [], errors: [] }
 
   // Mailbox is the more fundamental prerequisite: check it before spending a
@@ -73,37 +95,38 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
     return result
   }
 
-  const banks = await prisma.bank.findMany({ where: { isActive: true, userId: user.id } })
+  const banks = await prisma.bank.findMany({ where: { isActive: true, userId: user.id, id: retry?.bankId } })
   if (banks.length === 0) {
+    if (retry) result.skipReason = '找不到已啟用的對應銀行'
     callbacks?.onStart?.(0)
     return result
   }
 
-  const rangeDaysRaw = await getSetting(KEYS.SCAN_RANGE_DAYS)
-  const rangeDays = rangeDaysRaw ? Math.max(1, parseInt(rangeDaysRaw)) : 60
-  // Structured, provider-agnostic criteria — each EmailProvider is responsible for
-  // translating this into its own search syntax (Gmail's gmailraw extension,
-  // standard IMAP SearchObject, etc.). See services/email/providers/gmail-imap.ts.
-  const criteria: SearchCriteria = {
-    senders: banks.map((b) => b.emailSenderPattern),
-    sinceDays: rangeDays,
-    hasAttachment: true,
-  }
-
-  logger.info({ senders: criteria.senders, sinceDays: rangeDays }, 'Email scan criteria')
-
   try {
     return await provider.withSession(async (session) => {
       let messageRefs: { id: string }[]
-      try {
-        messageRefs = await session.search(criteria)
-      } catch (e) {
-        result.errors.push({
-          stage: 'email_search',
-          reason: `郵件搜尋失敗：${(e as Error).message}`,
-        })
-        callbacks?.onStart?.(0)
-        return result
+      if (retry) {
+        if (session.mailboxKey !== retry.mailboxKey) {
+          result.errors.push({ stage: 'email_fetch', reason: '信箱或資料夾識別已變更，無法確認原信件，請重新掃描信箱' })
+          callbacks?.onStart?.(0)
+          return result
+        }
+        messageRefs = [{ id: retry.msgId }]
+      } else {
+        const rangeDaysRaw = await getSetting(KEYS.SCAN_RANGE_DAYS)
+        const criteria: SearchCriteria = {
+          senders: banks.map((b) => b.emailSenderPattern),
+          sinceDays: rangeDaysRaw ? Math.max(1, parseInt(rangeDaysRaw)) : 60,
+          hasAttachment: true,
+        }
+        logger.info({ senders: criteria.senders, sinceDays: criteria.sinceDays }, 'Email scan criteria')
+        try {
+          messageRefs = await session.search(criteria)
+        } catch (e) {
+          result.errors.push({ stage: 'email_search', reason: `郵件搜尋失敗：${(e as Error).message}` })
+          callbacks?.onStart?.(0)
+          return result
+        }
       }
 
       result.scanned = messageRefs.length
@@ -115,17 +138,29 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
         const msgId = msgRef.id
         const idx = i + 1
         const total = messageRefs.length
-        let progressBank: string | undefined
+        let progressBank = retry?.bankId ? banks[0].name : undefined
+        let bankId = retry?.bankId
         let progressStatus: ScanItemStatus = 'skipped'
         let progressReason: string | undefined
+        const recordError = (stage: ScanErrorStage, reason: string) => {
+          result.errors.push({ stage, reason, msgId, bank: progressBank, bankId, mailboxKey: session.mailboxKey })
+          progressStatus = 'error'
+          progressReason = reason
+        }
         try {
           if (await emailAlreadyProcessed(msgId, user.id)) {
             progressReason = '此信件已建立過帳單'
             continue
           }
-          const email = await session.fetch(msgRef)
+          let email
+          try {
+            email = await session.fetch(msgRef)
+          } catch (e) {
+            recordError('email_fetch', `取信失敗：${(e as Error).message}`)
+            continue
+          }
           if (!email) {
-            progressReason = '取信失敗或郵件不存在'
+            recordError('email_fetch', '讀取不到原信件，請確認信件是否已移動或刪除')
             continue
           }
 
@@ -138,6 +173,7 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
             continue
           }
           progressBank = bank.name
+          bankId = bank.id
           progressStatus = 'matched'
 
           const pdfBuffers = await getPdfBuffers(email.attachments)
@@ -168,14 +204,7 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
             const reason = isPasswordError
               ? 'PDF 密碼錯誤，請至銀行管理更新密碼'
               : `PDF 文字擷取失敗${lastPdfError ? `（${lastPdfError}）` : ''}`
-            result.errors.push({
-              stage: isPasswordError ? 'pdf_password' : 'pdf_extract',
-              bank: bank.name,
-              msgId,
-              reason,
-            })
-            progressStatus = 'error'
-            progressReason = reason
+            recordError(isPasswordError ? 'pdf_password' : 'pdf_extract', reason)
             continue
           }
 
@@ -185,9 +214,7 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
           }
           if (!outcome.bill) {
             const reason = outcome.attempts.at(-1)?.error ?? '無法解析帳單'
-            result.errors.push({ stage: 'parse_failed', bank: bank.name, msgId, reason })
-            progressStatus = 'error'
-            progressReason = reason
+            recordError('parse_failed', reason)
             continue
           }
           const parsed = outcome.bill
@@ -197,9 +224,7 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
           if (sanityErr) {
             logger.warn({ bank: bank.name, source, parsed, error: sanityErr }, 'Parsed bill failed sanity check')
             const reason = `解析結果異常（${sanityErr}），請手動確認`
-            result.errors.push({ stage: 'sanity_check', bank: bank.name, msgId, reason })
-            progressStatus = 'error'
-            progressReason = reason
+            recordError('sanity_check', reason)
           }
 
           const existing = await prisma.bill.findUnique({
@@ -247,14 +272,13 @@ export async function scanAndProcessEmails(user: ScanUser, callbacks?: ScanCallb
 
           logger.info({ bank: bank.name, amount: parsed.amount, dueDate: parsed.dueDate }, 'New bill created')
           result.newBills.push({ bill, bank, warning: sanityErr ?? undefined })
-          if (progressStatus !== 'error') progressStatus = 'success'
+          if (!sanityErr) progressStatus = 'success'
         } catch (e) {
           const msg = (e as Error).message ?? String(e)
           logger.error({ msgId, error: msg }, 'Failed to process email')
-          result.errors.push({ stage: 'unexpected', msgId, reason: msg })
-          progressStatus = 'error'
-          progressReason = msg
+          recordError('unexpected', msg)
         } finally {
+          if (retry && result.errors.length === 0 && result.newBills.length === 0) result.skipReason = progressReason
           callbacks?.onProgress?.(idx, total, progressBank, progressStatus, progressReason)
         }
       }
@@ -299,12 +323,13 @@ const scanning = new Set<string>()
  * Throws `ScanInProgressError` (before any ScanLog row is created) if this
  * user already has a scan running.
  */
-export async function runScanWithLog(trigger: 'manual' | 'cron', user: ScanUser): Promise<RecordedScan> {
+export async function runScanWithLog(request: 'manual' | 'cron' | RetryTarget, user: ScanUser): Promise<RecordedScan> {
   if (scanning.has(user.id)) {
     throw new ScanInProgressError(user.id)
   }
   scanning.add(user.id)
   try {
+    const trigger = typeof request === 'string' ? request : 'retry'
     const log = await prisma.scanLog.create({
       data: { trigger, startedAt: new Date(), userId: user.id },
     })
@@ -319,7 +344,7 @@ export async function runScanWithLog(trigger: 'manual' | 'cron', user: ScanUser)
         onProgress: (idx, total, bank, status, reason) => {
           scanEvents.emitEvent({ type: 'progress', userId: user.id, scanLogId: log.id, idx, total, bank, status, reason })
         },
-      })
+      }, typeof request === 'string' ? undefined : request)
     } catch (e) {
       fatal = (e as Error).message ?? String(e)
       logger.error({ error: fatal }, 'Scan crashed unexpectedly')

@@ -51,9 +51,7 @@ async function handleRotate() {
   <div class="space-y-3">
     <div class="flex items-start justify-between gap-2">
       <p class="text-xs text-muted-foreground">
-        另一種提醒方式：把到期日放進你的日曆，事件內建到期前 1 天／1 小時提醒，跟上方的
-        Telegram 提醒互補。不需 OAuth——複製下方網址貼到任何支援 iCalendar
-        的應用程式（Google Calendar、Apple 行事曆、Outlook 等）。
+        複製訂閱網址，貼到 Google Calendar、Apple 行事曆或 Outlook，即可在行事曆查看帳單到期日與備款狀態。
       </p>
       <Button
         type="button"
@@ -178,7 +176,7 @@ async function handleRotate() {
             </p>
             <p>
               <span class="font-medium">提醒：</span>
-              事件內含到期日前 1 天與 1 小時兩個提醒（依日曆 App 規則顯示）。
+              待繳帳單在到期前 1 天與 1 小時提醒。已備足款項的帳單會依「提醒我確認自動扣款」設定，在截止日隔天上午 9 點提醒一次。實際顯示依行事曆 App 為準。
             </p>
             <p>
               <span class="font-medium">已繳清：</span>

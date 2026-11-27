@@ -1,7 +1,6 @@
 <template>
   <div class="space-y-6">
     <InstallPrompt variant="banner" />
-    <OnboardingProgressCard />
 
     <!-- Page Header -->
     <div>
@@ -13,87 +12,35 @@
       </p>
     </div>
 
-    <!-- Summary Cards（可點，跳帳單頁對應篩選） -->
-    <div class="grid gap-4 grid-cols-1 sm:grid-cols-3">
-      <NuxtLink to="/bills?tab=unpaid">
-        <Card class="h-full transition-colors hover:border-primary/50">
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">
-              目前待繳
-            </CardTitle>
-            <div class="flex items-center gap-1 text-muted-foreground">
-              <DollarSign class="h-4 w-4" />
-              <ChevronRight class="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">
-              {{ formatAmount(summary?.totalPending ?? 0) }}
-            </div>
-            <p class="text-xs text-muted-foreground">
-              {{ summary?.pendingCount ?? 0 }} 筆{{ (summary?.overdueCount ?? 0) > 0 ? `，含 ${summary?.overdueCount} 筆逾期` : '' }}
-            </p>
-            <div
-              v-if="summary && summary.totalTransferred > 0"
-              class="mt-2 text-xs text-muted-foreground"
-            >
-              <p>已轉帳待扣繳 {{ formatAmount(summary.totalTransferred) }}</p>
-              <p>尚待繳款或備款 {{ formatAmount(summary.totalPending - summary.totalTransferred) }}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </NuxtLink>
-
-      <NuxtLink to="/bills?tab=paid">
-        <Card class="h-full transition-colors hover:border-primary/50">
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">
-              本月已繳
-            </CardTitle>
-            <div class="flex items-center gap-1 text-muted-foreground">
-              <CircleCheck class="h-4 w-4" />
-              <ChevronRight class="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div class="text-2xl font-bold">
-              {{ summary?.paidCount ?? 0 }}
-            </div>
-            <p class="text-xs text-muted-foreground">
-              筆帳單已繳清
-            </p>
-          </CardContent>
-        </Card>
-      </NuxtLink>
-
-      <NuxtLink to="/bills?tab=unpaid">
-        <Card class="h-full transition-colors hover:border-primary/50">
-          <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle class="text-sm font-medium">
-              逾期帳單
-            </CardTitle>
-            <div class="flex items-center gap-1 text-muted-foreground">
-              <AlertTriangle
-                class="h-4 w-4"
-                :class="{ 'text-destructive': (summary?.overdueCount ?? 0) > 0 }"
-              />
-              <ChevronRight class="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div
-              class="text-2xl font-bold"
-              :class="{ 'text-destructive': (summary?.overdueCount ?? 0) > 0 }"
-            >
-              {{ summary?.overdueCount ?? 0 }}
-            </div>
-            <p class="text-xs text-muted-foreground">
-              筆帳單已逾期
-            </p>
-          </CardContent>
-        </Card>
-      </NuxtLink>
-    </div>
+    <Card v-if="summary">
+      <CardContent class="grid gap-4 p-4 sm:grid-cols-2 sm:items-center sm:p-6">
+        <NuxtLink
+          to="/bills?tab=unpaid&view=funding"
+          class="rounded-md focus-visible:outline-primary"
+        >
+          <div class="flex items-center gap-1 text-sm font-medium text-muted-foreground">
+            尚需繳款或備款 <ChevronRight class="size-4" />
+          </div>
+          <p class="mt-1 text-3xl font-bold tabular-nums">
+            {{ formatAmount(summary.totalToFund) }}
+          </p>
+        </NuxtLink>
+        <div class="grid grid-cols-3 gap-2 border-t pt-3 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+          <NuxtLink
+            v-for="item in metrics"
+            :key="item.label"
+            :to="item.to"
+            class="rounded-md py-1 hover:underline"
+          >
+            <span class="block text-xs text-muted-foreground">{{ item.label }}</span>
+            <span
+              class="text-lg font-semibold tabular-nums"
+              :class="item.color"
+            >{{ item.count }}</span>
+          </NuxtLink>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- 接下來要繳（單一待辦流） -->
     <div class="space-y-4">
@@ -118,19 +65,35 @@
         </Card>
       </div>
 
+      <Card
+        v-else-if="!summary"
+        class="p-4"
+      >
+        <p class="text-sm">
+          無法載入帳單總覽。
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          @click="fetchData"
+        >
+          重新載入
+        </Button>
+      </Card>
+
       <!-- 未授權信箱：中性引導，不慶祝 -->
       <Card
-        v-else-if="!emailConfigured && unpaidBills.length === 0"
+        v-else-if="!emailConfigured && summary.pendingCount === 0"
         class="py-8"
       >
         <CardContent class="text-center text-sm text-muted-foreground">
-          完成上方設定後，帳單會自動出現在這裡。
+          連接信箱並啟用銀行後，帳單會自動出現在這裡。
         </CardContent>
       </Card>
 
       <!-- 真正零未繳 -->
       <Card
-        v-else-if="unpaidBills.length === 0"
+        v-else-if="summary.pendingCount === 0"
         class="flex flex-col items-center justify-center py-10"
       >
         <CardContent class="flex flex-col items-center text-center">
@@ -145,71 +108,33 @@
       </Card>
 
       <template v-else>
-        <!-- 已逾期 -->
         <section
-          v-if="overdueBills.length > 0"
+          v-for="group in taskGroups"
+          :key="group.view"
           class="space-y-2"
         >
           <div class="flex items-center gap-3">
-            <h4 class="text-sm font-semibold text-red-500">
-              已逾期（{{ overdueBills.length }}）
-            </h4>
-            <Separator class="flex-1" />
-          </div>
-          <DashboardBillRow
-            v-for="bill in overdueBills"
-            :key="bill.id"
-            :bill="bill"
-            :refresh="fetchData"
-          />
-        </section>
-
-        <!-- 即將到期 -->
-        <section
-          v-if="upcomingShown.length > 0"
-          class="space-y-2"
-        >
-          <div class="flex items-center gap-3">
-            <h4 class="text-sm font-semibold text-muted-foreground">
-              即將到期（{{ upcomingAll.length }}）
-            </h4>
-            <Separator class="flex-1" />
-          </div>
-          <DashboardBillRow
-            v-for="bill in upcomingShown"
-            :key="bill.id"
-            :bill="bill"
-            :refresh="fetchData"
-          />
-          <div
-            v-if="upcomingHiddenCount > 0"
-            class="pt-1"
-          >
-            <NuxtLink
-              to="/bills?tab=unpaid"
-              class="text-sm text-muted-foreground underline-offset-4 hover:underline"
+            <h4
+              class="text-sm font-semibold"
+              :class="group.color"
             >
-              查看另外 {{ upcomingHiddenCount }} 筆未繳 →
-            </NuxtLink>
-          </div>
-        </section>
-
-        <section
-          v-if="awaitingDebitBills.length > 0"
-          class="space-y-2"
-        >
-          <div class="flex items-center gap-3">
-            <h4 class="text-sm font-semibold text-muted-foreground">
-              待確認扣繳（{{ awaitingDebitBills.length }}）
+              {{ group.label }}（{{ group.count }}）
             </h4>
             <Separator class="flex-1" />
           </div>
           <DashboardBillRow
-            v-for="bill in awaitingDebitBills"
+            v-for="bill in group.bills"
             :key="bill.id"
             :bill="bill"
             :refresh="fetchData"
           />
+          <NuxtLink
+            v-if="group.count > group.bills.length"
+            :to="{ path: '/bills', query: { tab: 'unpaid', view: group.view } }"
+            class="inline-block py-1 text-sm text-muted-foreground underline underline-offset-4"
+          >
+            查看全部 {{ group.count }} 筆{{ group.label }}帳單
+          </NuxtLink>
         </section>
       </template>
 
@@ -220,6 +145,52 @@
         >查看掃描紀錄</NuxtLink>
       </p>
     </div>
+
+    <section
+      v-if="summary?.fundingAccounts.length"
+      class="space-y-3"
+    >
+      <h3 class="text-lg font-semibold">
+        扣款帳戶備款
+      </h3>
+      <Card>
+        <CardContent class="divide-y p-0">
+          <details
+            v-for="account in summary.fundingAccounts"
+            :key="account.id ?? 'unassigned'"
+            class="px-4"
+          >
+            <summary class="cursor-pointer py-3 text-sm">
+              <span class="font-semibold">{{ account.name }}</span>
+              <span
+                v-if="account.bankName"
+                class="text-muted-foreground"
+              > · {{ account.bankName }}</span>
+              <span class="mt-1 flex flex-wrap justify-between gap-x-3 pl-4">
+                <span>尚需 {{ formatAmount(account.remaining) }}</span>
+                <span class="text-muted-foreground">最近截止 {{ formatYMD(account.nextDueDate) }} · {{ account.bills.length }} 筆</span>
+              </span>
+            </summary>
+            <ul class="divide-y border-t">
+              <li
+                v-for="bill in account.bills"
+                :key="bill.id"
+              >
+                <NuxtLink
+                  :to="`/bills/${bill.id}`"
+                  class="flex flex-wrap items-center justify-between gap-2 py-3 text-sm hover:underline"
+                >
+                  <span>{{ bill.name }} · {{ bill.period }}<small class="block text-muted-foreground">截止 {{ formatYMD(bill.dueDate) }}</small></span>
+                  <span>{{ bill.remaining ? `尚需 ${formatAmount(bill.remaining)}` : '已備足' }} ›</span>
+                </NuxtLink>
+              </li>
+            </ul>
+          </details>
+        </CardContent>
+      </Card>
+    </section>
+
+    <OnboardingProgressCard />
 
     <!-- 月度明細（月份選擇器只作用於此區） -->
     <div class="space-y-4">
@@ -282,15 +253,10 @@
 
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
-import {
-  DollarSign,
-  CircleCheck,
-  AlertTriangle,
-  ChevronRight,
-} from 'lucide-vue-next'
-import { BillStatus, isAwaitingDebit } from '@bill-alarm/shared/types'
-import type { BillDTO, MonthlySummaryDTO } from '@bill-alarm/shared/types'
+import { CircleCheck, ChevronRight } from 'lucide-vue-next'
+import type { MonthlySummaryDTO } from '@bill-alarm/shared/types'
 import { formatAmount } from '@bill-alarm/shared/format'
+import { formatYMD } from '@bill-alarm/shared/date'
 
 // --- Month Filter（只作用於月度明細區） ---
 
@@ -321,47 +287,44 @@ const monthTitle = computed(() => {
 
 // --- Data ---
 
-const { getSummary, list } = useBillApi()
-
+const { getSummary } = useBillApi()
 const summary = ref<MonthlySummaryDTO | null>(null)
-const unpaidBills = ref<BillDTO[]>([])
 const loading = ref(true)
+const metrics = computed(() => {
+  const data = summary.value
+  if (!data) return []
+  return [
+    { label: '待確認扣繳', count: data.tasks.awaitingCount, to: '/bills?tab=unpaid&view=awaiting', color: '' },
+    { label: '逾期需處理', count: data.overdueCount, to: '/bills?tab=unpaid&view=overdue', color: data.overdueCount ? 'text-destructive' : '' },
+    { label: '本期已繳', count: data.paidCount, to: `/bills?tab=paid&period=${data.paidBillingPeriod}`, color: '' },
+  ]
+})
+const taskGroups = computed(() => {
+  const data = summary.value
+  if (!data) return []
+  return [
+    { label: '已逾期', view: 'overdue', count: data.overdueCount, bills: data.tasks.overdue, color: 'text-red-500' },
+    { label: '待確認扣繳', view: 'awaiting', count: data.tasks.awaitingCount, bills: data.tasks.awaiting, color: 'text-muted-foreground' },
+    { label: '即將到期', view: 'upcoming', count: data.tasks.upcomingCount, bills: data.tasks.upcoming, color: 'text-muted-foreground' },
+  ].filter(group => group.count > 0)
+})
 
-const UPCOMING_LIMIT = 5
-
-const awaitingDebitBills = computed(() => unpaidBills.value.filter(isAwaitingDebit))
-const overdueBills = computed(() => unpaidBills.value.filter(b => b.status === BillStatus.OVERDUE && !isAwaitingDebit(b)))
-const upcomingAll = computed(() => unpaidBills.value.filter(b => b.status !== BillStatus.OVERDUE && !isAwaitingDebit(b)))
-const upcomingShown = computed(() => upcomingAll.value.slice(0, UPCOMING_LIMIT))
-const upcomingHiddenCount = computed(() => Math.max(0, upcomingAll.value.length - UPCOMING_LIMIT))
-
+let requestId = 0
 async function fetchData() {
+  const id = ++requestId
   loading.value = true
   try {
-    const [summaryData, unpaidData] = await Promise.all([
-      getSummary(selectedMonth.value),
-      list({ status: 'unpaid', pageSize: 100 }),
-    ])
-    summary.value = summaryData
-    unpaidBills.value = unpaidData.data
+    const data = await getSummary(selectedMonth.value)
+    if (id === requestId) summary.value = data
   }
   catch {
-    toast.error('載入資料失敗', { description: '請稍後再試' })
+    if (id === requestId) toast.error('載入資料失敗', { description: '請稍後再試' })
   }
   finally {
-    loading.value = false
+    if (id === requestId) loading.value = false
   }
 }
-
-// 月份切換只需要新的 breakdown——未繳列表與上方卡片是「當下事實」，不動。
-watch(selectedMonth, async () => {
-  try {
-    summary.value = await getSummary(selectedMonth.value)
-  }
-  catch {
-    toast.error('載入資料失敗', { description: '請稍後再試' })
-  }
-})
+watch(selectedMonth, fetchData)
 
 // 掃描完成（不論從哪一頁觸發）自動刷新總覽。
 const { onComplete } = useScanEvents()

@@ -1,10 +1,15 @@
 import type { Bill, Bank } from '../../generated/prisma/client.js'
 import prisma from '@/prisma.js'
-import { getSetting, KEYS } from './settings.js'
+import { billDetailUrl, getSetting, KEYS } from './settings.js'
 import { formatAmount } from '@bill-alarm/shared/format'
+import { fundingRemaining } from '@bill-alarm/shared/types'
 import { daysUntil, formatYMD } from '@bill-alarm/shared/date'
 
 const API_BASE = 'https://api.telegram.org/bot'
+
+function escapeHtml(text: string): string {
+  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
+}
 
 async function getBotToken(): Promise<string | null> {
   return getSetting(KEYS.TELEGRAM_BOT_TOKEN)
@@ -42,18 +47,18 @@ export async function sendMessage(chatId: string, text: string): Promise<boolean
 export interface SendOutcome {
   ok: boolean
   error?: string
+  unavailable?: boolean
 }
 
 /** Send to one user's bound chat. Unbound users fail gracefully — callers log, never throw. */
 export async function sendToUser(userId: string, text: string): Promise<SendOutcome> {
   const token = await getBotToken()
   if (!token) {
-    console.warn('[telegram] Bot token not configured, skipping message')
-    return { ok: false, error: 'bot token not configured' }
+    return { ok: false, unavailable: true, error: 'bot token not configured' }
   }
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { telegramChatId: true } })
   if (!user?.telegramChatId) {
-    return { ok: false, error: '使用者未綁定 Telegram' }
+    return { ok: false, unavailable: true, error: '使用者未綁定 Telegram' }
   }
   return sendRaw(token, user.telegramChatId, text)
 }
@@ -125,11 +130,10 @@ export async function sendNewBillAlert(bill: Bill, bank: Bank, warning?: string)
   }
 
   if (usedLlm) {
-    const baseUrl = await getSetting(KEYS.APP_BASE_URL)
-    if (baseUrl) {
-      const link = `${baseUrl.replace(/\/$/, '')}/bills/${bill.id}`
+    const link = billDetailUrl(await getSetting(KEYS.APP_BASE_URL), bill.id)
+    if (link) {
       lines.push('')
-      lines.push(`🤖 此次由 AI 解析，<a href="${link}">核對數值</a>。`)
+      lines.push(`🤖 此次由 AI 解析，<a href="${escapeHtml(link)}">核對數值</a>。`)
     } else {
       lines.push('')
       lines.push('🤖 此次由 AI 解析，請到帳單詳情頁核對金額。')
@@ -146,10 +150,12 @@ export async function sendBillReminder(bill: Bill, bank: Bank): Promise<SendOutc
   const text = [
     `<b>${urgency} 信用卡帳單提醒</b>`,
     '',
-    `🏦 ${bank.name}`,
+    `🏦 ${escapeHtml(bank.name)}`,
     `💰 應繳金額：${formatAmount(bill.amount)}`,
     `📅 截止日：${formatYMD(bill.dueDate)}`,
-    days === 0 ? '⚠️ 今天是最後繳費日！' : `⏰ 還有 ${days} 天`,
+    bill.transferredAt
+      ? `請確認扣款帳戶餘額，尚需備款 ${formatAmount(fundingRemaining(bill))}。`
+      : days === 0 ? '⚠️ 今天是最後繳費日！' : `⏰ 還有 ${days} 天`,
   ].join('\n')
 
   return sendToUser(bank.userId, text)
@@ -159,13 +165,30 @@ export async function sendOverdueWarning(bill: Bill, bank: Bank): Promise<SendOu
   const text = [
     '<b>🔴 帳單逾期警告</b>',
     '',
-    `🏦 ${bank.name}`,
+    `🏦 ${escapeHtml(bank.name)}`,
     `💰 應繳金額：${formatAmount(bill.amount)}`,
     `📅 截止日：${formatYMD(bill.dueDate)}（已逾期）`,
     '',
-    '⚠️ 請儘速繳款以避免延遲利息！',
+    bill.transferredAt
+      ? `帳單尚有 ${formatAmount(fundingRemaining(bill))} 未備款，請核對帳戶餘額與扣款紀錄。`
+      : '⚠️ 請儘速繳款以避免延遲利息！',
   ].join('\n')
 
+  return sendToUser(bank.userId, text)
+}
+
+export async function sendDebitConfirmationReminder(bill: Bill, bank: Bank): Promise<SendOutcome> {
+  const link = billDetailUrl(await getSetting(KEYS.APP_BASE_URL), bill.id)
+  const text = [
+    '<b>🔔 請確認自動扣款</b>',
+    '',
+    `🏦 ${escapeHtml(bank.name)} ・ ${escapeHtml(bill.billingPeriod)}`,
+    `💰 帳單金額：${formatAmount(bill.amount)}`,
+    `📅 截止日：${formatYMD(bill.dueDate)}`,
+    '',
+    '已備足款項。請先核對銀行紀錄，看到扣款成功後再到帳單明細確認。',
+    link ? `<a href="${escapeHtml(link)}">開啟帳單明細</a>` : `帳單明細：<code>/bills/${escapeHtml(bill.id)}</code>`,
+  ].join('\n')
   return sendToUser(bank.userId, text)
 }
 

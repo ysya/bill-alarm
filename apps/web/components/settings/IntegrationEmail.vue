@@ -6,6 +6,7 @@ import type { EmailStatus } from '~/types/settings'
 
 const props = defineProps<{
   email: EmailStatus
+  editCredentials?: boolean
 }>()
 
 const emit = defineEmits<{ refresh: [] }>()
@@ -21,7 +22,7 @@ const credForm = ref({
 const submitting = ref(false)
 const testing = ref(false)
 const testResult = ref<{ ok: boolean, message: string } | null>(null)
-const showCredentials = ref(false)
+const showCredentials = ref(props.editCredentials ?? false)
 const helpDialogOpen = ref(false)
 
 watch(() => props.email, (v) => {

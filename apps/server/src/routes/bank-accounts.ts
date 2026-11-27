@@ -36,14 +36,16 @@ app.patch('/:id', zValidator('json', z.object({
 })
 
 app.delete('/:id', async (c) => {
-  const existing = await prisma.bankAccount.findFirst({ where: { id: c.req.param('id'), userId: getAuthUser(c).id } })
-  if (!existing) return c.json({ error: 'Not found' }, 404)
-  const usedBy = await prisma.bank.count({ where: { bankAccountId: existing.id } })
-  if (usedBy > 0) {
-    return c.json({ error: '此帳戶仍被銀行使用中，請先解除關聯' }, 400)
-  }
-  await prisma.bankAccount.delete({ where: { id: existing.id } })
-  return c.json({ success: true })
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.bankAccount.findFirst({ where: { id: c.req.param('id'), userId: getAuthUser(c).id } })
+    if (!existing) return c.json({ error: 'Not found' }, 404)
+    const usedBy = await tx.bank.count({ where: { bankAccountId: existing.id } })
+    if (usedBy > 0) {
+      return c.json({ error: '此帳戶仍被銀行使用中，請先解除關聯' }, 400)
+    }
+    await tx.bankAccount.delete({ where: { id: existing.id } })
+    return c.json({ success: true })
+  })
 })
 
 export default app

@@ -95,7 +95,7 @@ export function startScheduler() {
     } catch (err) {
       logger.error(err, 'Reminder processing failed')
     }
-  }, { timezone: 'Asia/Taipei' })
+  }, { timezone: 'Asia/Taipei', noOverlap: true })
 
   logger.info('Cron jobs started')
 }

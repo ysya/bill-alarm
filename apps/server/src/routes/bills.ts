@@ -8,7 +8,8 @@ import { DATA_DIR } from '@/paths.js'
 import { decryptPdf } from '@/services/pdf-parser.js'
 import { parseBillWithLLM, getLlmProvider, LlmProvider } from '@/services/llm-parser.js'
 import { getBankPdfPassword } from '@/services/secrets.js'
-import { BillStatus } from '@bill-alarm/shared/types'
+import { BillStatus, fundingRemaining, isAwaitingDebit, type FundingAccountSummary } from '@bill-alarm/shared/types'
+import type { Bill, Prisma } from '../../generated/prisma/client.js'
 import { todayYMD, isValidYMD } from '@bill-alarm/shared/date'
 import { getAuthUser } from './auth.js'
 
@@ -38,24 +39,59 @@ app.get('/summary', async (c) => {
   // "Pending" figures cover everything still owed — pending AND overdue —
   // so the dashboard's headline number matches what the user must pay.
   const [unpaid, paid] = await Promise.all([
-    prisma.bill.findMany({ where: { status: { in: unpaidStatuses }, bank: { userId } } }),
+    prisma.bill.findMany({
+      where: { status: { in: unpaidStatuses }, bank: { userId } },
+      orderBy: [{ dueDate: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true, amount: true, status: true, dueDate: true, billingPeriod: true, transferredAt: true, transferredAmount: true,
+        bank: { select: {
+          id: true, name: true, code: true, autoDebit: true, isActive: true,
+          bankAccount: { select: { id: true, name: true, bankName: true, userId: true } },
+        } },
+      },
+    }),
     prisma.bill.count({ where: { status: BillStatus.PAID, billingPeriod: currentMonth, bank: { userId } } }),
   ])
 
   const totalPending = unpaid.reduce((sum, b) => sum + b.amount, 0)
-  const totalTransferred = unpaid.reduce((sum, b) => sum + (b.transferredAt ? b.amount : 0), 0)
-  const overdueCount = unpaid.filter((b) => b.status === BillStatus.OVERDUE && !b.transferredAt).length
-  const upcomingBills = unpaid
-    .filter((b) => b.dueDate >= today)
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  const totalTransferred = unpaid.reduce((sum, b) => sum + (b.transferredAmount ?? 0), 0)
+  const totalToFund = unpaid.reduce((sum, b) => sum + fundingRemaining(b), 0)
+  const accounts = new Map<string | null, FundingAccountSummary>()
+  const bills = unpaid.map(({ bank: { bankAccount, ...bank }, ...bill }) => {
+    const account = bankAccount?.userId === userId ? bankAccount : null
+    if (bank.autoDebit || bill.transferredAt) {
+      const key = account?.id ?? null
+      const group: FundingAccountSummary = accounts.get(key) ?? {
+        id: key, name: account?.name ?? '未指定扣款帳戶', bankName: account?.bankName ?? null,
+        nextDueDate: bill.dueDate, remaining: 0, bills: [],
+      }
+      const remaining = fundingRemaining(bill)
+      group.remaining += remaining
+      group.bills.push({ id: bill.id, name: bank.name, period: bill.billingPeriod, dueDate: bill.dueDate, remaining })
+      accounts.set(key, group)
+    }
+    return { ...bill, bank: { ...bank, bankAccountId: account?.id ?? null } }
+  })
+  const awaiting = bills.filter(isAwaitingDebit)
+  const overdue = bills.filter(b => b.status === BillStatus.OVERDUE && !isAwaitingDebit(b))
+  const upcoming = bills.filter(b => b.status === BillStatus.PENDING && !isAwaitingDebit(b))
+  const previewSize = 5
 
   const result: Record<string, unknown> = {
     totalPending,
     totalTransferred,
+    totalToFund,
+    paidBillingPeriod: currentMonth,
+    fundingAccounts: [...accounts.values()],
+    tasks: {
+      overdue: overdue.slice(0, previewSize),
+      upcoming: upcoming.slice(0, previewSize), upcomingCount: upcoming.length,
+      awaiting: awaiting.slice(0, previewSize), awaitingCount: awaiting.length,
+    },
     pendingCount: unpaid.length,
     paidCount: paid,
-    overdueCount,
-    nextDueDate: upcomingBills[0]?.dueDate ?? null,
+    overdueCount: overdue.length,
+    nextDueDate: unpaid.find(b => b.dueDate >= today)?.dueDate ?? null,
   }
 
   if (month) {
@@ -90,26 +126,44 @@ app.get('/summary', async (c) => {
 
 // List bills with filters + pagination
 app.get('/', async (c) => {
-  const { status, bankId } = c.req.query()
+  const { status, bankId, view, billingPeriod } = c.req.query()
   const page = Math.max(1, Number(c.req.query('page')) || 1)
   const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize')) || 20))
 
-  const where: Record<string, unknown> = { bank: { userId: getAuthUser(c).id } }
+  const where: Prisma.BillWhereInput = { bank: { userId: getAuthUser(c).id } }
   // 'unpaid' is a virtual filter: everything still owed (pending + overdue).
   if (status === 'unpaid') where.status = { in: unpaidStatuses }
   else if (status) where.status = status
   if (bankId) where.bankId = bankId
+  if (billingPeriod) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(billingPeriod)) return c.json({ error: '帳期格式錯誤' }, 400)
+    where.billingPeriod = billingPeriod
+  }
+  if (view && status === 'unpaid') {
+    const amount = prisma.bill.fields.amount
+    if (view === 'awaiting') {
+      where.transferredAt = { not: null }
+      where.transferredAmount = { gte: amount }
+    } else if (['funding', 'overdue', 'upcoming'].includes(view)) {
+      where.OR = [{ transferredAmount: null }, { transferredAmount: { lt: amount } }]
+      if (view === 'funding') where.amount = { gt: 0 }
+      if (view === 'overdue') where.status = BillStatus.OVERDUE
+      if (view === 'upcoming') where.status = BillStatus.PENDING
+    } else {
+      return c.json({ error: '未知的帳單篩選' }, 400)
+    }
+  }
 
   // Unpaid is an action list — soonest deadline first (overdue dates sort
   // naturally to the top). Everything else stays a ledger, newest first.
   const orderBy = status === 'unpaid'
-    ? [{ dueDate: 'asc' as const }]
-    : [{ billingPeriod: 'desc' as const }, { dueDate: 'desc' as const }]
+    ? [{ dueDate: 'asc' as const }, { id: 'asc' as const }]
+    : [{ billingPeriod: 'desc' as const }, { dueDate: 'desc' as const }, { id: 'asc' as const }]
 
   const [bills, total] = await Promise.all([
     prisma.bill.findMany({
       where,
-      include: { bank: { select: { id: true, name: true, code: true, autoDebit: true, isActive: true } } },
+      include: { bank: { select: { id: true, name: true, code: true, autoDebit: true, isActive: true, bankAccountId: true } } },
       orderBy,
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -127,7 +181,7 @@ app.get('/:id', async (c) => {
   const bill = await prisma.bill.findUnique({
     where: { id: own.id },
     include: {
-      bank: { select: { id: true, name: true, code: true, autoDebit: true, isActive: true } },
+      bank: { select: { id: true, name: true, code: true, autoDebit: true, isActive: true, bankAccountId: true } },
       notifications: { orderBy: { sentAt: 'desc' } },
     },
   })
@@ -162,44 +216,73 @@ function paidAtForStatusChange(
   return currentPaidAt ? { paidAt: null } : undefined
 }
 
+// Reopening a historical bill can only restore funding for the same debit account.
+async function updateOwnedBill(
+  c: Parameters<typeof getAuthUser>[0], id: string, changes: (bill: Bill) => Prisma.BillUpdateInput,
+) {
+  return prisma.$transaction(async (tx) => {
+    const own = await tx.bill.findFirst({
+      where: { id, bank: { userId: getAuthUser(c).id } }, include: { bank: { select: { bankAccountId: true } } },
+    })
+    if (!own) return c.json({ error: 'Bill not found' }, 404)
+    const data = changes(own)
+    const reopened = data.status === BillStatus.PENDING || data.status === BillStatus.OVERDUE
+    if (data.status === BillStatus.NO_PAYMENT || (reopened && own.transferredAccountId !== own.bank.bankAccountId)) {
+      Object.assign(data, { transferredAt: null, transferredAmount: null, transferredAccountId: null })
+    }
+    return c.json(await tx.bill.update({ where: { id }, data }))
+  })
+}
+
 // Update bill
 app.patch('/:id', zValidator('json', updateBillSchema), async (c) => {
-  const own = await ownBill(c, c.req.param('id'))
-  if (!own) return c.json({ error: 'Bill not found' }, 404)
   const data = c.req.valid('json')
-
-  const bill = await prisma.bill.update({
-    where: { id: own.id },
-    data: {
-      ...data,
-      ...paidAtForStatusChange(data.status, own.paidAt),
-      ...(data.status && data.status !== BillStatus.PAID ? { paidByAutoDebit: false } : {}),
-      ...(data.status === BillStatus.NO_PAYMENT ? { transferredAt: null } : {}),
-    },
-  })
-  return c.json(bill)
+  return updateOwnedBill(c, c.req.param('id'), (bill) => ({
+    ...data,
+    ...paidAtForStatusChange(data.status, bill.paidAt),
+    ...(data.status && data.status !== BillStatus.PAID ? { paidByAutoDebit: false } : {}),
+  }))
 })
 
-app.patch('/:id/transfer', zValidator('json', z.object({ transferred: z.boolean() })), async (c) => {
+app.patch('/:id/transfer', zValidator('json', z.object({
+  transferred: z.boolean(),
+  amount: z.number().int().positive().optional(),
+  bankAccountId: z.string().min(1).nullable().optional(),
+})), async (c) => {
   const id = c.req.param('id')
-  const { transferred } = c.req.valid('json')
-  const [updated] = await prisma.bill.updateManyAndReturn({
-    where: {
-      id,
-      bank: { userId: getAuthUser(c).id, ...(transferred ? { autoDebit: true } : {}) },
-      status: { in: unpaidStatuses },
-      transferredAt: transferred ? null : { not: null },
-    },
-    data: { transferredAt: transferred ? new Date() : null },
+  const { transferred, amount, bankAccountId } = c.req.valid('json')
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.bill.findFirst({
+      where: { id, bank: { userId: getAuthUser(c).id } },
+      include: { bank: { select: { autoDebit: true, bankAccountId: true } } },
+    })
+    if (!row) return c.json({ error: 'Bill not found' }, 404)
+    const { bank, ...bill } = row
+    if (!unpaidStatuses.some(status => status === bill.status)) {
+      return c.json({ error: '只有未結清的帳單可以變更轉帳標記' }, 409)
+    }
+    if (bankAccountId !== undefined && bank.bankAccountId !== bankAccountId) {
+      return c.json({ error: '扣款帳戶已變更，請重新核對備款' }, 409)
+    }
+    if (!transferred && !bill.transferredAt && bill.transferredAmount == null) return c.json(bill)
+    if (transferred) {
+      // A replay from an older client has no amount and must never fund a later increase.
+      if (bill.transferredAt && (amount === undefined || (bill.transferredAmount ?? 0) >= amount)) return c.json(bill)
+      if (!bank.autoDebit) return c.json({ error: '只有自動扣款帳單可以標記已轉帳' }, 409)
+      if (bill.amount <= 0 || (amount !== undefined && amount !== bill.amount)) {
+        return c.json({ error: '應繳金額已變更，請重新核對轉帳金額' }, 409)
+      }
+    }
+    const updated = await tx.bill.update({
+      where: { id },
+      data: {
+        transferredAt: transferred ? bill.transferredAt ?? new Date() : null,
+        transferredAmount: transferred ? bill.amount : null,
+        transferredAccountId: transferred ? bank.bankAccountId : null,
+      },
+    })
+    return c.json(updated)
   })
-  if (updated) return c.json(updated)
-
-  const own = await ownBill(c, id)
-  if (!own) return c.json({ error: 'Bill not found' }, 404)
-  if (unpaidStatuses.some(status => status === own.status) && Boolean(own.transferredAt) === transferred) {
-    return c.json(own)
-  }
-  return c.json({ error: '只有未結清的自動扣款帳單可以標記已轉帳' }, 409)
 })
 
 // Mark as paid
@@ -224,13 +307,9 @@ app.patch('/:id/pay', zValidator('json', z.object({
 
 // Revert a paid bill back to pending (undo for "標記已繳"; member-allowed)
 app.post('/:id/unpay', async (c) => {
-  const own = await ownBill(c, c.req.param('id'))
-  if (!own) return c.json({ error: 'Bill not found' }, 404)
-  const bill = await prisma.bill.update({
-    where: { id: own.id },
-    data: { status: BillStatus.PENDING, paidAt: null, paidByAutoDebit: false },
-  })
-  return c.json(bill)
+  return updateOwnedBill(c, c.req.param('id'), () => ({
+    status: BillStatus.PENDING, paidAt: null, paidByAutoDebit: false,
+  }))
 })
 
 // Re-parse a bill with LLM (user clicks "AI 重新解析")

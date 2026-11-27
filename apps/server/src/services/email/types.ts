@@ -36,6 +36,8 @@ export interface VerifyResult {
 }
 
 export interface EmailSession {
+  /** Identifies the account, selected folder and its UIDVALIDITY across sessions. */
+  readonly mailboxKey?: string
   search(criteria: SearchCriteria): Promise<MessageRef[]>
   /** Gmail-only debug escape hatch (raw `gmailraw`/X-GM-RAW query). Undefined on
    *  non-Gmail providers/hosts — callers must feature-detect before use. */

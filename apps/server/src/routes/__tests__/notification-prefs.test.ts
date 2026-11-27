@@ -44,6 +44,7 @@ describe('notification-prefs: GET', () => {
     expect(body.remindTime).toBe('09:00')
     expect(body.notifyNewBill).toBe(true)
     expect(body.notifyOverdue).toBe(true)
+    expect(body.notifyDebitConfirmation).toBe(false)
     expect(body.lastDelivery).toBeNull()
 
     const bossUser = await prisma.user.findUnique({ where: { username: 'boss' } })
@@ -60,6 +61,7 @@ describe('notification-prefs: PUT', () => {
       remindTime: '21:30',
       notifyNewBill: false,
       notifyOverdue: true,
+      notifyDebitConfirmation: true,
     })
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -70,6 +72,11 @@ describe('notification-prefs: PUT', () => {
     const again = await (await json('GET', '/api/notification-prefs', boss)).json()
     expect(again.remindDays).toEqual([7, 3, 1])
     expect(again.notifyNewBill).toBe(false)
+    expect(again.notifyDebitConfirmation).toBe(true)
+    const { notifyDebitConfirmation: enabled, ...legacy } = body
+    expect(enabled).toBe(true)
+    const oldClient = await (await json('PUT', '/api/notification-prefs', boss, legacy)).json()
+    expect(oldClient.notifyDebitConfirmation).toBe(true)
   })
 
   it('accepts an empty remindDays array (reminders off)', async () => {

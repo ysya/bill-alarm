@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { BillStatus } from '@bill-alarm/shared/types'
+import { BillStatus, fundingRemaining, isAwaitingDebit } from '@bill-alarm/shared/types'
 import { addDaysYMD, todayYMD } from '@bill-alarm/shared/date'
 import { setupTestDb } from '../../services/__tests__/helpers/test-db.js'
 
@@ -85,7 +85,7 @@ describe('bills: manual auto-debit tracking', () => {
     const transfer = await request(`/${bill.id}/transfer`, 'PATCH', { transferred: true })
     expect(transfer.status).toBe(200)
     const recorded = await transfer.json()
-    expect(recorded.status).toBe(BillStatus.OVERDUE)
+    expect(recorded).toMatchObject({ status: BillStatus.OVERDUE, transferredAmount: 400 })
     expect(recorded.paidAt).toBeNull()
     expect(recorded.transferredAt).toEqual(expect.any(String))
     expect(await (await request(`/${bill.id}/transfer`, 'PATCH', { transferred: true })).json())
@@ -113,7 +113,48 @@ describe('bills: manual auto-debit tracking', () => {
       status: BillStatus.PENDING, paidAt: null, paidByAutoDebit: false, transferredAt: recorded.transferredAt,
     })
     expect(await (await request(`/${bill.id}/transfer`, 'PATCH', { transferred: false })).json())
-      .toMatchObject({ transferredAt: null })
+      .toMatchObject({ transferredAt: null, transferredAmount: null })
+  })
+
+  it('preserves the recorded amount through edits and records each top-up only once', async () => {
+    const bill = await createBill(true)
+    const billPath = `/${bill.id}`
+    const transfer = (amount?: number) => request(`${billPath}/transfer`, 'PATCH', { transferred: true, amount })
+    const before = await (await request('/summary')).json()
+    await request(billPath, 'PATCH', { amount: 4200 })
+    const recorded = await (await transfer(4200)).json()
+    expect(recorded.transferredAmount).toBe(4200)
+    expect(isAwaitingDebit(recorded)).toBe(true)
+
+    const increased = await (await request(billPath, 'PATCH', { amount: 5200 })).json()
+    expect(increased.transferredAmount).toBe(4200)
+    expect(fundingRemaining(increased)).toBe(1000)
+    expect(isAwaitingDebit(increased)).toBe(false)
+    expect(await (await request('/summary')).json()).toMatchObject({
+      totalTransferred: before.totalTransferred + 4200,
+      totalToFund: before.totalToFund - bill.amount + 1000,
+    })
+
+    // Both an old boolean-only request and a retry of the initial transfer are harmless.
+    for (const retry of [await transfer(), await transfer(4200)]) {
+      expect(await retry.json()).toMatchObject({ transferredAt: recorded.transferredAt, transferredAmount: 4200 })
+    }
+    expect((await transfer(5000)).status).toBe(409)
+    const topUps = await Promise.all([transfer(5200), transfer(5200)])
+    for (const res of topUps) {
+      expect(res.status).toBe(200)
+      const toppedUp = await res.json()
+      expect(toppedUp).toMatchObject({ transferredAt: recorded.transferredAt, transferredAmount: 5200 })
+      expect(isAwaitingDebit(toppedUp)).toBe(true)
+    }
+
+    const reduced = await (await request(billPath, 'PATCH', { amount: 3000 })).json()
+    expect(reduced.transferredAmount).toBe(5200)
+    expect(fundingRemaining(reduced)).toBe(0)
+    expect(isAwaitingDebit(reduced)).toBe(true)
+    expect(await (await transfer(3000)).json()).toMatchObject({ transferredAmount: 5200 })
+    expect(await (await request(billPath, 'PATCH', { status: BillStatus.NO_PAYMENT })).json())
+      .toMatchObject({ transferredAt: null, transferredAmount: null })
   })
 
   it('allows direct debit confirmation and preserves it when editing the payment date', async () => {
@@ -125,6 +166,58 @@ describe('bills: manual auto-debit tracking', () => {
     const paidAt = '2026-07-01T00:00:00.000Z'
     const edit = await request(`/${bill.id}/pay`, 'PATCH', { paidAt })
     expect(await edit.json()).toMatchObject({ paidAt, paidByAutoDebit: true })
+  })
+
+  it('requires fresh funding after a card changes debit accounts, including when a paid bill is reopened', async () => {
+    const bill = await createBill(true)
+    const paid = await prisma.bill.create({
+      data: { bankId: bill.bankId, billingPeriod: '2001-01', amount: 600, dueDate: bill.dueDate },
+    })
+    const user = await prisma.user.findUniqueOrThrow({ where: { username: 'boss' } })
+    const [a, b] = await Promise.all(['A', 'B'].map(name => prisma.bankAccount.create({
+      data: { name, bankName: 'Savings', userId: user.id },
+    })))
+    const headers = { Cookie: adminCookie, 'Content-Type': 'application/json' }
+    const bind = (bankAccountId: string | null) => app.request(`/api/banks/${bill.bankId}`, {
+      method: 'PATCH', headers, body: JSON.stringify({ bankAccountId }),
+    })
+    const transfer = (id: string, bankAccountId: string | null) =>
+      request(`/${id}/transfer`, 'PATCH', { transferred: true, bankAccountId })
+
+    expect((await transfer(bill.id, null)).status).toBe(200)
+    expect((await bind(a.id)).status).toBe(200)
+    expect((await bind(a.id)).status).toBe(200)
+    expect(await (await request(`/${bill.id}`)).json()).toMatchObject({ transferredAmount: 400, transferredAccountId: a.id })
+    expect((await transfer(paid.id, a.id)).status).toBe(200)
+    expect((await request(`/${paid.id}/pay`, 'PATCH', {})).status).toBe(200)
+    expect((await app.request(`/api/bank-accounts/${a.id}`, { method: 'DELETE', headers })).status).toBe(400)
+
+    // Serialization gives either order the same result: no transfer into A can fund B.
+    const [switchAccount, racingTransfer] = await Promise.all([bind(b.id), transfer(bill.id, a.id)])
+    expect(switchAccount.status).toBe(200)
+    expect([200, 409]).toContain(racingTransfer.status)
+    expect((await transfer(bill.id, a.id)).status).toBe(409)
+    expect(await (await request(`/${bill.id}`)).json()).toMatchObject({
+      transferredAt: null, transferredAmount: null, transferredAccountId: null, bank: { bankAccountId: b.id },
+    })
+    expect((await (await request('/summary')).json()).fundingAccounts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: b.id, remaining: 400 }),
+    ]))
+    expect(await (await request(`/${paid.id}`)).json()).toMatchObject({
+      status: BillStatus.PAID, transferredAmount: 600, transferredAccountId: a.id,
+    })
+    expect((await app.request(`/api/bank-accounts/${a.id}`, { method: 'DELETE', headers })).status).toBe(200)
+    expect(await (await request(`/${paid.id}/unpay`, 'POST')).json()).toMatchObject({
+      status: BillStatus.PENDING, transferredAt: null, transferredAmount: null, transferredAccountId: null,
+    })
+    expect((await transfer(bill.id, b.id)).status).toBe(200)
+    expect((await transfer(paid.id, b.id)).status).toBe(200)
+    expect((await request(`/${paid.id}/pay`, 'PATCH', {})).status).toBe(200)
+    expect((await bind(null)).status).toBe(200)
+    expect(await (await request(`/${bill.id}`)).json()).toMatchObject({ transferredAt: null, transferredAmount: null })
+    expect(await (await request(`/${paid.id}`, 'PATCH', { status: BillStatus.OVERDUE })).json()).toMatchObject({
+      status: BillStatus.OVERDUE, transferredAt: null, transferredAmount: null,
+    })
   })
 
   it('rejects transfer marking for a manual-payment bank and for a bill with no payment due', async () => {

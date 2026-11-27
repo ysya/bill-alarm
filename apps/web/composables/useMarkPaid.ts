@@ -1,4 +1,5 @@
 import { toast } from 'vue-sonner'
+import { isAwaitingDebit } from '@bill-alarm/shared/types'
 
 /** One-tap mark-paid with an Undo toast — the single implementation every
  *  entry point (dashboard, list, detail) shares. paidAt is always "today";
@@ -24,7 +25,7 @@ export function useMarkPaid() {
           onClick: async () => {
             try {
               const restored = await unpay(bill.id)
-              toast.success(restored.transferredAt ? `已復原 ${bankName} 為待扣繳` : `已復原 ${bankName} 為待繳`)
+              toast.success(isAwaitingDebit(restored) ? `已復原 ${bankName} 為待扣繳` : `已復原 ${bankName} 為待繳`)
             }
             catch (e) {
               toast.error('復原失敗', { description: String(e) })

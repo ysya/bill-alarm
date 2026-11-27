@@ -1,5 +1,15 @@
 import type { ScanEvent, ScanItemStatus, ScanTrigger } from '@bill-alarm/shared/scan'
 
+const TRIGGER_LABELS: Record<ScanTrigger, string> = {
+  manual: '手動掃描',
+  cron: '自動掃描',
+  retry: '單封重試',
+}
+
+export function scanTriggerLabel(trigger: ScanTrigger | null): string {
+  return trigger ? TRIGGER_LABELS[trigger] : '掃描'
+}
+
 export interface ScanProgressState {
   active: boolean
   trigger: ScanTrigger | null

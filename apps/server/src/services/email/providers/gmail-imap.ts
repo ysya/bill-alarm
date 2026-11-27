@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { ImapFlow, type ImapFlowOptions, type MailboxLockObject, type SearchObject } from 'imapflow'
 import { simpleParser } from 'mailparser'
 import { logger } from '@/index.js'
@@ -113,10 +114,17 @@ export class GmailImapProvider implements EmailProvider {
         mailboxPath = mailbox.path
       }
       lock = await client.getMailboxLock(mailboxPath, { readOnly: true })
+      const uidValidity = client.mailbox && client.mailbox.uidValidity
+      const mailboxKey = uidValidity
+        ? createHash('sha256').update(JSON.stringify([
+            this.config.host.toLowerCase(), this.config.port, this.config.user, mailboxPath, uidValidity.toString(),
+          ])).digest('hex')
+        : undefined
       const toRefs = (uids: number[] | false): MessageRef[] =>
         uids === false ? [] : uids.map((u) => ({ id: `${allMail ? ALL_MAIL_ID_PREFIX : ''}${u}` }))
 
       const session: EmailSession = {
+        mailboxKey,
         search: async (criteria: SearchCriteria) => {
           const query = gmail ? await this.buildGmailSearch(criteria) : this.buildImapSearch(criteria)
           const uids = await client.search(query, { uid: true })
@@ -131,9 +139,11 @@ export class GmailImapProvider implements EmailProvider {
           },
         } : {}),
         fetch: async (ref: MessageRef) => {
+          if (ref.id.startsWith(ALL_MAIL_ID_PREFIX) !== allMail) return null
           const uid = allMail ? ref.id.slice(ALL_MAIL_ID_PREFIX.length) : ref.id
+          if (!/^[1-9]\d{0,9}$/.test(uid) || Number(uid) > 0xffffffff) return null
           const msg = await client.fetchOne(uid, { source: true }, { uid: true })
-          if (!msg || !msg.source) return null
+          if (!msg || !msg.source || msg.uid !== Number(uid)) return null
 
           const parsed = await simpleParser(msg.source)
           const attachments: Attachment[] = (parsed.attachments ?? []).map((a) => ({

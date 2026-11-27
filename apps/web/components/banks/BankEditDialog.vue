@@ -10,6 +10,7 @@ const props = defineProps<{
   presets: BankPreset[]
   bankAccounts: BankAccountDTO[]
   showPassword: boolean
+  focusPassword?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -21,6 +22,7 @@ const emit = defineEmits<{
 const bankApi = useBankApi()
 
 const editForm = ref({ emailSenderPattern: '', emailSubjectPattern: '', pdfPassword: '', autoDebit: false, bankAccountId: '' as string | null })
+const accountChanged = computed(() => props.editingBank && props.editingBank.bankAccountId !== (editForm.value.bankAccountId || null))
 const editingPreset = computed<BankPreset | null>(() => {
   if (!props.editingBank?.code) return null
   return props.presets.find(p => p.code === props.editingBank!.code) ?? null
@@ -39,6 +41,12 @@ watch(() => editForm.value.pdfPassword, (val) => {
 })
 
 const submitting = ref(false)
+
+function onOpenAutoFocus(event: Event) {
+  if (!props.focusPassword) return
+  event.preventDefault()
+  document.getElementById('ePwd')?.focus()
+}
 
 // Re-populate from the target bank every time the dialog opens — mirrors
 // the original page's openEdit(), which always reset the form/flags
@@ -65,8 +73,8 @@ async function handleEdit() {
       emailSenderPattern: editForm.value.emailSenderPattern,
       emailSubjectPattern: editForm.value.emailSubjectPattern,
       autoDebit: editForm.value.autoDebit,
-      bankAccountId: editForm.value.bankAccountId || null,
     }
+    if (accountChanged.value) data.bankAccountId = editForm.value.bankAccountId || null
     // Leave empty -> omit entirely (server keeps the existing password).
     // Typed a new value -> overwrite it (takes priority over a staged clear).
     // "清除密碼" with nothing typed -> explicit null (server clears it).
@@ -96,7 +104,10 @@ async function handleEdit() {
     :open="open"
     @update:open="emit('update:open', $event)"
   >
-    <DialogContent class="sm:max-w-lg">
+    <DialogContent
+      class="sm:max-w-lg"
+      @open-auto-focus="onOpenAutoFocus"
+    >
       <DialogHeader>
         <DialogTitle>編輯 {{ editingBank?.name }}</DialogTitle>
         <DialogDescription>調整 email 篩選規則和 PDF 密碼。只要 email 的寄件者與主旨都包含這兩個字串就會被掃描解析。</DialogDescription>
@@ -207,7 +218,7 @@ async function handleEdit() {
           <div class="space-y-0.5">
             <Label>自動扣款</Label>
             <p class="text-xs text-muted-foreground">
-              啟用後將不再發送繳費提醒
+              可先標記已轉帳，核對銀行紀錄後再確認已扣繳。
             </p>
           </div>
           <Switch v-model="editForm.autoDebit" />
@@ -218,7 +229,7 @@ async function handleEdit() {
         >
           <Label for="eBankAccount">扣款帳戶</Label>
           <Select v-model="editForm.bankAccountId">
-            <SelectTrigger>
+            <SelectTrigger id="eBankAccount">
               <SelectValue placeholder="選擇扣款帳戶" />
             </SelectTrigger>
             <SelectContent>
@@ -235,6 +246,15 @@ async function handleEdit() {
             </SelectContent>
           </Select>
         </div>
+        <p
+          v-if="accountChanged"
+          role="status"
+          class="text-sm text-muted-foreground"
+        >
+          {{ editingBank?.bankAccountId
+            ? '儲存後會清除此卡未結清帳單的轉帳標記，請重新核對備款。'
+            : '儲存後，此卡原先未指定帳戶的轉帳標記會歸入這個帳戶。' }}
+        </p>
         <DialogFooter class="gap-2">
           <DialogClose as-child>
             <Button

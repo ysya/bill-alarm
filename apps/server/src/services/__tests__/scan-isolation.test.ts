@@ -60,6 +60,8 @@ vi.mock('@/services/pdf-parser.js', () => ({
 }))
 
 const { default: prisma } = await import('@/prisma.js')
+const { default: app } = await import('@/index.js')
+const { createSession } = await import('../auth.js')
 const { runScanWithLog } = await import('../email-parser.js')
 const { scanEvents, eventVisibleTo } = await import('../scan-events.js')
 
@@ -110,12 +112,12 @@ function fakeEmail(id: string, from: string, subject: string, pdfText: string): 
 }
 
 /** Build a fake EmailProvider whose session.search/fetch are directly-inspectable vi.fn mocks. */
-function buildFakeProvider(searchResult: MessageRef[], fetchImpl: () => Promise<EmailMessage | null>) {
+function buildFakeProvider(searchResult: MessageRef[], fetchImpl: () => Promise<EmailMessage | null>, mailboxKey?: string) {
   const searchFn = vi.fn<(criteria: SearchCriteria) => Promise<MessageRef[]>>()
   searchFn.mockResolvedValue(searchResult)
   const fetchFn = vi.fn<(ref: MessageRef) => Promise<EmailMessage | null>>()
   fetchFn.mockImplementation(fetchImpl)
-  const session: EmailSession = { search: searchFn, fetch: fetchFn }
+  const session: EmailSession = { search: searchFn, fetch: fetchFn, mailboxKey }
   const provider: EmailProvider = {
     name: 'gmail-imap',
     verify: vi.fn(async () => ({ ok: true, email: 'fake@example.com' })),
@@ -240,7 +242,7 @@ describe('scan isolation (MT carry-forward): concurrent real scans for two diffe
       // deferred we control — so userC's scan is genuinely "in flight" (past
       // its 'start' event, before 'complete') for as long as we need.
       const fetchGate = createDeferred<EmailMessage | null>()
-      const { provider: providerC } = buildFakeProvider([{ id: 'emailC-1' }], () => fetchGate.promise)
+      const { provider: providerC } = buildFakeProvider([{ id: 'gmail-all:42' }], () => fetchGate.promise, 'folder-c')
       // userD has nothing to process — its scan runs start -> complete immediately.
       const { provider: providerD } = buildFakeProvider([], async () => null)
       emailProviders.set(userC.id, providerC)
@@ -267,7 +269,13 @@ describe('scan isolation (MT carry-forward): concurrent real scans for two diffe
       // Let userC finish.
       fetchGate.resolve(null)
       const scanC = await scanCPromise
-      expect(scanC.result.errors).toEqual([])
+      expect(scanC.result.errors).toMatchObject([{ stage: 'email_fetch', msgId: 'gmail-all:42', mailboxKey: 'folder-c' }])
+      const headers = { Cookie: `ba_session=${(await createSession(userC.id)).token}` }
+      const userLogs = await (await app.request('/api/scan-logs', { headers })).json()
+      expect(userLogs.logs[0]).toMatchObject({
+        id: scanC.scanLogId, errorCount: 1, errors: [{ stage: 'email_fetch', canRetry: true, msgId: 'gmail-all:42' }],
+      })
+      expect(eventsVisibleToC).toContainEqual(expect.objectContaining({ type: 'progress', status: 'error' }))
 
       expect(scanEvents.getSnapshot(userC.id)).toBeNull()
       expect(scanEvents.getSnapshot(userD.id)).toBeNull()
@@ -282,5 +290,104 @@ describe('scan isolation (MT carry-forward): concurrent real scans for two diffe
     } finally {
       scanEvents.off('scan', listener)
     }
+  })
+})
+
+describe('single-message recovery', () => {
+  it('retries the recorded owner and UID only, after the PDF password is fixed, while preserving the scan lock and deduplication', async () => {
+    const owner = await prisma.user.create({ data: { username: 'retry-owner', passwordHash: 'x:y' } })
+    const other = await prisma.user.create({ data: { username: 'retry-other', passwordHash: 'x:y' } })
+    const ownerCookie = { Cookie: `ba_session=${(await createSession(owner.id)).token}` }
+    const otherCookie = { Cookie: `ba_session=${(await createSession(other.id)).token}` }
+    const bank = await prisma.bank.create({
+      data: { name: 'Retry bank', emailSenderPattern: 'retry@example.com', emailSubjectPattern: 'Statement', userId: owner.id, parserConfig: TEMPLATE_CONFIG, autoDebit: true },
+    })
+    const email = fakeEmail('gmail-all:77', bank.emailSenderPattern, 'Statement', billText(98, addDaysYMD(todayYMD(), 12)))
+    const mailbox = buildFakeProvider([{ id: email.id }], async () => email, 'folder-one')
+    emailProviders.set(owner.id, mailbox.provider)
+    const { extractPdfText } = await import('../pdf-parser.js')
+    vi.mocked(extractPdfText).mockRejectedValueOnce(new Error('PDF 密碼錯誤'))
+    const failed = await runScanWithLog('manual', owner)
+    const logs = await (await app.request('/api/scan-logs', { headers: ownerCookie })).json()
+    const error = logs.logs[0].errors[0]
+    expect(error).toMatchObject({ stage: 'pdf_password', bankId: bank.id, msgId: email.id, canRetry: true })
+    expect(error).not.toHaveProperty('mailboxKey')
+    const retryUrl = `/api/scan-logs/${failed.scanLogId}/errors/0/retry`
+    expect((await app.request(retryUrl, { method: 'POST', headers: otherCookie })).status).toBe(404)
+
+    const differentMailbox = buildFakeProvider([], async () => email, 'folder-two')
+    emailProviders.set(owner.id, differentMailbox.provider)
+    const mismatch = await app.request(retryUrl, { method: 'POST', headers: ownerCookie })
+    expect((await mismatch.json()).errors[0]).toMatchObject({ stage: 'email_fetch', canRetry: false })
+    expect(differentMailbox.fetchFn).not.toHaveBeenCalled()
+    expect(differentMailbox.searchFn).not.toHaveBeenCalled()
+
+    emailProviders.set(owner.id, mailbox.provider)
+    const update = await app.request(`/api/banks/${bank.id}`, {
+      method: 'PATCH', headers: { ...ownerCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdfPassword: 'corrected-password' }),
+    })
+    expect(update.status).toBe(200)
+    const gate = createDeferred<EmailMessage | null>()
+    mailbox.fetchFn.mockClear().mockImplementationOnce(() => gate.promise)
+    const start = waitForScanEvent(e => e.userId === owner.id && e.type === 'start' && e.trigger === 'retry')
+    const retry = app.request(retryUrl, { method: 'POST', headers: ownerCookie })
+    await start
+    try {
+      expect((await app.request('/api/email/scan', { method: 'POST', headers: ownerCookie })).status).toBe(409)
+    } finally {
+      gate.resolve(email)
+    }
+    const recovered = await (await retry).json()
+    expect(recovered).toMatchObject({ scanned: 1, newBills: 1, errors: [] })
+    expect(mailbox.fetchFn.mock.calls).toEqual([[{ id: email.id }]])
+    expect(extractPdfText).toHaveBeenLastCalledWith(email.attachments[0].data, 'corrected-password')
+    expect(await prisma.scanLog.findUnique({ where: { id: recovered.scanLogId } })).toMatchObject({ userId: owner.id, trigger: 'retry', newBillsCount: 1 })
+
+    const repeated = await app.request(retryUrl, { method: 'POST', headers: ownerCookie })
+    expect(await repeated.json()).toMatchObject({ newBills: 0, errors: [], skipReason: '此信件已建立過帳單' })
+    expect(mailbox.fetchFn).toHaveBeenCalledTimes(1)
+    expect(mailbox.searchFn).toHaveBeenCalledTimes(1)
+    expect(await prisma.bill.count({ where: { bankId: bank.id } })).toBe(1)
+  })
+
+  it('keeps historical, non-message and malformed UID errors readable without offering an unsafe retry', async () => {
+    const owner = await prisma.user.create({ data: { username: 'legacy-retry-owner', passwordHash: 'x:y' } })
+    const headers = { Cookie: `ba_session=${(await createSession(owner.id)).token}` }
+    const errors = [
+      { stage: 'pdf_password', bank: 'Legacy bank', msgId: '7', reason: 'wrong password' },
+      { stage: 'notification', msgId: '7', mailboxKey: 'folder-one', reason: 'notification failed' },
+      { stage: 'email_fetch', msgId: '1:*', mailboxKey: 'folder-one', reason: 'invalid UID set' },
+    ]
+    const log = await prisma.scanLog.create({
+      data: { trigger: 'cron', userId: owner.id, errors: JSON.stringify(errors), errorCount: errors.length },
+    })
+    const body = await (await app.request('/api/scan-logs', { headers })).json()
+    expect(body.logs[0].errors.map((error: { canRetry: boolean }) => error.canRetry)).toEqual([false, false, false])
+    for (const index of errors.keys()) {
+      const response = await app.request(`/api/scan-logs/${log.id}/errors/${index}/retry`, { method: 'POST', headers })
+      expect(response.status).toBe(422)
+    }
+    expect(await prisma.scanLog.count({ where: { userId: owner.id } })).toBe(1)
+  })
+
+  it('links a legacy password error only to an unambiguous bank owned by the user that already existed at scan time', async () => {
+    const owner = await prisma.user.create({ data: { username: 'legacy-bank-owner', passwordHash: 'x:y' } })
+    const other = await prisma.user.create({ data: { username: 'other-bank-owner', passwordHash: 'x:y' } })
+    const headers = { Cookie: `ba_session=${(await createSession(owner.id)).token}` }
+    const startedAt = new Date('2026-02-10T00:00:00Z')
+    const oldBank = { emailSenderPattern: 'bank.example', emailSubjectPattern: 'bill', createdAt: new Date('2026-02-01'), userId: owner.id }
+    const unique = await prisma.bank.create({ data: { ...oldBank, name: 'Unique' } })
+    await prisma.bank.createMany({ data: [
+      { ...oldBank, name: 'Unique', userId: other.id },
+      { ...oldBank, name: 'Same' }, { ...oldBank, name: 'Same' },
+      { ...oldBank, name: 'Replaced', createdAt: new Date('2026-03-01') },
+      { ...oldBank, name: 'Foreign', userId: other.id },
+    ] })
+    const errors = ['Unique', 'Same', 'Replaced', 'Foreign'].map(bank => ({ stage: 'pdf_password', bank, reason: 'wrong password' }))
+    await prisma.scanLog.create({ data: { userId: owner.id, trigger: 'manual', startedAt, errors: JSON.stringify(errors) } })
+    const body = await (await app.request('/api/scan-logs', { headers })).json()
+    expect(body.logs[0].errors.map((error: { bankId?: string }) => error.bankId)).toEqual([unique.id, undefined, undefined, undefined])
+    expect(body.logs[0].errors[0].canRetry).toBe(false)
   })
 })

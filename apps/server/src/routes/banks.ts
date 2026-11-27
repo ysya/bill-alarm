@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import prisma from '@/prisma.js'
 import { BANK_PRESETS } from '@bill-alarm/shared/constants'
+import { BillStatus } from '@bill-alarm/shared/types'
 import { templateParserConfigSchema } from '@bill-alarm/shared/template-parser'
 import { encryptSecret } from '@/services/secrets.js'
 import { getAuthUser } from './auth.js'
@@ -100,11 +101,9 @@ app.patch('/:id', zValidator('json', z.object({
   parserConfig: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
   autoDebit: z.boolean().optional(),
-  bankAccountId: z.string().nullable().optional(),
+  bankAccountId: z.string().min(1).nullable().optional(),
 })), async (c) => {
   const userId = getAuthUser(c).id
-  const existing = await prisma.bank.findFirst({ where: { id: c.req.param('id'), userId } })
-  if (!existing) return c.json({ error: 'Not found' }, 404)
   const data = c.req.valid('json')
   if (typeof data.parserConfig === 'string') {
     let parsed: unknown
@@ -116,15 +115,33 @@ app.patch('/:id', zValidator('json', z.object({
     const check = templateParserConfigSchema.safeParse(parsed)
     if (!check.success) return c.json({ error: `parserConfig 格式錯誤：${check.error.issues[0]?.message}` }, 400)
   }
-  if (data.bankAccountId) {
-    const account = await prisma.bankAccount.findFirst({ where: { id: data.bankAccountId, userId } })
-    if (!account) return c.json({ error: '找不到帳戶' }, 404)
-  }
   // Absent (undefined) leaves the stored value untouched, null clears it —
   // only a genuine non-empty string (already enforced by .min(1) above) gets encrypted.
   if (data.pdfPassword) data.pdfPassword = encryptSecret(data.pdfPassword)
-  const bank = await prisma.bank.update({ where: { id: existing.id }, data })
-  return c.json(toBankDTO(bank))
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.bank.findFirst({ where: { id: c.req.param('id'), userId } })
+    if (!existing) return c.json({ error: 'Not found' }, 404)
+    if (data.bankAccountId !== undefined && data.bankAccountId !== existing.bankAccountId) {
+      if (data.bankAccountId) {
+        const account = await tx.bankAccount.findFirst({ where: { id: data.bankAccountId, userId } })
+        if (!account) return c.json({ error: '找不到帳戶' }, 404)
+      }
+      if (existing.bankAccountId) {
+        await tx.bill.updateMany({
+          where: { bankId: existing.id, transferredAt: { not: null }, status: { in: [BillStatus.PENDING, BillStatus.OVERDUE] } },
+          data: { transferredAt: null, transferredAmount: null, transferredAccountId: null },
+        })
+      } else {
+        // Giving previously unassigned transfers an account keeps the user's recorded funding.
+        await tx.bill.updateMany({
+          where: { bankId: existing.id, transferredAt: { not: null }, transferredAccountId: null },
+          data: { transferredAccountId: data.bankAccountId },
+        })
+      }
+    }
+    const bank = await tx.bank.update({ where: { id: existing.id }, data })
+    return c.json(toBankDTO(bank))
+  })
 })
 
 app.post('/', zValidator('json', z.object({

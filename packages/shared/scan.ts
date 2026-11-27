@@ -1,4 +1,4 @@
-export type ScanTrigger = 'manual' | 'cron'
+export type ScanTrigger = 'manual' | 'cron' | 'retry'
 export type ScanItemStatus = 'matched' | 'success' | 'error' | 'skipped'
 
 export type ScanErrorStage =
@@ -15,7 +15,9 @@ export interface ScanError {
   stage: ScanErrorStage
   reason: string
   bank?: string
+  bankId?: string
   msgId?: string
+  canRetry?: boolean
 }
 
 export type ScanEvent =

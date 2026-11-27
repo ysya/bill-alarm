@@ -17,7 +17,7 @@
             :class="scanInProgress ? 'animate-spin' : ''"
           />
           <template v-if="scanProgress.active">
-            掃描中 {{ scanProgress.idx }}/{{ scanProgress.total }}
+            {{ scanTriggerLabel(scanProgress.trigger) }}中 {{ scanProgress.idx }}/{{ scanProgress.total }}
             <span
               v-if="scanProgress.bank"
               class="ml-1 text-muted-foreground"
@@ -42,7 +42,7 @@
     >
       <div class="flex items-center justify-between text-xs">
         <span class="font-medium">
-          {{ scanProgress.trigger === 'cron' ? '自動掃描中' : '手動掃描中' }}
+          {{ scanTriggerLabel(scanProgress.trigger) }}中
           · {{ scanProgress.idx }} / {{ scanProgress.total }}
         </span>
         <span class="text-muted-foreground">{{ progressPercent }}%</span>
@@ -88,6 +88,42 @@
         </TabsTrigger>
       </TabsList>
 
+      <div
+        v-if="activeTab === 'unpaid'"
+        class="max-w-xs"
+      >
+        <Select
+          :model-value="activeView"
+          @update:model-value="setView"
+        >
+          <SelectTrigger aria-label="未繳帳單篩選">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem
+              v-for="item in unpaidViews"
+              :key="item.value"
+              :value="item.value"
+            >
+              {{ item.label }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div
+        v-if="activeTab === 'paid' && activePeriod"
+        class="flex items-center gap-3 text-sm"
+      >
+        <span>{{ formatPeriodLabel(activePeriod) }}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          @click="router.replace({ query: { tab: 'paid' } })"
+        >
+          顯示所有帳期
+        </Button>
+      </div>
+
       <!-- Shared content for all tabs -->
       <TabsContent
         :value="activeTab"
@@ -113,6 +149,20 @@
           </Card>
         </div>
 
+        <Card
+          v-else-if="loadError"
+          class="p-4"
+        >
+          <p>無法載入帳單。</p>
+          <Button
+            variant="outline"
+            size="sm"
+            @click="fetchBills"
+          >
+            重試
+          </Button>
+        </Card>
+
         <!-- Empty -->
         <Card
           v-else-if="bills.length === 0"
@@ -133,7 +183,7 @@
                 >設定</NuxtLink>完成信箱授權，帳單會自動掃進來。
               </p>
             </template>
-            <template v-else-if="activeTab === 'unpaid'">
+            <template v-else-if="activeTab === 'unpaid' && activeView === 'all'">
               <h4 class="text-lg font-semibold mb-1">
                 沒有未繳帳單{{ emailConfigured ? ' 🎉' : '' }}
               </h4>
@@ -179,7 +229,7 @@
               </h3>
               <Separator class="flex-1" />
               <span class="text-xs text-muted-foreground whitespace-nowrap">
-                共 {{ group.bills.length }} 筆 · {{ formatAmount(group.total) }}
+                共 {{ group.bills.length }} 筆 · {{ activeView === 'funding' ? '尚需 ' : '' }}{{ formatAmount(group.total) }}
               </span>
             </div>
             <Card
@@ -191,7 +241,11 @@
               <div class="p-4 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div class="flex-1 min-w-0 space-y-1">
                   <div class="flex items-center gap-2 flex-wrap">
-                    <span class="font-semibold truncate">{{ bill.bank?.name }}</span>
+                    <NuxtLink
+                      :to="`/bills/${bill.id}`"
+                      class="truncate font-semibold hover:underline"
+                      @click.stop
+                    >{{ bill.bank?.name }}</NuxtLink>
                     <BillStatusBadge :bill="bill" />
                     <Badge
                       v-if="bill.bank?.autoDebit"
@@ -211,6 +265,7 @@
                       plain
                     />
                   </div>
+                  <BillFundingNote :bill="bill" />
                 </div>
                 <div class="flex flex-wrap items-center gap-3 sm:gap-4">
                   <span class="text-lg font-bold whitespace-nowrap">{{ formatAmount(bill.amount) }}</span>
@@ -268,7 +323,7 @@
 </template>
 
 <script setup lang="ts">
-import { toast } from 'vue-sonner'
+import { scanTriggerLabel } from '~/composables/useScanEvents'
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -276,7 +331,7 @@ import {
   Inbox,
   RefreshCw,
 } from 'lucide-vue-next'
-import { BillStatus, isAwaitingDebit } from '@bill-alarm/shared/types'
+import { BillStatus, fundingRemaining, isAwaitingDebit } from '@bill-alarm/shared/types'
 import type { BillDTO } from '@bill-alarm/shared/types'
 import { formatAmount } from '@bill-alarm/shared/format'
 import { formatYMD } from '@bill-alarm/shared/date'
@@ -313,14 +368,35 @@ const progressPercent = computed(() =>
 
 const bills = ref<BillDTO[]>([])
 const total = ref(0)
-const currentPage = ref(1)
 const loading = ref(true)
 
-// ?tab= deep link（非法值落回 all）
-const initialTab = VALID_TABS.includes(route.query.tab as typeof VALID_TABS[number])
-  ? route.query.tab as string
-  : 'all'
-const activeTab = ref<string>(initialTab)
+const unpaidViews = [
+  { value: 'all', label: '全部未繳' },
+  { value: 'funding', label: '尚需繳款或備款' },
+  { value: 'awaiting', label: '待確認扣繳' },
+  { value: 'overdue', label: '逾期需處理' },
+  { value: 'upcoming', label: '即將到期' },
+]
+
+const activeTab = computed({
+  get: () => VALID_TABS.find(tab => tab === route.query.tab) ?? 'all',
+  set: (tab: string) => { router.replace({ query: tab === 'all' ? {} : { tab } }) },
+})
+const activeView = computed(() => activeTab.value === 'unpaid'
+  ? unpaidViews.find(item => item.value === route.query.view)?.value ?? 'all'
+  : 'all')
+const activePeriod = computed(() => {
+  const period = route.query.period
+  return activeTab.value === 'paid' && typeof period === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(period) ? period : ''
+})
+const currentPage = computed(() => {
+  const page = Number(route.query.page)
+  return Number.isSafeInteger(page) && page > 0 ? page : 1
+})
+function setView(view: unknown) {
+  if (typeof view === 'string') router.replace({ query: { tab: 'unpaid', view: view === 'all' ? undefined : view } })
+}
+const loadError = ref(false)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
@@ -344,7 +420,7 @@ const groupedBills = computed<BillGroup[]>(() => {
         label: `已逾期（${overdue.length}）`,
         labelClass: 'text-red-500',
         bills: overdue,
-        total: overdue.reduce((s, b) => s + b.amount, 0),
+        total: overdue.reduce((s, b) => s + (activeView.value === 'funding' ? fundingRemaining(b) : b.amount), 0),
       })
     }
     if (upcoming.length > 0) {
@@ -353,7 +429,7 @@ const groupedBills = computed<BillGroup[]>(() => {
         label: `即將到期（${upcoming.length}）`,
         labelClass: 'text-muted-foreground',
         bills: upcoming,
-        total: upcoming.reduce((s, b) => s + b.amount, 0),
+        total: upcoming.reduce((s, b) => s + (activeView.value === 'funding' ? fundingRemaining(b) : b.amount), 0),
       })
     }
     if (awaitingDebit.length > 0) {
@@ -391,34 +467,36 @@ const groupedBills = computed<BillGroup[]>(() => {
 
 // --- Data ---
 
+let requestId = 0
 async function fetchBills() {
+  const id = ++requestId
   loading.value = true
+  loadError.value = false
   try {
-    const status = activeTab.value === 'all' ? undefined : activeTab.value
-    const result = await list({ status, page: currentPage.value, pageSize: PAGE_SIZE })
+    const result = await list({
+      status: activeTab.value === 'all' ? undefined : activeTab.value,
+      view: activeView.value === 'all' ? undefined : activeView.value,
+      billingPeriod: activePeriod.value || undefined,
+      page: currentPage.value, pageSize: PAGE_SIZE,
+    })
+    if (id !== requestId) return
     bills.value = result.data
     total.value = result.total
+    if (currentPage.value > totalPages.value) goToPage(totalPages.value)
   }
   catch {
-    toast.error('載入帳單失敗', { description: '請稍後再試' })
+    if (id === requestId) loadError.value = true
   }
   finally {
-    loading.value = false
+    if (id === requestId) loading.value = false
   }
 }
 
 function goToPage(page: number) {
-  currentPage.value = page
+  router.replace({ query: { ...route.query, page: page === 1 ? undefined : String(page) } })
 }
 
-// 切換 tab：回第一頁、寫回 URL（replace，不進 history）
-watch(activeTab, (tab) => {
-  currentPage.value = 1
-  router.replace({ query: { ...route.query, tab: tab === 'all' ? undefined : tab } })
-  fetchBills()
-})
-
-watch(currentPage, () => fetchBills())
+watch([activeTab, activeView, activePeriod, currentPage], fetchBills)
 
 const emailConfigured = ref(true) // 防閃：抓到狀態前先當 true
 onMounted(async () => {

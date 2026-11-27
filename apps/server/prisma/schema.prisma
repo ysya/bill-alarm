@@ -56,7 +56,9 @@ model Bill {
   parseSource      String?           // 'template' | 'hardcoded' | 'llm' ('generic' exists on legacy rows)
   paidAt           DateTime?
   transferredAt    DateTime?
-  paidByAutoDebit   Boolean           @default(false)
+  transferredAmount Int?
+  transferredAccountId String?       // Historical account, including after it is unlinked or deleted
+  paidByAutoDebit  Boolean           @default(false)
   sourceEmailId    String?
   rawEmailSnippet  String?
   pdfPath          String?
@@ -78,6 +80,7 @@ model NotificationPreference {
   remindTime    String   @default("09:00") // HH:mm
   notifyNewBill Boolean  @default(true)
   notifyOverdue Boolean  @default(true)
+  notifyDebitConfirmation Boolean @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -107,7 +110,7 @@ model Setting {
 
 model ScanLog {
   id            String    @id @default(uuid(7))
-  trigger       String    // 'manual' | 'cron'
+  trigger       String    // 'manual' | 'cron' | 'retry'
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   startedAt     DateTime  @default(now())
@@ -115,7 +118,7 @@ model ScanLog {
   scanned       Int       @default(0)
   newBillsCount Int       @default(0)
   errorCount    Int       @default(0)
-  // JSON-stringified array of { stage, bank?, msgId?, reason }
+  // JSON-stringified array of { stage, reason, bank?, bankId?, msgId?, mailboxKey? }
   errors        String?
   fatalError    String?
 

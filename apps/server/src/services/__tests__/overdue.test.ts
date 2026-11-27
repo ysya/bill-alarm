@@ -8,11 +8,12 @@ process.env.LOG_LEVEL = 'silent'
 
 vi.mock('@/services/telegram.js', () => ({
   sendOverdueWarning: vi.fn(async () => ({ ok: true })),
+  sendDebitConfirmationReminder: vi.fn(async () => ({ ok: true })),
 }))
 
 const { default: prisma } = await import('@/prisma.js')
-const { sendOverdueWarning } = await import('../telegram.js')
-const { processOverdueBills, OVERDUE_WARNING_MESSAGE } = await import('../notification.js')
+const { sendOverdueWarning, sendDebitConfirmationReminder } = await import('../telegram.js')
+const { processOverdueBills, OVERDUE_WARNING_MESSAGE, DEBIT_CONFIRMATION_MESSAGE } = await import('../notification.js')
 
 // Single "now" base for the whole file: all test data (dueDate) and all tick
 // times are derived from this one Date, so the suite can't flake if the wall
@@ -88,7 +89,7 @@ describe('processOverdueBills: mark every tick, notify once after 09:00', () => 
     const { bank } = await seedUser('alice')
     await prisma.bank.update({ where: { id: bank.id }, data: { autoDebit: true } })
     const bill = await seedBill(bank.id, addDaysYMD(todayYMD(base), -1))
-    await prisma.bill.update({ where: { id: bill.id }, data: { transferredAt: base } })
+    await prisma.bill.update({ where: { id: bill.id }, data: { transferredAt: base, transferredAmount: bill.amount } })
 
     await processOverdueBills(at(9, 10))
 
@@ -98,6 +99,48 @@ describe('processOverdueBills: mark every tick, notify once after 09:00', () => 
       transferredAt: base,
     })
     expect(sendOverdueWarning).not.toHaveBeenCalled()
+    expect(sendDebitConfirmationReminder).not.toHaveBeenCalled()
+    expect(await prisma.notificationLog.count()).toBe(0)
+  })
+
+  it('retries an opted-in confirmation after a failed send and records one success without settling', async () => {
+    const { bank, user } = await seedUser('alice')
+    await prisma.notificationPreference.create({ data: { userId: user.id, notifyDebitConfirmation: true, notifyOverdue: false } })
+    const yesterday = addDaysYMD(todayYMD(base), -1)
+    const bill = await seedBill(bank.id, yesterday)
+    await seedBill(bank.id, todayYMD(base))
+    await seedBill(bank.id, yesterday, BillStatus.PAID)
+    await prisma.bill.updateMany({ where: { bankId: bank.id }, data: { transferredAt: base, transferredAmount: bill.amount } })
+
+    await processOverdueBills(at(8, 59))
+    expect(sendDebitConfirmationReminder).not.toHaveBeenCalled()
+    vi.mocked(sendDebitConfirmationReminder).mockResolvedValueOnce({ ok: false, error: 'delivery failed' })
+    await processOverdueBills(at(9, 0))
+    await processOverdueBills(at(9, 15))
+    await processOverdueBills(at(9, 30))
+
+    expect(sendOverdueWarning).not.toHaveBeenCalled()
+    expect(sendDebitConfirmationReminder).toHaveBeenCalledTimes(2)
+    expect(await prisma.notificationLog.findMany({ select: { billId: true, message: true, success: true }, orderBy: { id: 'asc' } })).toEqual([
+      { billId: bill.id, message: DEBIT_CONFIRMATION_MESSAGE, success: false },
+      { billId: bill.id, message: DEBIT_CONFIRMATION_MESSAGE, success: true },
+    ])
+    expect(await prisma.bill.findUniqueOrThrow({ where: { id: bill.id } })).toMatchObject({ status: BillStatus.OVERDUE, paidAt: null })
+  })
+
+  it('warns about a funding shortfall and can remind separately after the amount has been topped up', async () => {
+    const { bank, user } = await seedUser('alice')
+    await prisma.notificationPreference.create({ data: { userId: user.id, notifyDebitConfirmation: true } })
+    const bill = await seedBill(bank.id, addDaysYMD(todayYMD(base), -5))
+    await prisma.bill.update({ where: { id: bill.id }, data: { transferredAt: base, transferredAmount: 60 } })
+    await processOverdueBills(at(10, 0))
+    expect(sendOverdueWarning).toHaveBeenCalledTimes(1)
+    expect(sendDebitConfirmationReminder).not.toHaveBeenCalled()
+
+    await prisma.bill.update({ where: { id: bill.id }, data: { transferredAmount: bill.amount } })
+    await processOverdueBills(at(10, 15))
+    expect(sendDebitConfirmationReminder).toHaveBeenCalledTimes(1)
+    expect(sendOverdueWarning).toHaveBeenCalledTimes(1)
   })
 
   it('a bill marked overdue on an earlier tick is notified on the first tick at/after 09:00', async () => {

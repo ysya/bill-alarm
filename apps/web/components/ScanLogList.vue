@@ -2,12 +2,42 @@
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, RefreshCw } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import type { ScanErrorStage, ScanLogDTO } from '~/composables/useSettingsApi'
+import { scanTriggerLabel } from '~/composables/useScanEvents'
+
+defineProps<{ scanning: boolean }>()
 
 const settingsApi = useSettingsApi()
+const route = useRoute()
 
 const logs = ref<ScanLogDTO[]>([])
 const loading = ref(false)
-const expanded = ref<Set<string>>(new Set())
+const expanded = ref(new Set(typeof route.query.log === 'string' ? [route.query.log] : []))
+const retrying = ref<string | null>(null)
+
+async function retry(logId: string, index: number) {
+  if (retrying.value) return
+  retrying.value = `${logId}/${index}`
+  try {
+    const result = await settingsApi.retryScanError(logId, index)
+    if (result.errors.length) {
+      expanded.value.add(result.scanLogId)
+      toast.warning(result.newBills ? '已建立帳單，仍有項目需要確認' : '單封重試未完成', { description: result.errors[0]?.reason })
+    }
+    else if (result.newBills) {
+      toast.success('已從這封信建立帳單')
+    }
+    else {
+      toast.info(result.skipReason ?? '未建立新帳單')
+    }
+    await load()
+  }
+  catch (e) {
+    toast.error('無法重試', { description: (e as { data?: { error?: string } }).data?.error ?? String(e) })
+  }
+  finally {
+    retrying.value = null
+  }
+}
 
 async function load() {
   loading.value = true
@@ -70,7 +100,7 @@ function stageLabel(stage: ScanErrorStage): string {
           掃描紀錄
         </h3>
         <p class="text-xs text-muted-foreground">
-          最近 20 次自動或手動掃描的結果與失敗原因。
+          最近 20 次掃描與單封重試的結果。
         </p>
       </div>
       <Button
@@ -116,6 +146,7 @@ function stageLabel(stage: ScanErrorStage): string {
       >
         <button
           type="button"
+          :aria-expanded="expanded.has(log.id)"
           class="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-muted/50"
           @click="toggle(log.id)"
         >
@@ -132,7 +163,7 @@ function stageLabel(stage: ScanErrorStage): string {
                   variant="outline"
                   class="text-[10px] uppercase"
                 >
-                  {{ log.trigger === 'manual' ? '手動' : '自動' }}
+                  {{ scanTriggerLabel(log.trigger) }}
                 </Badge>
               </div>
               <p class="text-xs text-muted-foreground">
@@ -197,6 +228,41 @@ function stageLabel(stage: ScanErrorStage): string {
               <p class="mt-1 break-words text-muted-foreground">
                 {{ err.reason }}
               </p>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <Button
+                  v-if="err.stage === 'pdf_password'"
+                  size="sm"
+                  variant="outline"
+                  as-child
+                >
+                  <NuxtLink :to="err.bankId ? { path: '/banks', query: { editBank: err.bankId, log: log.id } } : '/banks'">
+                    {{ err.bankId ? '更新 PDF 密碼' : '前往銀行管理' }}
+                  </NuxtLink>
+                </Button>
+                <Button
+                  v-if="err.stage === 'email_search' || err.stage === 'email_fetch'"
+                  size="sm"
+                  variant="outline"
+                  as-child
+                >
+                  <NuxtLink to="/settings?edit=email#data-source">
+                    檢查信箱設定
+                  </NuxtLink>
+                </Button>
+                <Button
+                  v-if="err.canRetry"
+                  size="sm"
+                  variant="outline"
+                  :disabled="scanning || !!retrying"
+                  @click="retry(log.id, idx)"
+                >
+                  {{ retrying === `${log.id}/${idx}` ? '重試中…' : '重試這封信' }}
+                </Button>
+                <span
+                  v-else-if="['pdf_password', 'pdf_extract', 'parse_failed'].includes(err.stage) || (err.msgId && err.stage === 'unexpected')"
+                  class="text-muted-foreground"
+                >紀錄缺少原信件識別，請重新掃描信箱。</span>
+              </div>
             </li>
           </ul>
         </div>

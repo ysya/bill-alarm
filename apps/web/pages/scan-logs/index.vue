@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { scanTriggerLabel } from '~/composables/useScanEvents'
+
 const { state: scanProgress, onComplete } = useScanEvents()
 
 const list = ref<{ refresh: () => Promise<void> } | null>(null)
@@ -21,7 +23,7 @@ const progressPercent = computed(() =>
         掃描紀錄
       </h1>
       <p class="text-sm text-muted-foreground mt-1">
-        最近的自動與手動信箱掃描結果。
+        查看信箱掃描結果，處理失敗的信件。
       </p>
     </div>
 
@@ -32,7 +34,7 @@ const progressPercent = computed(() =>
     >
       <div class="flex items-center justify-between text-xs">
         <span class="font-medium">
-          {{ scanProgress.trigger === 'cron' ? '自動掃描中' : '手動掃描中' }}
+          {{ scanTriggerLabel(scanProgress.trigger) }}中
           · {{ scanProgress.idx }} / {{ scanProgress.total }}
         </span>
         <span class="text-muted-foreground">{{ progressPercent }}%</span>
@@ -58,6 +60,9 @@ const progressPercent = computed(() =>
       </p>
     </div>
 
-    <ScanLogList ref="list" />
+    <ScanLogList
+      ref="list"
+      :scanning="scanProgress.active"
+    />
   </div>
 </template>
